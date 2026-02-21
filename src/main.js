@@ -254,6 +254,13 @@ class MainScene extends Phaser.Scene {
     this.ghost.body.setCollideWorldBounds(true);
     this.ghost.setVisible(false);
 
+    // Physics links (create once)
+    this.playerWallCollider = this.physics.add.collider(this.player, this.walls);
+    this.guardWallCollider = this.physics.add.collider(this.guard, this.walls);
+    this.scannerWallCollider = this.physics.add.collider(this.scannerDrone, this.walls);
+    this.playerDataCoreOverlap = this.physics.add.overlap(this.player, this.dataCore, this.collectDataCore, null, this);
+    this.playerExitOverlap = this.physics.add.overlap(this.player, this.exitZone, this.reachExit, null, this);
+
     // Input
     this.cursors = this.input.keyboard.createCursorKeys();
     this.wasd = this.input.keyboard.addKeys({
@@ -387,16 +394,13 @@ class MainScene extends Phaser.Scene {
       this.physics.add.existing(wall, true);
     });
 
-    this.physics.add.collider(this.player, this.walls);
-    this.physics.add.collider(this.guard, this.walls);
-    this.physics.add.overlap(this.player, this.dataCore, this.collectDataCore, null, this);
-    this.physics.add.overlap(this.player, this.exitZone, this.reachExit, null, this);
   }
 
   collectDataCore(player, dataCore) {
     if (!this.hasDataCore) {
       this.hasDataCore = true;
-      dataCore.destroy();
+      dataCore.setVisible(false);
+      if (dataCore.body) dataCore.body.enable = false;
       sfx.collect();
       this.objectiveText.setText('[✓] Data Core');
       this.objectiveText.setFill('#00ff00');
@@ -765,12 +769,18 @@ class MainScene extends Phaser.Scene {
     this.statusText.setText('Sneak to the data core!');
     this.statusText.setFill('#666666');
     
-    // Recreate data core
+    // Reset existing data core safely (avoid replacing overlap targets)
     const dcPos = this.currentLayout.dataCore;
-    this.dataCore = this.add.rectangle(dcPos.x * TILE_SIZE, dcPos.y * TILE_SIZE, TILE_SIZE - 4, TILE_SIZE - 4, 0xffaa00);
-    this.dataCore.setStrokeStyle(2, 0xffdd44);
-    this.physics.add.existing(this.dataCore, true);
-    this.physics.add.overlap(this.player, this.dataCore, this.collectDataCore, null, this);
+    this.dataCore.x = dcPos.x * TILE_SIZE;
+    this.dataCore.y = dcPos.y * TILE_SIZE;
+    this.dataCore.setVisible(true);
+    if (this.dataCore.body) {
+      this.dataCore.body.enable = true;
+      if (typeof this.dataCore.body.updateFromGameObject === 'function') {
+        this.dataCore.body.updateFromGameObject();
+      }
+    }
+    this.dataCore.alpha = 1;
     
     this.tweens.add({
       targets: this.dataCore,
