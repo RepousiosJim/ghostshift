@@ -899,6 +899,7 @@ const config = {
 
 // Initialize game
 const game = new Phaser.Game(config);
+window.__ghostGame = game;
 
 // Handle restart key globally
 document.addEventListener('keydown', (e) => {
