@@ -171,6 +171,7 @@ class MainScene extends Phaser.Scene {
     this.applyStealth = false;
     this.applyTimeBonus = false;
     this.selectionMade = false;
+    this.transientUi = [];
   }
 
   create() {
@@ -357,13 +358,21 @@ class MainScene extends Phaser.Scene {
     this.walls = this.add.group();
 
     for (let x = 0; x < MAP_WIDTH; x++) {
-      this.walls.add(this.add.rectangle(x * TILE_SIZE + TILE_SIZE/2, TILE_SIZE/2, TILE_SIZE, TILE_SIZE, wallColor));
-      this.walls.add(this.add.rectangle(x * TILE_SIZE + TILE_SIZE/2, MAP_HEIGHT * TILE_SIZE - TILE_SIZE/2, TILE_SIZE, TILE_SIZE, wallColor));
+      const topWall = this.add.rectangle(x * TILE_SIZE + TILE_SIZE/2, TILE_SIZE/2, TILE_SIZE, TILE_SIZE, wallColor);
+      const bottomWall = this.add.rectangle(x * TILE_SIZE + TILE_SIZE/2, MAP_HEIGHT * TILE_SIZE - TILE_SIZE/2, TILE_SIZE, TILE_SIZE, wallColor);
+      this.physics.add.existing(topWall, true);
+      this.physics.add.existing(bottomWall, true);
+      this.walls.add(topWall);
+      this.walls.add(bottomWall);
     }
 
     for (let y = 1; y < MAP_HEIGHT - 1; y++) {
-      this.walls.add(this.add.rectangle(TILE_SIZE/2, y * TILE_SIZE + TILE_SIZE/2, TILE_SIZE, TILE_SIZE, wallColor));
-      this.walls.add(this.add.rectangle(MAP_WIDTH * TILE_SIZE - TILE_SIZE/2, y * TILE_SIZE + TILE_SIZE/2, TILE_SIZE, TILE_SIZE, wallColor));
+      const leftWall = this.add.rectangle(TILE_SIZE/2, y * TILE_SIZE + TILE_SIZE/2, TILE_SIZE, TILE_SIZE, wallColor);
+      const rightWall = this.add.rectangle(MAP_WIDTH * TILE_SIZE - TILE_SIZE/2, y * TILE_SIZE + TILE_SIZE/2, TILE_SIZE, TILE_SIZE, wallColor);
+      this.physics.add.existing(leftWall, true);
+      this.physics.add.existing(rightWall, true);
+      this.walls.add(leftWall);
+      this.walls.add(rightWall);
     }
 
     this.currentLayout.obstacles.forEach(obs => {
@@ -624,9 +633,10 @@ class MainScene extends Phaser.Scene {
     const overlay = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x000000, 0.7);
     const banner = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2 - 30, 280, 80, 0x330000, 0.9);
     banner.setStrokeStyle(2, 0xff4444);
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2 - 45, 'DETECTED!', { fontSize: '28px', fill: '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2 - 10, 'The guard spotted you!', { fontSize: '14px', fill: '#ff8888', fontFamily: 'Courier New' }).setOrigin(0.5);
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2 + 20, 'Press R to retry', { fontSize: '16px', fill: '#ffffff', fontFamily: 'Courier New' }).setOrigin(0.5);
+    const t1 = this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2 - 45, 'DETECTED!', { fontSize: '28px', fill: '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    const t2 = this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2 - 10, 'The guard spotted you!', { fontSize: '14px', fill: '#ff8888', fontFamily: 'Courier New' }).setOrigin(0.5);
+    const t3 = this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2 + 20, 'Press R to retry', { fontSize: '16px', fill: '#ffffff', fontFamily: 'Courier New' }).setOrigin(0.5);
+    this.transientUi.push(overlay, banner, t1, t2, t3);
   }
 
   updateGhost() {
@@ -671,24 +681,26 @@ class MainScene extends Phaser.Scene {
     const overlay = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x000000, 0.8);
     const banner = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2 - 80, 320, 50, 0x003300, 0.9);
     banner.setStrokeStyle(2, 0x00ff66);
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2 - 95, 'ESCAPED!', { fontSize: '32px', fill: '#00ff66', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2 - 55, `Time: ${this.timerText.text}`, { fontSize: '16px', fill: '#88ffaa', fontFamily: 'Courier New' }).setOrigin(0.5);
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2 - 20, 'Choose an upgrade:', { fontSize: '14px', fill: '#ffffff', fontFamily: 'Courier New' }).setOrigin(0.5);
+    const t1 = this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2 - 95, 'ESCAPED!', { fontSize: '32px', fill: '#00ff66', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    const t2 = this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2 - 55, `Time: ${this.timerText.text}`, { fontSize: '16px', fill: '#88ffaa', fontFamily: 'Courier New' }).setOrigin(0.5);
+    const t3 = this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2 - 20, 'Choose an upgrade:', { fontSize: '14px', fill: '#ffffff', fontFamily: 'Courier New' }).setOrigin(0.5);
     
     // Option 1: Speed Boost
     const opt1 = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2 - 100, MAP_HEIGHT * TILE_SIZE / 2 + 30, 160, 60, 0x224466, 0.9);
     opt1.setStrokeStyle(2, 0x4488ff);
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2 - 100, MAP_HEIGHT * TILE_SIZE / 2 + 15, 'SPEED', { fontSize: '16px', fill: '#88ccff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2 - 100, MAP_HEIGHT * TILE_SIZE / 2 + 35, '+30% Movement', { fontSize: '11px', fill: '#aaaacc', fontFamily: 'Courier New' }).setOrigin(0.5);
+    const t4 = this.add.text(MAP_WIDTH * TILE_SIZE / 2 - 100, MAP_HEIGHT * TILE_SIZE / 2 + 15, 'SPEED', { fontSize: '16px', fill: '#88ccff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    const t5 = this.add.text(MAP_WIDTH * TILE_SIZE / 2 - 100, MAP_HEIGHT * TILE_SIZE / 2 + 35, '+30% Movement', { fontSize: '11px', fill: '#aaaacc', fontFamily: 'Courier New' }).setOrigin(0.5);
     
     // Option 2: Stealth
     const opt2 = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2 + 100, MAP_HEIGHT * TILE_SIZE / 2 + 30, 160, 60, 0x224466, 0.9);
     opt2.setStrokeStyle(2, 0x4488ff);
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2 + 100, MAP_HEIGHT * TILE_SIZE / 2 + 15, 'STEALTH', { fontSize: '16px', fill: '#88ccff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2 + 100, MAP_HEIGHT * TILE_SIZE / 2 + 35, 'Wider cone', { fontSize: '11px', fill: '#aaaacc', fontFamily: 'Courier New' }).setOrigin(0.5);
+    const t6 = this.add.text(MAP_WIDTH * TILE_SIZE / 2 + 100, MAP_HEIGHT * TILE_SIZE / 2 + 15, 'STEALTH', { fontSize: '16px', fill: '#88ccff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    const t7 = this.add.text(MAP_WIDTH * TILE_SIZE / 2 + 100, MAP_HEIGHT * TILE_SIZE / 2 + 35, 'Wider cone', { fontSize: '11px', fill: '#aaaacc', fontFamily: 'Courier New' }).setOrigin(0.5);
     
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2 - 100, MAP_HEIGHT * TILE_SIZE / 2 + 75, '[1] Select', { fontSize: '12px', fill: '#666688', fontFamily: 'Courier New' }).setOrigin(0.5);
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2 + 100, MAP_HEIGHT * TILE_SIZE / 2 + 75, '[2] Select', { fontSize: '12px', fill: '#666688', fontFamily: 'Courier New' }).setOrigin(0.5);
+    const t8 = this.add.text(MAP_WIDTH * TILE_SIZE / 2 - 100, MAP_HEIGHT * TILE_SIZE / 2 + 75, '[1] Select', { fontSize: '12px', fill: '#666688', fontFamily: 'Courier New' }).setOrigin(0.5);
+    const t9 = this.add.text(MAP_WIDTH * TILE_SIZE / 2 + 100, MAP_HEIGHT * TILE_SIZE / 2 + 75, '[2] Select', { fontSize: '12px', fill: '#666688', fontFamily: 'Courier New' }).setOrigin(0.5);
+
+    this.transientUi.push(overlay, banner, opt1, opt2, t1, t2, t3, t4, t5, t6, t7, t8, t9);
     
     // Listen for upgrade selection
     this.selectionMade = false;
@@ -788,16 +800,12 @@ class MainScene extends Phaser.Scene {
     this.runCount++;
     this.runText.setText(`Run: ${this.runCount}`);
 
-    // Clear overlays
-    this.children.list
-      .filter(child => child.type === 'Rectangle' && child.fillAlpha >= 0.7)
-      .forEach(child => {
-        if (child !== this.vignette) child.destroy();
-      });
-    this.children.list
-      .filter(child => child.type === 'Text' && (child.text.includes('DETECTED') || child.text.includes('ESCAPED')))
-      .forEach(child => child.destroy());
-      
+    // Clear only transient overlays (never destroy gameplay objects)
+    this.transientUi.forEach((obj) => {
+      if (obj && obj.active) obj.destroy();
+    });
+    this.transientUi = [];
+
     // Reset vignette
     this.vignette.setAlpha(0);
   }
