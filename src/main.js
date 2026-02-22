@@ -1262,21 +1262,166 @@ class MainMenuScene extends Phaser.Scene {
   }
   
   showCreditsOverlay() {
-    const overlay = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x000000, 0.9);
+    // Full-screen overlay with dark background
+    const overlay = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x000000, 0.92);
     overlay.setDepth(100);
+    overlay.setInteractive({ useHandCursor: true });
+    
+    // Main panel container - centered
+    const panelWidth = 600;
+    const panelHeight = 480;
     const panel = this.add.container(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2);
     panel.setDepth(101);
-    const bg = this.add.rectangle(0, 0, 400, 280, 0x1a1a2a);
-    bg.setStrokeStyle(2, 0x4488ff);
+    
+    // Background panel with border
+    const bg = this.add.rectangle(0, 0, panelWidth, panelHeight, 0x1a1a2a);
+    bg.setStrokeStyle(3, 0x4488ff);
     panel.add(bg);
-    panel.add(this.add.text(0, -110, 'CREDITS', { fontSize: '24px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5));
-    const credits = [{ role: 'Developer', name: 'GhostShift Team' }, { role: 'Engine', name: 'Phaser 3' }, { role: 'Version', name: '0.6.0 (Phase 6)' }, { role: 'Levels', name: '5 Total' }, { role: 'Save', name: 'Hardened v5' }];
-    let yOffset = -60;
-    credits.forEach(c => { panel.add(this.add.text(-120, yOffset, c.role + ':', { fontSize: '14px', fill: '#ffaa00', fontFamily: 'Courier New' }).setOrigin(0, 0.5)); panel.add(this.add.text(30, yOffset, c.name, { fontSize: '14px', fill: '#cccccc', fontFamily: 'Courier New' }).setOrigin(0, 0.5)); yOffset += 35; });
-    panel.add(this.add.text(0, 100, '[ Press any key or click to close ]', { fontSize: '12px', fill: '#666688', fontFamily: 'Courier New' }).setOrigin(0.5));
-    const closeHandler = () => { this.input.keyboard.off('keydown', closeHandler); this.input.off('pointerdown', closeHandler); overlay.destroy(); panel.destroy(); };
-    this.input.keyboard.on('keydown', closeHandler);
-    this.input.on('pointerdown', closeHandler);
+    
+    // Title section with glow effect
+    const titleY = -panelHeight / 2 + 45;
+    const title = this.add.text(0, titleY, '★ CREDITS ★', { 
+      fontSize: '32px', 
+      fill: '#4488ff', 
+      fontFamily: 'Courier New', 
+      fontStyle: 'bold' 
+    }).setOrigin(0.5);
+    title.setShadow(0, 0, '#4488ff', 10, true, true);
+    panel.add(title);
+    
+    // Decorative line under title
+    const titleLine = this.add.rectangle(0, titleY + 28, 300, 2, 0x4488ff);
+    panel.add(titleLine);
+    
+    // Credits sections with proper styling
+    const sections = [
+      { title: 'DEVELOPMENT', items: [
+        { label: 'Lead Developer', value: 'GhostShift Team' },
+        { label: 'Game Engine', value: 'Phaser 3' },
+        { label: 'Version', value: '0.6.1 (Phase 9)' }
+      ]},
+      { title: 'GAME FEATURES', items: [
+        { label: 'Total Levels', value: '5 Unique Maps' },
+        { label: 'Save System', value: 'Hardened v5' },
+        { label: 'Perk System', value: 'Speed, Stealth, Luck' }
+      ]},
+      { title: 'TECHNICAL', items: [
+        { label: 'Framework', value: 'Phaser.js' },
+        { label: 'Physics', value: 'Arcade Physics' },
+        { label: 'Audio', value: 'Web Audio API' }
+      ]}
+    ];
+    
+    // Calculate starting Y position for sections
+    const sectionStartY = titleY + 55;
+    const sectionHeight = 110;
+    const sectionGap = 15;
+    let currentY = sectionStartY;
+    
+    sections.forEach((section, sectionIndex) => {
+      // Section title
+      const sectionTitle = this.add.text(-panelWidth / 2 + 40, currentY, section.title, {
+        fontSize: '14px',
+        fill: '#ffaa00',
+        fontFamily: 'Courier New',
+        fontStyle: 'bold'
+      });
+      panel.add(sectionTitle);
+      
+      // Section items
+      let itemY = currentY + 25;
+      section.items.forEach((item, itemIndex) => {
+        const labelX = -panelWidth / 2 + 50;
+        const valueX = 80;
+        
+        // Label
+        panel.add(this.add.text(labelX + valueX, itemY, item.label + ':', {
+          fontSize: '13px',
+          fill: '#88aacc',
+          fontFamily: 'Courier New'
+        }).setOrigin(0, 0.5));
+        
+        // Value
+        panel.add(this.add.text(labelX + valueX + 120, itemY, item.value, {
+          fontSize: '13px',
+          fill: '#ffffff',
+          fontFamily: 'Courier New'
+        }).setOrigin(0, 0.5));
+        
+        itemY += 22;
+      });
+      
+      currentY += sectionHeight;
+    });
+    
+    // Bottom section - thank you message
+    const thankYouY = panelHeight / 2 - 60;
+    const thankYou = this.add.text(0, thankYouY, 'Thanks for playing GhostShift!', {
+      fontSize: '14px',
+      fill: '#66ff88',
+      fontFamily: 'Courier New',
+      fontStyle: 'italic'
+    }).setOrigin(0.5);
+    panel.add(thankYou);
+    
+    // Back button - styled consistently with other menu buttons
+    const backBtnY = panelHeight / 2 - 25;
+    const backBtnBg = this.add.rectangle(0, backBtnY, 200, 45, 0x2244aa);
+    backBtnBg.setStrokeStyle(2, 0x66aaff);
+    backBtnBg.setInteractive({ useHandCursor: true });
+    panel.add(backBtnBg);
+    
+    const backBtnText = this.add.text(0, backBtnY, '⬅ BACK TO MENU', {
+      fontSize: '16px',
+      fill: '#ffffff',
+      fontFamily: 'Courier New',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+    panel.add(backBtnText);
+    
+    // Button hover effects
+    backBtnBg.on('pointerover', () => {
+      backBtnBg.setFillStyle(0x3366cc);
+      backBtnBg.setStrokeStyle(2, 0xffffff);
+    });
+    backBtnBg.on('pointerout', () => {
+      backBtnBg.setFillStyle(0x2244aa);
+      backBtnBg.setStrokeStyle(2, 0x66aaff);
+    });
+    backBtnBg.on('pointerdown', () => {
+      sfx.click();
+      this.input.keyboard.off('keydown', closeHandler);
+      this.input.off('pointerdown', closeHandler);
+      overlay.destroy();
+      panel.destroy();
+    });
+    
+    // Close handler
+    const closeHandler = () => {
+      this.input.keyboard.off('keydown', closeHandler);
+      this.input.off('pointerdown', closeHandler);
+      overlay.destroy();
+      panel.destroy();
+    };
+    
+    // Keyboard support - ESC to close
+    const escHandler = (e) => {
+      if (e.code === 'Escape') {
+        sfx.click();
+        this.input.keyboard.off('keydown', escHandler);
+        overlay.destroy();
+        panel.destroy();
+      }
+    };
+    this.input.keyboard.on('keydown', escHandler);
+    
+    // Click outside panel to close
+    overlay.on('pointerdown', () => {
+      sfx.click();
+      this.input.keyboard.off('keydown', escHandler);
+      overlay.destroy();
+      panel.destroy();
+    });
   }
   
   // Phase 9: Handle window resize for fullscreen
