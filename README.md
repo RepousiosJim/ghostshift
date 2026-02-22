@@ -2,9 +2,9 @@
 
 A stealth evasion game built with Phaser 3 and Tauri.
 
-## Game Flow (Phase 3 Complete)
+## Game Flow (Phase 4 Complete)
 
-The game now features a complete menu system and scene architecture with polish:
+The game now features 5 playable levels with progressive difficulty:
 
 ### Scene Flow
 ```
@@ -13,31 +13,33 @@ BootScene → MainMenuScene → LevelSelectScene → GameScene
             SettingsScene              ResultsScene
 ```
 
+### Levels (5 Total)
+1. **Warehouse** (Difficulty 1) - Tutorial-style entry level
+2. **Labs** (Difficulty 1) - Moderate obstacles with dual patrols
+3. **Server Farm** (Difficulty 2) - Challenging with more coverage
+4. **The Vault** (Difficulty 3) - High-security bank vault with dense lasers/cameras
+5. **Training Facility** (Difficulty 3) - Open area with multiple guards and drones
+
 ### Scenes
 - **BootScene**: Loading screen, transitions to MainMenuScene
 - **MainMenuScene**: Full menu with Play, Level Select, Continue, Settings, Controls, Credits - with animated background
 - **LevelSelectScene**: Level selection with lock/unlock status and best times
-- **GameScene**: Core gameplay (existing mechanics preserved)
+- **GameScene**: Core gameplay with difficulty-based balancing
 - **SettingsScene**: Audio toggle, volume slider, effects quality, fullscreen, reduced motion, reset progress
 - **ResultsScene**: Mission complete/failed display with animations, particles, and Retry, Next Level, Level Select, and Menu buttons
 
-### Main Menu Features
-- **Play**: Goes to Level Select
-- **Level Select**: Choose from unlocked levels (progressive unlock)
-- **Continue**: Enabled when save data exists, loads last played level
-- **Settings**: Full settings panel with audio, volume, quality, fullscreen, reduced motion options
-- **Controls**: Overlay panel with key bindings
-- **Credits**: Overlay panel with game info
+### Phase 4 New Features
+- **5 playable levels**: Added "The Vault" and "Training Facility" with unique layouts
+- **Difficulty scaling**: Guards, vision cones, and sensors scale with level difficulty
+- **New objectives**: Security Code and Power Cell pickups
+- **Difficulty indicator**: UI shows current level difficulty (1-3)
+- **Improved balancing**: 
+  - Guard speed: 65 (easy) → 81 (hard)
+  - Vision cone distance: 140px (easy) → 170px (hard)
+  - Vision cone angle: 55° (easy) → 61° (hard)
+  - Motion sensor cooldown: 100→70 frames based on difficulty
 
-### Phase 3 Polish Features
-- **Scene transitions**: Smooth fade transitions between all scenes
-- **Animated menu background**: Floating particles and animated grid
-- **Button enhancements**: Press animations, enhanced hover states with glow
-- **Sound effects**: Detection pulse, restart sounds, click feedback
-- **Result screen animations**: Title pop-in, stats slide-in, particles for win/lose
-- **Detection feedback**: Red pulse overlay, screen shake, player glow effect
-
-## Visual Polish (Phase 1-3 Complete)
+## Visual Polish (Phase 1-4 Complete)
 
 The game features enhanced visuals including:
 - **Atmospheric depth** - Multi-layer backgrounds with subtle grid patterns and scanline textures
@@ -46,6 +48,7 @@ The game features enhanced visuals including:
 - **Movement trails** - Player leaves subtle cyan trail when moving
 - **Dynamic lighting** - Exit zone glows when unlocked, vignette corners for atmosphere
 - **Improved silhouettes** - Clear, high-contrast entity visuals for stealth gameplay
+- **Difficulty indicators** - Color-coded difficulty display in-game
 
 *See `docs/VISUAL_STYLE.md` for the full visual style guide.*
 

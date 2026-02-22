@@ -3,7 +3,7 @@
 ## Overview
 Phased roadmap for implementing the complete game flow system.
 
-## Current Status: Phase 3 Complete ✅
+## Current Status: Phase 4 Complete ✅
 
 ### Phase 1: Menu Foundation (DONE)
 - [x] Scene architecture with 6 scenes
@@ -38,14 +38,16 @@ Phased roadmap for implementing the complete game flow system.
 - [x] Restart sound effect
 - [x] Additional SFX hooks (detection, restart, click)
 
-## Phase 4: Content & Maps (NEXT)
-- [ ] Additional levels (4-6)
-- [ ] Level-specific objectives and challenges
-- [ ] Enemy variety (different guard patterns)
-- [ ] Difficulty scaling
-- [ ] Level editor (stretch goal)
+### Phase 4: Content & Maps (DONE)
+- [x] Additional levels (4-5) - Added "The Vault" and "Training Facility"
+- [x] Level-specific objectives and challenges
+- [x] Enemy variety (different guard patterns per level)
+- [x] Difficulty scaling (guards, vision cones, sensors scale with level)
+- [x] New objectives: Security Code and Power Cell pickups
+- [x] UI improvements: Difficulty indicator, additional objective tracking
+- [x] Game constant improvements for balancing
 
-## Phase 5: Save System Enhancement
+## Phase 5: Save System Enhancement (NEXT)
 - [ ] Multiple save slots
 - [ ] Cloud save (stretch)
 - [ ] Achievement system

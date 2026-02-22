@@ -65,14 +65,41 @@ function loadSave() { return saveManager.data; }
 function saveSaveData(data) { saveManager.data = data; saveManager.save(); }
 
 // ==================== GAME CONSTANTS ====================
+// Phase 4: Improved balancing with difficulty scaling
 const TILE_SIZE = 32;
 const MAP_WIDTH = 20;
 const MAP_HEIGHT = 15;
 const BASE_PLAYER_SPEED = 180;
-const GUARD_SPEED = 70;
+// Guard speed now scales with difficulty (base 65, max 90)
+const BASE_GUARD_SPEED = 65;
 const GHOST_ALPHA = 0.25;
-const VISION_CONE_ANGLE = 60;
-const VISION_CONE_DISTANCE = 150;
+// Vision cone improvements - slightly reduced angle for fairness, increased distance for higher difficulty
+const BASE_VISION_CONE_ANGLE = 55;
+const BASE_VISION_CONE_DISTANCE = 140;
+// Scanner drone settings - improved balancing
+const SCANNER_SPEED = 50;
+const SCANNER_BEAM_LENGTH = 110;
+const SCANNER_BEAM_ANGLE = 0.25;
+// Motion sensor improvements - faster cooldown for harder levels
+const MOTION_SENSOR_RADIUS = 55;
+const MOTION_SENSOR_COOLDOWN_BASE = 100;
+
+// Difficulty-based settings helper
+function getGuardSpeedForLevel(difficulty) {
+  return BASE_GUARD_SPEED + (difficulty - 1) * 8; // +8 speed per difficulty level
+}
+
+function getVisionConeDistanceForLevel(difficulty) {
+  return BASE_VISION_CONE_DISTANCE + (difficulty - 1) * 15;
+}
+
+function getVisionConeAngleForLevel(difficulty) {
+  return (BASE_VISION_CONE_ANGLE + (difficulty - 1) * 3) * Math.PI / 180;
+}
+
+function getMotionSensorCooldownForLevel(difficulty) {
+  return Math.max(50, MOTION_SENSOR_COOLDOWN_BASE - (difficulty - 1) * 15);
+}
 
 // ==================== AUDIO SYSTEM ====================
 class SFXManager {
@@ -168,10 +195,80 @@ class SceneTransitionManager {
 }
 
 // ==================== LEVEL LAYOUTS ====================
+// Phase 4: Added Vault and Training Facility levels with improved balancing
 const LEVEL_LAYOUTS = [
-  { name: 'Warehouse', obstacles: [{x:8,y:4},{x:9,y:4},{x:10,y:4},{x:8,y:5},{x:10,y:5},{x:8,y:6},{x:10,y:6},{x:3,y:10},{x:4,y:10},{x:14,y:8},{x:15,y:8},{x:12,y:3},{x:13,y:3},{x:6,y:8},{x:7,y:8}], guardPatrol:[{x:15,y:7},{x:5,y:7},{x:5,y:12},{x:15,y:12}], dataCore:{x:16,y:3}, keyCard:{x:3,y:12}, hackTerminal:{x:10,y:7}, playerStart:{x:2,y:2}, exitZone:{x:19,y:7}, cameras:[{x:5,y:2},{x:15,y:12}], motionSensors:[{x:8,y:7},{x:12,y:10}], laserGrids:[{x:10,y:9,h:true},{x:6,y:3,v:true}], patrolDrones:[{x:12,y:6,patrol:[{x:12,y:6},{x:16,y:6},{x:16,y:10},{x:12,y:10}]}], securityCode:{x:4,y:8}, powerCell:{x:14,y:4} },
-  { name: 'Labs', obstacles: [{x:5,y:3},{x:5,y:4},{x:5,y:5},{x:5,y:6},{x:10,y:8},{x:11,y:8},{x:12,y:8},{x:10,y:9},{x:12,y:9},{x:10,y:10},{x:11,y:10},{x:12,y:10},{x:15,y:3},{x:16,y:3},{x:17,y:3},{x:3,y:11},{x:4,y:11},{x:5,y:11},{x:8,y:13},{x:9,y:13}], guardPatrol:[{x:14,y:5},{x:6,y:5},{x:6,y:13},{x:14,y:13}], dataCore:{x:17,y:2}, keyCard:{x:2,y:3}, hackTerminal:{x:8,y:5}, playerStart:{x:2,y:13}, exitZone:{x:19,y:3}, cameras:[{x:10,y:2},{x:3,y:8}], motionSensors:[{x:12,y:6},{x:7,y:11}], laserGrids:[{x:8,y:7,h:true},{x:14,y:9,v:true}], patrolDrones:[{x:10,y:10,patrol:[{x:10,y:10},{x:14,y:10},{x:14,y:4},{x:10,y:4}]}], securityCode:{x:6,y:2}, powerCell:{x:16,y:12} },
-  { name: 'Server Farm', obstacles: [{x:4,y:3},{x:5,y:3},{x:9,y:3},{x:10,y:3},{x:4,y:5},{x:10,y:5},{x:4,y:7},{x:5,y:7},{x:9,y:7},{x:10,y:7},{x:7,y:9},{x:8,y:9},{x:3,y:11},{x:7,y:11},{x:12,y:11},{x:16,y:11},{x:3,y:13},{x:4,y:13},{x:15,y:13},{x:16,y:13}], guardPatrol:[{x:2,y:9},{x:18,y:9},{x:18,y:5},{x:2,y:5}], dataCore:{x:18,y:13}, keyCard:{x:7,y:3}, hackTerminal:{x:14,y:9}, playerStart:{x:2,y:2}, exitZone:{x:19,y:7}, cameras:[{x:2,y:5},{x:17,y:11}], motionSensors:[{x:7,y:7},{x:12,y:5}], laserGrids:[{x:6,y:5,v:true},{x:12,y:9,h:true}], patrolDrones:[{x:8,y:6,patrol:[{x:8,y:6},{x:14,y:6},{x:14,y:12},{x:8,y:12}]}], securityCode:{x:2,y:12}, powerCell:{x:18,y:3} }
+  { name: 'Warehouse', obstacles: [{x:8,y:4},{x:9,y:4},{x:10,y:4},{x:8,y:5},{x:10,y:5},{x:8,y:6},{x:10,y:6},{x:3,y:10},{x:4,y:10},{x:14,y:8},{x:15,y:8},{x:12,y:3},{x:13,y:3},{x:6,y:8},{x:7,y:8}], guardPatrol:[{x:15,y:7},{x:5,y:7},{x:5,y:12},{x:15,y:12}], dataCore:{x:16,y:3}, keyCard:{x:3,y:12}, hackTerminal:{x:10,y:7}, playerStart:{x:2,y:2}, exitZone:{x:19,y:7}, cameras:[{x:5,y:2},{x:15,y:12}], motionSensors:[{x:8,y:7},{x:12,y:10}], laserGrids:[{x:10,y:9,h:true},{x:6,y:3,v:true}], patrolDrones:[{x:12,y:6,patrol:[{x:12,y:6},{x:16,y:6},{x:16,y:10},{x:12,y:10}]}], securityCode:{x:4,y:8}, powerCell:{x:14,y:4}, difficulty: 1 },
+  { name: 'Labs', obstacles: [{x:5,y:3},{x:5,y:4},{x:5,y:5},{x:5,y:6},{x:10,y:8},{x:11,y:8},{x:12,y:8},{x:10,y:9},{x:12,y:9},{x:10,y:10},{x:11,y:10},{x:12,y:10},{x:15,y:3},{x:16,y:3},{x:17,y:3},{x:3,y:11},{x:4,y:11},{x:5,y:11},{x:8,y:13},{x:9,y:13}], guardPatrol:[{x:14,y:5},{x:6,y:5},{x:6,y:13},{x:14,y:13}], dataCore:{x:17,y:2}, keyCard:{x:2,y:3}, hackTerminal:{x:8,y:5}, playerStart:{x:2,y:13}, exitZone:{x:19,y:3}, cameras:[{x:10,y:2},{x:3,y:8}], motionSensors:[{x:12,y:6},{x:7,y:11}], laserGrids:[{x:8,y:7,h:true},{x:14,y:9,v:true}], patrolDrones:[{x:10,y:10,patrol:[{x:10,y:10},{x:14,y:10},{x:14,y:4},{x:10,y:4}]}], securityCode:{x:6,y:2}, powerCell:{x:16,y:12}, difficulty: 1 },
+  { name: 'Server Farm', obstacles: [{x:4,y:3},{x:5,y:3},{x:9,y:3},{x:10,y:3},{x:4,y:5},{x:10,y:5},{x:4,y:7},{x:5,y:7},{x:9,y:7},{x:10,y:7},{x:7,y:9},{x:8,y:9},{x:3,y:11},{x:7,y:11},{x:12,y:11},{x:16,y:11},{x:3,y:13},{x:4,y:13},{x:15,y:13},{x:16,y:13}], guardPatrol:[{x:2,y:9},{x:18,y:9},{x:18,y:5},{x:2,y:5}], dataCore:{x:18,y:13}, keyCard:{x:7,y:3}, hackTerminal:{x:14,y:9}, playerStart:{x:2,y:2}, exitZone:{x:19,y:7}, cameras:[{x:2,y:5},{x:17,y:11}], motionSensors:[{x:7,y:7},{x:12,y:5}], laserGrids:[{x:6,y:5,v:true},{x:12,y:9,h:true}], patrolDrones:[{x:8,y:6,patrol:[{x:8,y:6},{x:14,y:6},{x:14,y:12},{x:8,y:12}]}], securityCode:{x:2,y:12}, powerCell:{x:18,y:3}, difficulty: 2 },
+  // Phase 4: New Level 4 - The Vault (high security bank vault)
+  { name: 'The Vault', obstacles: [
+      {x:4,y:3},{x:5,y:3},{x:6,y:3},{x:10,y:3},{x:11,y:3},{x:12,y:3},
+      {x:4,y:5},{x:12,y:5},{x:4,y:7},{x:12,y:7},
+      {x:4,y:9},{x:5,y:9},{x:6,y:9},{x:10,y:9},{x:11,y:9},{x:12,y:9},
+      {x:4,y:11},{x:12,y:11},{x:7,y:12},{x:8,y:12}
+    ], 
+    guardPatrol: [
+      {x:7,y:4},{x:10,y:4},{x:10,y:8},{x:7,y:8},
+      {x:2,y:6},{x:17,y:6}
+    ], 
+    dataCore:{x:8,y:2}, 
+    keyCard:{x:2,y:13}, 
+    hackTerminal:{x:15,y:6}, 
+    playerStart:{x:2,y:2}, 
+    exitZone:{x:18,y:7}, 
+    cameras:[
+      {x:8,y:1},{x:2,y:10},{x:16,y:10}
+    ], 
+    motionSensors:[
+      {x:8,y:6},{x:14,y:4},{x:5,y:10}
+    ], 
+    laserGrids:[
+      {x:8,y:4,h:true},{x:3,y:6,v:true},{x:13,y:6,v:true},{x:8,y:10,h:true}
+    ], 
+    patrolDrones:[
+      {x:5,y:7,patrol:[{x:5,y:7},{x:11,y:7},{x:11,y:5},{x:5,y:5}]},
+      {x:15,y:9,patrol:[{x:15,y:9},{x:15,y:3},{x:18,y:3},{x:18,y:9}]}
+    ], 
+    securityCode:{x:6,y:13}, 
+    powerCell:{x:16,y:12}, 
+    difficulty: 3 
+  },
+  // Phase 4: New Level 5 - Training Facility (open area with multiple threats)
+  { name: 'Training Facility', obstacles: [
+      {x:6,y:3},{x:7,y:3},{x:13,y:3},{x:14,y:3},
+      {x:3,y:6},{x:4,y:6},{x:16,y:6},{x:17,y:6},
+      {x:6,y:9},{x:7,y:9},{x:13,y:9},{x:14,y:9},
+      {x:6,y:12},{x:7,y:12},{x:13,y:12},{x:14,y:12},
+      {x:9,y:5},{x:10,y:5},{x:9,y:10},{x:10,y:10}
+    ], 
+    guardPatrol: [
+      {x:2,y:4},{x:18,y:4},
+      {x:2,y:11},{x:18,y:11},
+      {x:10,y:2},{x:10,y:13}
+    ], 
+    dataCore:{x:10,y:7}, 
+    keyCard:{x:2,y:13}, 
+    hackTerminal:{x:17,y:7}, 
+    playerStart:{x:2,y:2}, 
+    exitZone:{x:18,y:2}, 
+    cameras:[
+      {x:5,y:2},{x:15,y:2},{x:5,y:13},{x:15,y:13}
+    ], 
+    motionSensors:[
+      {x:10,y:4},{x:10,y:10},{x:5,y:8},{x:15,y:8}
+    ], 
+    laserGrids:[
+      {x:10,y:3,v:true},{x:10,y:12,v:true},{x:4,y:8,h:true},{x:16,y:8,h:true}
+    ], 
+    patrolDrones:[
+      {x:8,y:4,patrol:[{x:8,y:4},{x:12,y:4},{x:12,y:11},{x:8,y:11}]},
+      {x:5,y:7,patrol:[{x:5,y:7},{x:5,y:10},{x:8,y:10},{x:8,y:7}]},
+      {x:15,y:7,patrol:[{x:15,y:7},{x:15,y:10},{x:12,y:10},{x:12,y:7}]}
+    ], 
+    securityCode:{x:3,y:4}, 
+    powerCell:{x:17,y:12}, 
+    difficulty: 3 
+  }
 ];
 
 // ==================== PERK DEFINITIONS ====================
@@ -434,7 +531,7 @@ class MainMenuScene extends Phaser.Scene {
     bg.setStrokeStyle(2, 0x4488ff);
     panel.add(bg);
     panel.add(this.add.text(0, -110, 'CREDITS', { fontSize: '24px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5));
-    const credits = [{ role: 'Developer', name: 'GhostShift Team' }, { role: 'Engine', name: 'Phaser 3' }, { role: 'Version', name: '0.2.0 (Phase 1)' }];
+    const credits = [{ role: 'Developer', name: 'GhostShift Team' }, { role: 'Engine', name: 'Phaser 3' }, { role: 'Version', name: '0.4.0 (Phase 4)' }, { role: 'Levels', name: '5 Total' }];
     let yOffset = -60;
     credits.forEach(c => { panel.add(this.add.text(-120, yOffset, c.role + ':', { fontSize: '14px', fill: '#ffaa00', fontFamily: 'Courier New' }).setOrigin(0, 0.5)); panel.add(this.add.text(30, yOffset, c.name, { fontSize: '14px', fill: '#cccccc', fontFamily: 'Courier New' }).setOrigin(0, 0.5)); yOffset += 35; });
     panel.add(this.add.text(0, 100, '[ Press any key or click to close ]', { fontSize: '12px', fill: '#666688', fontFamily: 'Courier New' }).setOrigin(0.5));
@@ -682,7 +779,7 @@ class SettingsScene extends Phaser.Scene {
       } 
     });
     
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE - 30, 'GhostShift v0.3.0 - Phase 3', { fontSize: '12px', fill: '#444455', fontFamily: 'Courier New' }).setOrigin(0.5);
+    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE - 30, 'GhostShift v0.4.0 - Phase 4', { fontSize: '12px', fill: '#444455', fontFamily: 'Courier New' }).setOrigin(0.5);
     this.input.keyboard.once('keydown', () => sfx.init());
     this.input.on('pointerdown', () => sfx.init(), this);
   }
@@ -1021,6 +1118,12 @@ class GameScene extends Phaser.Scene {
     this.applyStealth = saveManager.getPerkLevel('stealth') > 0;
     this.currentLevelIndex = this.requestedLevelIndex !== null ? this.requestedLevelIndex : Math.floor(Math.random() * LEVEL_LAYOUTS.length);
     this.currentLayout = LEVEL_LAYOUTS[this.currentLevelIndex];
+    // Phase 4: Get difficulty settings for this level
+    this.levelDifficulty = this.currentLayout.difficulty || 1;
+    this.currentGuardSpeed = getGuardSpeedForLevel(this.levelDifficulty);
+    this.currentVisionDistance = getVisionConeDistanceForLevel(this.levelDifficulty);
+    this.currentVisionAngle = getVisionConeAngleForLevel(this.levelDifficulty);
+    this.currentMotionCooldown = getMotionSensorCooldownForLevel(this.levelDifficulty);
     this.createMap();
     this.createEntities();
     this.createUI();
@@ -1240,14 +1343,19 @@ class GameScene extends Phaser.Scene {
 
   createUI() {
     this.timerText = this.add.text(10, 10, '00:00.00', { fontSize: '20px', fill: '#00ffaa', fontFamily: 'Courier New' });
-    this.creditsText = this.add.text(10, 35, 'Credits: ' + gameSave.credits, { fontSize: '12px', fill: '#ffaa00', fontFamily: 'Courier New' });
+    this.creditsText = this.add.text(10, 35, 'Credits: ' + saveManager.data.credits, { fontSize: '12px', fill: '#ffaa00', fontFamily: 'Courier New' });
     this.runText = this.add.text(10, 55, 'Run: ' + this.runCount, { fontSize: '12px', fill: '#888888', fontFamily: 'Courier New' });
     this.levelText = this.add.text(10, 70, 'Level: ' + this.currentLayout.name, { fontSize: '12px', fill: '#8888ff', fontFamily: 'Courier New' });
     this.objectiveText = this.add.text(10, 90, '[O] Key Card', { fontSize: '12px', fill: '#00aaff', fontFamily: 'Courier New' });
     this.objectiveText2 = this.add.text(10, 105, '[O] Hack Terminal', { fontSize: '12px', fill: '#00ff88', fontFamily: 'Courier New' });
     this.objectiveText3 = this.add.text(10, 120, '[O] Data Core', { fontSize: '12px', fill: '#ffaa00', fontFamily: 'Courier New' });
-    this.statusText = this.add.text(10, 140, 'Find the Key Card!', { fontSize: '11px', fill: '#666666', fontFamily: 'Courier New' });
-    this.perksText = this.add.text(10, 155, 'Perks: S' + gameSave.perks.speed + '/L' + gameSave.perks.luck + '/St' + gameSave.perks.stealth, { fontSize: '10px', fill: '#666666', fontFamily: 'Courier New' });
+    // Phase 4: Additional objectives
+    this.objectiveText4 = this.add.text(10, 135, '[O] Security Code', { fontSize: '12px', fill: '#00ffff', fontFamily: 'Courier New' });
+    this.objectiveText5 = this.add.text(10, 150, '[O] Power Cell', { fontSize: '12px', fill: '#ff00ff', fontFamily: 'Courier New' });
+    this.statusText = this.add.text(10, 170, 'Find the Key Card!', { fontSize: '11px', fill: '#666666', fontFamily: 'Courier New' });
+    this.perksText = this.add.text(10, 185, 'Perks: S' + gameSave.perks.speed + '/L' + gameSave.perks.luck + '/St' + gameSave.perks.stealth, { fontSize: '10px', fill: '#666666', fontFamily: 'Courier New' });
+    // Phase 4: Add difficulty indicator
+    this.difficultyText = this.add.text(MAP_WIDTH * TILE_SIZE - 10, 10, 'DIFF: ' + this.levelDifficulty, { fontSize: '12px', fill: this.levelDifficulty >= 3 ? '#ff4444' : '#44ff88', fontFamily: 'Courier New' }).setOrigin(1, 0);
     this.add.text(10, MAP_HEIGHT * TILE_SIZE - 25, 'ARROWS/WASD: Move | R: Restart | ESC: Pause', { fontSize: '10px', fill: '#444455', fontFamily: 'Courier New' });
   }
 
@@ -1485,7 +1593,7 @@ class GameScene extends Phaser.Scene {
     const dx = target.x - this.guard.x, dy = target.y - this.guard.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist < 5) { this.currentPatrolIndex = (this.currentPatrolIndex + 1) % this.guardPatrolPoints.length; }
-    else { this.guardAngle = Math.atan2(dy, dx); this.guard.body.setVelocity((dx / dist) * GUARD_SPEED, (dy / dist) * GUARD_SPEED); }
+    else { this.guardAngle = Math.atan2(dy, dx); this.guard.body.setVelocity((dx / dist) * this.currentGuardSpeed, (dy / dist) * this.currentGuardSpeed); }
     
     // Update guard glow position
     if (this.guardGlow) {
@@ -1541,14 +1649,16 @@ class GameScene extends Phaser.Scene {
         const dx = this.player.x - sensor.x;
         const dy = this.player.y - sensor.y;
         const dist = Math.sqrt(dx * dx + dy * dy);
-        if (dist < sensor.detectionRadius && sensor.cooldown <= 0) {
+        // Use difficulty-based detection radius and cooldown
+        const effectiveRadius = MOTION_SENSOR_RADIUS + (this.levelDifficulty - 1) * 5;
+        if (dist < effectiveRadius && sensor.cooldown <= 0) {
           this.detected();
-          sensor.cooldown = 120;
+          sensor.cooldown = this.currentMotionCooldown;
         }
       }
       if (sensor.cooldown > 0) sensor.cooldown--;
       sensor.graphics.fillStyle(0xff0066, sensor.cooldown > 0 ? 0.5 : 0.2);
-      sensor.graphics.fillCircle(sensor.x, sensor.y, sensor.detectionRadius);
+      sensor.graphics.fillCircle(sensor.x, sensor.y, MOTION_SENSOR_RADIUS);
     });
   }
   
@@ -1595,8 +1705,9 @@ class GameScene extends Phaser.Scene {
     this.visionGraphics.clear();
     if (!this.isRunning || this.isDetected) return;
     
-    const coneLength = VISION_CONE_DISTANCE;
-    const halfAngle = (VISION_CONE_ANGLE * Math.PI) / 360;
+    // Use difficulty-based cone settings
+    const coneLength = this.currentVisionDistance;
+    const halfAngle = this.currentVisionAngle / 2;
     const tipX = this.guard.x, tipY = this.guard.y;
     const leftAngle = this.guardAngle - halfAngle, rightAngle = this.guardAngle + halfAngle;
     const leftX = tipX + Math.cos(leftAngle) * coneLength;
@@ -1648,12 +1759,12 @@ class GameScene extends Phaser.Scene {
     const dy = this.player.y - this.guard.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     if (dist < 20) { this.detected(); return; }
-    if (dist < VISION_CONE_DISTANCE) {
+    if (dist < this.currentVisionDistance) {
       const angleToPlayer = Math.atan2(dy, dx);
       let angleDiff = angleToPlayer - this.guardAngle;
       while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
       while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-      if (Math.abs(angleDiff) < VISION_CONE_ANGLE * Math.PI / 360) {
+      if (Math.abs(angleDiff) < this.currentVisionAngle / 2) {
         if (!this.isLineBlocked(this.guard.x, this.guard.y, this.player.x, this.player.y)) {
           this.detected();
         }
