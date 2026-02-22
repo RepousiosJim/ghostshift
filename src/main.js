@@ -3039,6 +3039,277 @@ class ResultsScene extends Phaser.Scene {
   formatTime(ms) { if (!ms) return '--:--'; const minutes = Math.floor(ms / 60000); const seconds = Math.floor((ms % 60000) / 1000); const centis = Math.floor((ms % 1000) / 10); return minutes.toString().padStart(2, '0') + ':' + seconds.toString().padStart(2, '0') + '.' + centis.toString().padStart(2, '0'); }
 }
 
+// ==================== VICTORY SCENE (Game Complete) ====================
+// Phase 10: Add game completion celebration screen
+class VictoryScene extends Phaser.Scene {
+  constructor() { super({ key: 'VictoryScene' }); }
+  
+  init(data) {
+    this.resultData = data || {};
+    this.levelIndex = getValidLevelIndex(this.resultData.levelIndex, {
+      fallbackIndex: 0,
+      allowRandom: false,
+      source: 'VictoryScene.init'
+    });
+    this.success = this.resultData.success || false;
+    this.runTime = this.resultData.time || 0;
+    this.credits = this.resultData.credits || 0;
+    this.isGameComplete = this.resultData.isGameComplete || false;
+    setRuntimePhase('victory:init', { sceneKey: this.scene.key, levelIndex: this.levelIndex });
+  }
+
+  create() {
+    attachSceneGuard(this, 'VictoryScene');
+    setRuntimePhase('victory:create', { sceneKey: this.scene.key, levelIndex: this.levelIndex });
+    
+    // Register resize listener
+    this._resizeListener = () => this._handleResize();
+    fullscreenManager.on('resize', this._resizeListener);
+    
+    // Background
+    this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
+    
+    // Celebration particles - gold/rainbow colors
+    this.createVictoryParticles();
+    
+    // Main title - dramatic game complete
+    const title = this.add.text(MAP_WIDTH * TILE_SIZE / 2, 50, '🎉 GAME COMPLETE! 🎉', { fontSize: '36px', fill: '#ffd700', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    title.setShadow(0, 0, '#ffd700', 15, true, true);
+    
+    // Title animation - dramatic entrance
+    title.setAlpha(0);
+    title.setScale(0.3);
+    this.tweens.add({
+      targets: title,
+      alpha: 1,
+      scale: 1,
+      duration: 600,
+      ease: 'Back.easeOut'
+    });
+    
+    // Subtitle
+    const subtitle = this.add.text(MAP_WIDTH * TILE_SIZE / 2, 90, 'You have conquered all 5 levels!', { fontSize: '14px', fill: '#88aacc', fontFamily: 'Courier New' }).setOrigin(0.5);
+    subtitle.setAlpha(0);
+    this.tweens.add({
+      targets: subtitle,
+      alpha: 1,
+      duration: 400,
+      delay: 300
+    });
+    
+    // Stats panel - show total game stats
+    const statsY = 130;
+    
+    // Total runs
+    const totalRuns = saveManager.data.totalRuns || 0;
+    const runsText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY, `Total Runs: ${totalRuns}`, { fontSize: '16px', fill: '#4488ff', fontFamily: 'Courier New' }).setOrigin(0.5);
+    
+    // Total credits earned
+    const totalCredits = saveManager.data.totalCreditsEarned || 0;
+    const creditsText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY + 28, `Total Credits Earned: ${totalCredits}`, { fontSize: '16px', fill: '#ffaa00', fontFamily: 'Courier New' }).setOrigin(0.5);
+    
+    // Levels completed
+    const levelsCompleted = saveManager.data.unlockedLevels ? saveManager.data.unlockedLevels.length : 1;
+    const levelsText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY + 56, `Levels Completed: ${levelsCompleted}/${LEVEL_LAYOUTS.length}`, { fontSize: '16px', fill: '#44ff88', fontFamily: 'Courier New' }).setOrigin(0.5);
+    
+    // Last run time
+    const lastTime = this.formatTime(this.runTime);
+    const timeText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY + 84, `Last Run: ${lastTime}`, { fontSize: '14px', fill: '#888888', fontFamily: 'Courier New' }).setOrigin(0.5);
+    
+    // Calculate total best time across all completed levels
+    const bestTimes = saveManager.data.bestTimes || {};
+    let totalBestTime = 0;
+    let timesCount = 0;
+    for (const levelIdx in bestTimes) {
+      totalBestTime += bestTimes[levelIdx];
+      timesCount++;
+    }
+    
+    if (timesCount > 0) {
+      const avgTime = totalBestTime / timesCount;
+      const avgText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY + 112, `Avg Level Time: ${this.formatTime(avgTime)}`, { fontSize: '14px', fill: '#aa66ff', fontFamily: 'Courier New' }).setOrigin(0.5);
+      avgText.setAlpha(0);
+      this.tweens.add({ targets: avgText, alpha: 1, duration: 300, delay: 600 });
+    }
+    
+    // Animate stats entrance
+    [runsText, creditsText, levelsText, timeText].forEach((t, i) => {
+      t.setAlpha(0);
+      t.setY(t.y + 15);
+      this.tweens.add({
+        targets: t,
+        alpha: 1,
+        y: t.y - 15,
+        duration: 300,
+        delay: 400 + i * 100,
+        ease: 'Quad.easeOut'
+      });
+    });
+    
+    // Level completion list
+    const listY = statsY + 150;
+    this.add.text(MAP_WIDTH * TILE_SIZE / 2, listY, '★ Level Best Times ★', { fontSize: '14px', fill: '#ffdd00', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    
+    // Show best times for each completed level
+    let listOffset = 0;
+    LEVEL_LAYOUTS.forEach((level, idx) => {
+      const bestTime = saveManager.getBestTime(idx);
+      if (bestTime) {
+        const levelName = level.name;
+        const timeStr = this.formatTime(bestTime);
+        const levelTimeText = this.add.text(MAP_WIDTH * TILE_SIZE / 2 - 100, listY + 25 + listOffset, `${idx + 1}. ${levelName}`, { fontSize: '12px', fill: '#88aacc', fontFamily: 'Courier New' }).setOrigin(0, 0.5);
+        const timeValueText = this.add.text(MAP_WIDTH * TILE_SIZE / 2 + 100, listY + 25 + listOffset, timeStr, { fontSize: '12px', fill: '#44ff88', fontFamily: 'Courier New' }).setOrigin(1, 0.5);
+        
+        levelTimeText.setAlpha(0);
+        timeValueText.setAlpha(0);
+        this.tweens.add({ targets: levelTimeText, alpha: 1, duration: 200, delay: 800 + listOffset * 30 });
+        this.tweens.add({ targets: timeValueText, alpha: 1, duration: 200, delay: 800 + listOffset * 30 });
+        
+        listOffset += 20;
+      }
+    });
+    
+    // Buttons - centered
+    const buttonY = MAP_HEIGHT * TILE_SIZE - 80;
+    const buttonWidth = 220;
+    const buttonHeight = 52;
+    const spacing = 20;
+    
+    // Play Again button - restart from level 1
+    this.createButton(MAP_WIDTH * TILE_SIZE / 2 - spacing - buttonWidth/2, buttonY, buttonWidth, buttonHeight, '↻ PLAY AGAIN', 0x2244aa, 0x66aaff, () => {
+      sfx.select();
+      this.transitionTo('GameScene', { levelIndex: 0 });
+    });
+    
+    // Main Menu button
+    this.createButton(MAP_WIDTH * TILE_SIZE / 2 + spacing + buttonWidth/2, buttonY, buttonWidth, buttonHeight, '⌂ MAIN MENU', 0x2a3a4a, 0xaaaacc, () => {
+      sfx.select();
+      this.transitionTo('MainMenuScene');
+    });
+    
+    // Keyboard shortcuts
+    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE - 25, '[R] Play Again | [ESC] Menu', { fontSize: '12px', fill: '#444455', fontFamily: 'Courier New' }).setOrigin(0.5);
+    
+    // Setup keyboard handlers
+    this._retryKeyHandler = () => {
+      sfx.select();
+      this.transitionTo('GameScene', { levelIndex: 0 });
+    };
+    this._menuKeyHandler = () => {
+      sfx.select();
+      this.transitionTo('MainMenuScene');
+    };
+    this.input.keyboard.on('keydown-R', this._retryKeyHandler);
+    this.input.keyboard.on('keydown-ESC', this._menuKeyHandler);
+    this.input.keyboard.once('keydown', () => sfx.init());
+    this.input.on('pointerdown', () => sfx.init(), this);
+    
+    // Play victory sound
+    sfx.win();
+  }
+  
+  // Handle window resize
+  _handleResize() {
+    // Minimal handling needed for celebration scene
+  }
+  
+  // Cleanup on shutdown
+  shutdown() {
+    if (this._particleTimer) {
+      this._particleTimer.remove();
+      this._particleTimer = null;
+    }
+    if (this._resizeListener) {
+      fullscreenManager.off(this._resizeListener);
+    }
+    if (this._retryKeyHandler) {
+      this.input.keyboard.off('keydown-R', this._retryKeyHandler);
+      this._retryKeyHandler = null;
+    }
+    if (this._menuKeyHandler) {
+      this.input.keyboard.off('keydown-ESC', this._menuKeyHandler);
+      this._menuKeyHandler = null;
+    }
+    super.shutdown();
+  }
+  
+  // Celebration particles with gold/rainbow theme
+  createVictoryParticles() {
+    this.resultParticles = [];
+    const particleCount = 50; // More particles for celebration
+    const colors = [0xffd700, 0xffaa00, 0x00ff88, 0x44ffaa, 0x88ffcc, 0xff66aa, 0xaa66ff, 0x66aaff];
+    
+    for (let i = 0; i < particleCount; i++) {
+      const x = Math.random() * MAP_WIDTH * TILE_SIZE;
+      const y = Math.random() * MAP_HEIGHT * TILE_SIZE;
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      const particle = this.add.circle(x, y, 2 + Math.random() * 5, color, 0.4 + Math.random() * 0.4);
+      particle.speedX = (Math.random() - 0.5) * 3;
+      particle.speedY = -1.5 - Math.random() * 2.5;
+      particle.life = 1;
+      particle.decay = 0.003 + Math.random() * 0.008;
+      this.resultParticles.push(particle);
+    }
+    
+    // Animate particles
+    this._particleTimer = this.time.addEvent({
+      delay: 16,
+      callback: () => {
+        this.resultParticles.forEach(p => {
+          p.x += p.speedX;
+          p.y += p.speedY;
+          p.life -= p.decay;
+          p.setAlpha(p.life * 0.6);
+          
+          if (p.life <= 0 || p.y < 0) {
+            p.x = Math.random() * MAP_WIDTH * TILE_SIZE;
+            p.y = MAP_HEIGHT * TILE_SIZE + 10;
+            p.life = 1;
+          }
+        });
+      },
+      loop: true
+    });
+  }
+  
+  transitionTo(sceneKey, data = null) {
+    runSceneTransition(this, sceneKey, data);
+  }
+  
+  createButton(x, y, width, height, text, bgColor, strokeColor, onClick) {
+    const bg = this.add.rectangle(x, y, width, height, bgColor);
+    bg.setStrokeStyle(2, strokeColor);
+    bg.setInteractive({ useHandCursor: true });
+    const label = this.add.text(x, y, text, { fontSize: '16px', fill: '#ffffff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    
+    bg.on('pointerover', () => { 
+      bg.setFillStyle(bgColor + 0x202020); 
+      bg.setStrokeStyle(2, 0xffffff);
+      sfx.menuHover(); 
+    });
+    bg.on('pointerout', () => { 
+      bg.setFillStyle(bgColor); 
+      bg.setStrokeStyle(2, strokeColor);
+    });
+    bg.on('pointerdown', () => {
+      this.tweens.add({
+        targets: bg,
+        scaleX: 0.95,
+        scaleY: 0.95,
+        duration: 50,
+        yoyo: true,
+        onComplete: () => {
+          bg.setScale(1);
+        }
+      });
+      onClick();
+    });
+    return { bg, label };
+  }
+  
+  formatTime(ms) { if (!ms) return '--:--'; const minutes = Math.floor(ms / 60000); const seconds = Math.floor((ms % 60000) / 1000); const centis = Math.floor((ms % 1000) / 10); return minutes.toString().padStart(2, '0') + ':' + seconds.toString().padStart(2, '0') + '.' + centis.toString().padStart(2, '0'); }
+}
+
 // ==================== GAME SCENE ====================
 class GameScene extends Phaser.Scene {
   constructor() {
@@ -4185,13 +4456,27 @@ class GameScene extends Phaser.Scene {
     // Mark as won - keep isRunning true for test compatibility
     this.hasWon = true;
     
-    // Transition to ResultsScene
-    safeSceneStart(this, 'ResultsScene', { 
-      levelIndex: this.currentLevelIndex,
-      success: true, 
-      time: this.elapsedTime, 
-      credits: creditsEarned 
-    }, { via: 'winGame' });
+    // Check if this was the final level - show VictoryScene for game completion
+    const isFinalLevel = this.currentLevelIndex === LEVEL_LAYOUTS.length - 1;
+    
+    if (isFinalLevel) {
+      // Transition to VictoryScene for game completion
+      safeSceneStart(this, 'VictoryScene', { 
+        levelIndex: this.currentLevelIndex,
+        success: true, 
+        time: this.elapsedTime, 
+        credits: creditsEarned,
+        isGameComplete: true
+      }, { via: 'winGame' });
+    } else {
+      // Transition to ResultsScene for level completion
+      safeSceneStart(this, 'ResultsScene', { 
+        levelIndex: this.currentLevelIndex,
+        success: true, 
+        time: this.elapsedTime, 
+        credits: creditsEarned 
+      }, { via: 'winGame' });
+    }
   }
 }
 
@@ -4212,7 +4497,7 @@ const config = {
     default: 'arcade',
     arcade: { debug: false }
   },
-  scene: [BootScene, MainMenuScene, LevelSelectScene, SettingsScene, ResultsScene, ControlsScene, GameScene]
+  scene: [BootScene, MainMenuScene, LevelSelectScene, SettingsScene, ResultsScene, ControlsScene, GameScene, VictoryScene]
 };
 
 // Phase 9: Listen to fullscreen changes and emit resize events
