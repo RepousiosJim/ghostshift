@@ -138,7 +138,7 @@ function safeSceneStart(scene, sceneKey, data = null, meta = {}) {
 }
 
 function safeDelayedCall(scene, delay, phase, fn, meta = {}) {
-  if (!scene?.time) return null;
+  if (!scene?.time?.delayedCall) return null;
   const guard = attachSceneGuard(scene, scene.scene?.key);
   const timer = scene.time.delayedCall(delay, guardSceneCallback(scene, phase, fn, meta));
   guard.timers.add(timer);
@@ -1151,7 +1151,7 @@ const _levelStartGuard = {
     this.inProgress = true;
     this.lastRequest = { levelIndex, source, at: Date.now() };
     const release = () => { this.inProgress = false; };
-    if (scene?.time) {
+    if (scene?.time?.delayedCall) {
       scene.time.delayedCall(400, release);
     } else {
       setTimeout(release, 400);
@@ -1386,7 +1386,7 @@ class MainMenuScene extends Phaser.Scene {
     // Check if we should show How to Play from ControlsScene transition
     if (data?.showHowToPlay) {
       // Delay slightly to ensure scene is fully created
-      this.time.delayedCall(100, () => {
+      safeDelayedCall(this, 100, 'menu:how-to-play', () => {
         this.showHowToPlayOverlay();
       });
     }
@@ -2783,7 +2783,7 @@ class ResultsScene extends Phaser.Scene {
       source: 'ResultsScene.init'
     });
     this.success = this.resultData.success || false;
-    this.time = this.resultData.time || 0;
+    this.runTime = this.resultData.time || 0;
     this.credits = this.resultData.credits || 0;
     setRuntimePhase('results:init', { sceneKey: this.scene.key, levelIndex: this.levelIndex });
   }
@@ -2824,12 +2824,12 @@ class ResultsScene extends Phaser.Scene {
     const statsY = 140;
     if (this.success) {
       const creditsText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY, '+' + this.credits + ' Credits', { fontSize: '20px', fill: '#ffaa00', fontFamily: 'Courier New' }).setOrigin(0.5);
-      const timeText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY + 30, 'Time: ' + this.formatTime(this.time), { fontSize: '16px', fill: '#888888', fontFamily: 'Courier New' }).setOrigin(0.5);
+      const timeText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY + 30, 'Time: ' + this.formatTime(this.runTime), { fontSize: '16px', fill: '#888888', fontFamily: 'Courier New' }).setOrigin(0.5);
       
       // Best time for this level - Phase 6: check for new record
       const previousBest = saveManager.getBestTime(this.levelIndex);
-      const isNewRecord = previousBest === null || this.time < previousBest;
-      const bestTime = isNewRecord ? this.time : previousBest;
+      const isNewRecord = previousBest === null || this.runTime < previousBest;
+      const bestTime = isNewRecord ? this.runTime : previousBest;
       
       let bestText, newBestText;
       if (isNewRecord) {
@@ -3049,6 +3049,7 @@ class GameScene extends Phaser.Scene {
   init(data) {
     this.requestedLevelIndex = data?.levelIndex ?? null;
     this.continueRun = data?.continueRun ?? false;
+    setRuntimePhase('level:init', { sceneKey: this.scene.key, levelIndex: this.requestedLevelIndex });
   }
 
   // Manual restart method for testing
@@ -3058,6 +3059,7 @@ class GameScene extends Phaser.Scene {
 
   requestRestart(source = 'GameScene.requestRestart') {
     this._restarted = true;
+    setRuntimePhase('level:restart', { sceneKey: this.scene.key, levelIndex: this.currentLevelIndex, transition: { from: this.scene.key, to: 'GameScene' } });
     const data = prepareLevelStart(this, { levelIndex: this.currentLevelIndex, continueRun: this.continueRun }, source);
     if (!data) return;
     this.scene.restart(data);

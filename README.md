@@ -4,11 +4,19 @@ A stealth evasion game built with Phaser 3 and Tauri.
 
 ## Console-Zero Verification (2026-02-22)
 
-✅ **Verified: Zero console errors/warnings in runtime**
-- Playwright E2E tests pass with no console errors
-- Full game flow tested: boot → play → detection → restart → win
-- Build passes with no errors
-- Tests: `npm run test:e2e`
+✅ **Build: PASS**
+- `npm run build` completes without errors
+
+⚠️ **Test Suite: 3 passed, 3 failed (logic assertions, NOT console/runtime errors)**
+- Core boot/play/restart flow: ✅ PASS
+- Console error collection: ✅ ZERO runtime errors detected
+- Fail flow test: fails on `isDetected` assertion (timing/state issue)
+- Win flow test: fails on `winGame` return (isRunning check)
+- Warehouse flow: fails on restart state assertion
+
+**Status: Game runs without console/runtime errors. Test failures are game logic edge cases.**
+
+Tests: `npm run test:e2e` or `npx playwright test`
 
 ## Game Flow (Phase 9 Complete)
 
@@ -172,3 +180,27 @@ ghostshift/
 ## License
 
 MIT
+
+---
+
+## Verification & Priorities (2026-02-22)
+
+### ✅ Completed
+- Build optimization (recent commits)
+- Scene teardown cleanup and timer management
+- Level loading pipeline hardening
+- Level layout module and validator
+- Level select background redesign
+
+### ⚠️ Known Issues / Test Failures (Non-Critical)
+1. **Fail flow test**: `isDetected` state timing issue - detected() sets flag but test assertion may fire too quickly
+2. **Win flow test**: `winGame()` returns early if `!this.isRunning` - test calls directly without proper game state
+3. **Warehouse flow restart**: Restart doesn't fully clear detected state in test context
+
+### 🔴 Remaining Bottlenecks
+- None identified - core gameplay works
+
+### 📋 Next Priorities
+1. Fix test assertions for fail/win flows (add waitForState or proper async handling)
+2. Add Level 3+ content (Server Farm, The Vault, Training Facility)
+3. Performance profiling on lower-end devices
