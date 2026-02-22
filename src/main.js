@@ -1,32 +1,62 @@
 import Phaser from 'phaser';
 
-// ==================== SAVE/LOAD SYSTEM ====================
+// ==================== SAVE MANAGER ====================
 const SAVE_KEY = 'ghostshift_save';
 
 const defaultSaveData = {
   credits: 0,
   totalRuns: 0,
   bestTime: null,
+  bestTimes: {}, // per-level best times
+  unlockedLevels: [0], // array of unlocked level indices
   perks: { speed: 1, stealth: 1, luck: 1 },
-  settings: { audioEnabled: true }
+  settings: { audioEnabled: true },
+  lastPlayed: null,
+  totalCreditsEarned: 0
 };
 
-function loadSave() {
-  try {
-    const saved = localStorage.getItem(SAVE_KEY);
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      return { ...defaultSaveData, ...parsed, perks: { ...defaultSaveData.perks, ...parsed.perks }, settings: { ...defaultSaveData.settings, ...parsed.settings } };
-    }
-  } catch (e) { console.warn('Failed to load save:', e); }
-  return { ...defaultSaveData };
+class SaveManager {
+  constructor() { this.data = this.load(); }
+  load() {
+    try {
+      const saved = localStorage.getItem(SAVE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        return { ...defaultSaveData, ...parsed, perks: { ...defaultSaveData.perks, ...(parsed.perks || {}) }, settings: { ...defaultSaveData.settings, ...(parsed.settings || {}) }, bestTimes: parsed.bestTimes || {}, unlockedLevels: parsed.unlockedLevels || [0] };
+      }
+    } catch (e) { console.warn('Failed to load save, using defaults:', e); }
+    return { ...defaultSaveData };
+  }
+  save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(this.data)); } catch (e) { console.warn('Failed to save:', e); } }
+  hasSave() { return this.data.totalRuns > 0 || this.data.credits > 0; }
+  getLastPlayed() { return this.data.lastPlayed; }
+  addCredits(amount) { this.data.credits += amount; this.data.totalCreditsEarned += amount; this.save(); }
+  spendCredits(amount) { if (this.data.credits >= amount) { this.data.credits -= amount; this.save(); return true; } return false; }
+  getPerkLevel(perk) { return this.data.perks[perk] || 1; }
+  upgradePerk(perk) {
+    const PERK_INFO = { speed: { costs: [0, 50, 100, 200], bonus: [0, 0.15, 0.35, 0.6] }, stealth: { costs: [0, 50, 100, 200], bonus: [0, 0.2, 0.4, 0.65] }, luck: { costs: [0, 50, 100, 200], bonus: [0, 10, 25, 50] } };
+    const currentLevel = this.data.perks[perk] || 1;
+    if (currentLevel >= 4) return false;
+    const cost = PERK_INFO[perk].costs[currentLevel];
+    if (this.spendCredits(cost)) { this.data.perks[perk] = currentLevel + 1; this.save(); return true; }
+    return false;
+  }
+  isLevelUnlocked(levelIndex) { return this.data.unlockedLevels.includes(levelIndex); }
+  unlockLevel(levelIndex) { if (!this.isLevelUnlocked(levelIndex)) { this.data.unlockedLevels.push(levelIndex); this.save(); } }
+  getBestTime(levelIndex) { return this.data.bestTimes[levelIndex] || null; }
+  setBestTime(levelIndex, time) { const current = this.data.bestTimes[levelIndex]; if (!current || time < current) { this.data.bestTimes[levelIndex] = time; this.save(); } }
+  getSetting(key) { return this.data.settings[key]; }
+  setSetting(key, value) { this.data.settings[key] = value; this.save(); }
+  recordRun(levelIndex, time, creditsEarned) { this.data.totalRuns++; this.data.lastPlayed = Date.now(); this.addCredits(creditsEarned); this.setBestTime(levelIndex, time); if (levelIndex < LEVEL_LAYOUTS.length - 1) this.unlockLevel(levelIndex + 1); }
+  resetSave() { this.data = { ...defaultSaveData }; this.save(); }
 }
 
-function saveSaveData(data) {
-  try { localStorage.setItem(SAVE_KEY, JSON.stringify(data)); } catch (e) { console.warn('Failed to save:', e); }
-}
+const saveManager = new SaveManager();
 
-let gameSave = loadSave();
+// Backwards compatibility
+let gameSave = saveManager.data;
+function loadSave() { return saveManager.data; }
+function saveSaveData(data) { saveManager.data = data; saveManager.save(); }
 
 // ==================== GAME CONSTANTS ====================
 const TILE_SIZE = 32;
@@ -40,9 +70,10 @@ const VISION_CONE_DISTANCE = 150;
 
 // ==================== AUDIO SYSTEM ====================
 class SFXManager {
-  constructor() { this.ctx = null; this.initialized = false; this.enabled = gameSave.settings.audioEnabled; }
+  constructor() { this.ctx = null; this.initialized = false; this.enabled = saveManager.getSetting('audioEnabled') !== false; }
   init() { if (this.initialized) return; try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); this.initialized = true; } catch (e) { console.warn('WebAudio not available'); } }
-  setEnabled(enabled) { this.enabled = enabled; gameSave.settings.audioEnabled = enabled; saveSaveData(gameSave); }
+  setEnabled(enabled) { this.enabled = enabled; saveManager.setSetting('audioEnabled', enabled); }
+  get isEnabled() { return this.enabled; }
   playTone(freq, duration, type = 'square', volume = 0.1) {
     if (!this.ctx || !this.enabled) return;
     const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
@@ -55,7 +86,7 @@ class SFXManager {
   fail() { this.playTone(200, 0.3, 'sawtooth', 0.1); setTimeout(() => this.playTone(150, 0.4, 'sawtooth', 0.1), 200); }
   collect() { this.playTone(1200, 0.05, 'sine', 0.08); setTimeout(() => this.playTone(1500, 0.1, 'sine', 0.08), 50); }
   select() { this.playTone(600, 0.08, 'sine', 0.08); }
-  pause() { this.playTone(400, 0.1, 'sine', 0.08); }
+  menuHover() { this.playTone(400, 0.05, 'sine', 0.03); }
 }
 const sfx = new SFXManager();
 
@@ -76,10 +107,213 @@ function getSpeedBonus() { return PERK_INFO.speed.bonus[gameSave.perks.speed]; }
 function getStealthBonus() { return PERK_INFO.stealth.bonus[gameSave.perks.stealth]; }
 function getLuckBonus() { return PERK_INFO.luck.bonus[gameSave.perks.luck]; }
 
-// ==================== MAIN SCENE ====================
-class MainScene extends Phaser.Scene {
+// ==================== BOOT SCENE (Loading) ====================
+class BootScene extends Phaser.Scene {
   constructor() {
-    super({ key: 'MainScene' });
+    super({ key: 'BootScene' });
+  }
+
+  create() {
+    // Simple loading screen
+    this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
+    
+    const title = this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2 - 30, 'GHOSTSHIFT', { fontSize: '36px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    const loading = this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2 + 20, 'Loading...', { fontSize: '14px', fill: '#666688', fontFamily: 'Courier New' }).setOrigin(0.5);
+    
+    // Initialize audio on first interaction
+    this.input.keyboard.once('keydown', () => sfx.init());
+    this.input.on('pointerdown', () => sfx.init(), this);
+    
+    // Auto-transition to main menu
+    this.time.delayedCall(500, () => {
+      this.scene.start('MainMenuScene');
+    });
+  }
+}
+
+// ==================== MAIN MENU SCENE ====================
+class MainMenuScene extends Phaser.Scene {
+  constructor() {
+    super({ key: 'MainMenuScene' });
+  }
+
+  create() {
+    // Background
+    this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
+    
+    // Title
+    this.add.text(MAP_WIDTH * TILE_SIZE / 2, 50, 'GHOSTSHIFT', { fontSize: '40px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    this.add.text(MAP_WIDTH * TILE_SIZE / 2, 85, 'Infiltrate. Hack. Escape.', { fontSize: '14px', fill: '#666688', fontFamily: 'Courier New' }).setOrigin(0.5);
+    
+    // Stats
+    if (saveManager.hasSave()) {
+      this.add.text(40, 110, 'Runs: ' + saveManager.data.totalRuns + ' | Best: ' + this.formatTime(saveManager.data.bestTime), { fontSize: '12px', fill: '#888888', fontFamily: 'Courier New' });
+    }
+    
+    // Credits
+    this.creditsText = this.add.text(MAP_WIDTH * TILE_SIZE - 40, 20, 'Credits: ' + saveManager.data.credits, { fontSize: '16px', fill: '#ffaa00', fontFamily: 'Courier New' }).setOrigin(1, 0);
+    
+    // Buttons
+    const buttonWidth = 250, buttonHeight = 45, startY = 180, spacing = 60;
+    
+    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY, buttonWidth, buttonHeight, '▶  PLAY', 0x2244aa, 0x4488ff, () => this.scene.start('LevelSelectScene'));
+    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing, buttonWidth, buttonHeight, '▣  LEVEL SELECT', 0x1a2a3a, 0x4488ff, () => this.scene.start('LevelSelectScene'));
+    
+    const canContinue = saveManager.hasSave();
+    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 2, buttonWidth, buttonHeight, '↻  CONTINUE', canContinue ? 0x1a3a2a : 0x1a1a1a, canContinue ? 0x44ff88 : 0x444444, () => { if (canContinue) this.scene.start('GameScene', { continueRun: true }); }, !canContinue);
+    
+    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 3, buttonWidth, buttonHeight, '⚙  SETTINGS', 0x2a2a3a, 0x8888aa, () => this.scene.start('SettingsScene'));
+    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 4, buttonWidth, buttonHeight, '?  CONTROLS', 0x2a2a3a, 0x8888aa, () => this.showControlsOverlay());
+    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 5, buttonWidth, buttonHeight, '★  CREDITS', 0x2a2a3a, 0x8888aa, () => this.showCreditsOverlay());
+    
+    this.input.keyboard.once('keydown', () => sfx.init());
+    this.input.on('pointerdown', () => sfx.init(), this);
+  }
+  
+  createMenuButton(x, y, width, height, text, bgColor, strokeColor, onClick, disabled = false) {
+    const bg = this.add.rectangle(x, y, width, height, bgColor);
+    bg.setStrokeStyle(2, strokeColor);
+    bg.setInteractive({ useHandCursor: !disabled });
+    const label = this.add.text(x, y, text, { fontSize: '16px', fill: disabled ? '#444444' : '#ffffff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    bg.on('pointerover', () => { if (!disabled) { bg.setFillStyle(bgColor + 0x202020); sfx.menuHover(); } });
+    bg.on('pointerout', () => { if (!disabled) bg.setFillStyle(bgColor); });
+    bg.on('pointerdown', () => { sfx.select(); onClick(); });
+    return { bg, label };
+  }
+  
+  showControlsOverlay() {
+    const overlay = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x000000, 0.9);
+    overlay.setDepth(100);
+    const panel = this.add.container(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2);
+    panel.setDepth(101);
+    const bg = this.add.rectangle(0, 0, 400, 300, 0x1a1a2a);
+    bg.setStrokeStyle(2, 0x4488ff);
+    panel.add(bg);
+    panel.add(this.add.text(0, -120, 'CONTROLS', { fontSize: '24px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5));
+    const controls = [{ key: 'WASD / Arrows', action: 'Move player' }, { key: 'R', action: 'Restart level' }, { key: 'ESC', action: 'Pause game' }, { key: 'SPACE', action: 'Start game' }];
+    let yOffset = -80;
+    controls.forEach(c => { panel.add(this.add.text(-150, yOffset, c.key, { fontSize: '14px', fill: '#ffaa00', fontFamily: 'Courier New' }).setOrigin(0, 0.5)); panel.add(this.add.text(50, yOffset, c.action, { fontSize: '14px', fill: '#cccccc', fontFamily: 'Courier New' }).setOrigin(0, 0.5)); yOffset += 30; });
+    panel.add(this.add.text(0, 110, '[ Press any key or click to close ]', { fontSize: '12px', fill: '#666688', fontFamily: 'Courier New' }).setOrigin(0.5));
+    const closeHandler = () => { this.input.keyboard.off('keydown', closeHandler); this.input.off('pointerdown', closeHandler); overlay.destroy(); panel.destroy(); };
+    this.input.keyboard.on('keydown', closeHandler);
+    this.input.on('pointerdown', closeHandler);
+  }
+  
+  showCreditsOverlay() {
+    const overlay = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x000000, 0.9);
+    overlay.setDepth(100);
+    const panel = this.add.container(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2);
+    panel.setDepth(101);
+    const bg = this.add.rectangle(0, 0, 400, 280, 0x1a1a2a);
+    bg.setStrokeStyle(2, 0x4488ff);
+    panel.add(bg);
+    panel.add(this.add.text(0, -110, 'CREDITS', { fontSize: '24px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5));
+    const credits = [{ role: 'Developer', name: 'GhostShift Team' }, { role: 'Engine', name: 'Phaser 3' }, { role: 'Version', name: '0.2.0 (Phase 1)' }];
+    let yOffset = -60;
+    credits.forEach(c => { panel.add(this.add.text(-120, yOffset, c.role + ':', { fontSize: '14px', fill: '#ffaa00', fontFamily: 'Courier New' }).setOrigin(0, 0.5)); panel.add(this.add.text(30, yOffset, c.name, { fontSize: '14px', fill: '#cccccc', fontFamily: 'Courier New' }).setOrigin(0, 0.5)); yOffset += 35; });
+    panel.add(this.add.text(0, 100, '[ Press any key or click to close ]', { fontSize: '12px', fill: '#666688', fontFamily: 'Courier New' }).setOrigin(0.5));
+    const closeHandler = () => { this.input.keyboard.off('keydown', closeHandler); this.input.off('pointerdown', closeHandler); overlay.destroy(); panel.destroy(); };
+    this.input.keyboard.on('keydown', closeHandler);
+    this.input.on('pointerdown', closeHandler);
+  }
+  
+  formatTime(ms) { if (!ms) return '--:--'; const minutes = Math.floor(ms / 60000); const seconds = Math.floor((ms % 60000) / 1000); const centis = Math.floor((ms % 1000) / 10); return minutes.toString().padStart(2, '0') + ':' + seconds.toString().padStart(2, '0') + '.' + centis.toString().padStart(2, '0'); }
+}
+
+// ==================== LEVEL SELECT SCENE ====================
+class LevelSelectScene extends Phaser.Scene {
+  constructor() { super({ key: 'LevelSelectScene' }); }
+  create() {
+    this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
+    this.add.text(MAP_WIDTH * TILE_SIZE / 2, 30, 'SELECT LEVEL', { fontSize: '28px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    const backBtn = this.add.text(20, 15, '< BACK', { fontSize: '14px', fill: '#888888', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
+    backBtn.on('pointerover', () => backBtn.setFill('#ffffff'));
+    backBtn.on('pointerout', () => backBtn.setFill('#888888'));
+    backBtn.on('pointerdown', () => { sfx.select(); this.scene.start('MainMenuScene'); });
+    const startY = 80, spacingY = 70;
+    LEVEL_LAYOUTS.forEach((level, index) => {
+      const isUnlocked = saveManager.isLevelUnlocked(index);
+      const bestTime = saveManager.getBestTime(index);
+      const y = startY + index * spacingY;
+      const cardBg = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, y, 400, 55, isUnlocked ? 0x1a2a3a : 0x1a1a1a);
+      cardBg.setStrokeStyle(2, isUnlocked ? 0x4488ff : 0x333333);
+      cardBg.setInteractive({ useHandCursor: isUnlocked });
+      this.add.text(MAP_WIDTH * TILE_SIZE / 2 - 160, y, String(index + 1), { fontSize: '20px', fill: isUnlocked ? '#4488ff' : '#444444', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+      this.add.text(MAP_WIDTH * TILE_SIZE / 2 - 100, y - 10, level.name, { fontSize: '14px', fill: isUnlocked ? '#ffffff' : '#444444', fontFamily: 'Courier New' }).setOrigin(0, 0.5);
+      this.add.text(MAP_WIDTH * TILE_SIZE / 2 - 100, y + 10, 'Best: ' + (bestTime ? this.formatTime(bestTime) : '--:--'), { fontSize: '11px', fill: isUnlocked ? '#888888' : '#444444', fontFamily: 'Courier New' });
+      this.add.text(MAP_WIDTH * TILE_SIZE / 2 + 140, y, isUnlocked ? '▶ PLAY' : '🔒 LOCKED', { fontSize: '12px', fill: isUnlocked ? '#44ff88' : '#444444', fontFamily: 'Courier New' }).setOrigin(0.5);
+      if (isUnlocked) {
+        cardBg.on('pointerover', () => { cardBg.setFillStyle(0x2a3a4a); sfx.menuHover(); });
+        cardBg.on('pointerout', () => cardBg.setFillStyle(0x1a2a3a));
+        cardBg.on('pointerdown', () => { sfx.select(); this.scene.start('GameScene', { levelIndex: index }); });
+      }
+    });
+    this.input.keyboard.once('keydown', () => sfx.init());
+    this.input.on('pointerdown', () => sfx.init(), this);
+  }
+  formatTime(ms) { if (!ms) return '--:--'; const minutes = Math.floor(ms / 60000); const seconds = Math.floor((ms % 60000) / 1000); const centis = Math.floor((ms % 1000) / 10); return minutes.toString().padStart(2, '0') + ':' + seconds.toString().padStart(2, '0') + '.' + centis.toString().padStart(2, '0'); }
+}
+
+// ==================== SETTINGS SCENE ====================
+class SettingsScene extends Phaser.Scene {
+  constructor() { super({ key: 'SettingsScene' }); }
+  create() {
+    this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
+    this.add.text(MAP_WIDTH * TILE_SIZE / 2, 30, 'SETTINGS', { fontSize: '28px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    const backBtn = this.add.text(20, 15, '< BACK', { fontSize: '14px', fill: '#888888', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
+    backBtn.on('pointerover', () => backBtn.setFill('#ffffff'));
+    backBtn.on('pointerout', () => backBtn.setFill('#888888'));
+    backBtn.on('pointerdown', () => { sfx.select(); this.scene.start('MainMenuScene'); });
+    const panelY = 100;
+    this.add.text(40, panelY, 'Audio', { fontSize: '16px', fill: '#ffffff', fontFamily: 'Courier New' });
+    const audioToggle = this.add.text(MAP_WIDTH * TILE_SIZE - 100, panelY, sfx.isEnabled ? '[X] ON' : '[ ] OFF', { fontSize: '14px', fill: sfx.isEnabled ? '#44ff88' : '#ff4444', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
+    audioToggle.on('pointerdown', () => { const newState = !sfx.isEnabled; sfx.setEnabled(newState); audioToggle.setText(newState ? '[X] ON' : '[ ] OFF'); audioToggle.setFill(newState ? '#44ff88' : '#ff4444'); sfx.select(); });
+    const resetY = panelY + 80;
+    this.add.text(40, resetY, 'Reset Progress', { fontSize: '16px', fill: '#ffffff', fontFamily: 'Courier New' });
+    const resetBtn = this.add.text(MAP_WIDTH * TILE_SIZE - 100, resetY, '[RESET]', { fontSize: '14px', fill: '#ff4444', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
+    resetBtn.on('pointerdown', () => { if (confirm('Are you sure you want to reset all progress?')) { saveManager.resetSave(); sfx.fail(); this.scene.start('BootScene'); } });
+    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE - 30, 'GhostShift v0.2.0 - Phase 1', { fontSize: '12px', fill: '#444455', fontFamily: 'Courier New' }).setOrigin(0.5);
+    this.input.keyboard.once('keydown', () => sfx.init());
+    this.input.on('pointerdown', () => sfx.init(), this);
+  }
+}
+
+// ==================== RESULTS SCENE ====================
+class ResultsScene extends Phaser.Scene {
+  constructor() { super({ key: 'ResultsScene' }); }
+  create(data) {
+    this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
+    const success = data?.success ?? false;
+    const time = data?.time ?? 0;
+    const credits = data?.credits ?? 0;
+    const titleText = success ? 'MISSION COMPLETE!' : 'MISSION FAILED';
+    const titleColor = success ? '#00ff88' : '#ff4444';
+    this.add.text(MAP_WIDTH * TILE_SIZE / 2, 80, titleText, { fontSize: '32px', fill: titleColor, fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    if (success) {
+      this.add.text(MAP_WIDTH * TILE_SIZE / 2, 140, '+' + credits + ' Credits', { fontSize: '20px', fill: '#ffaa00', fontFamily: 'Courier New' }).setOrigin(0.5);
+      this.add.text(MAP_WIDTH * TILE_SIZE / 2, 170, 'Time: ' + this.formatTime(time), { fontSize: '16px', fill: '#888888', fontFamily: 'Courier New' }).setOrigin(0.5);
+    }
+    const continueBtn = this.add.text(MAP_WIDTH * TILE_SIZE / 2, 250, '[ Press R or click to continue ]', { fontSize: '14px', fill: '#666688', fontFamily: 'Courier New' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+    continueBtn.on('pointerdown', () => this.scene.start('MainMenuScene'));
+    this.input.keyboard.on('keydown-R', () => this.scene.start('MainMenuScene'));
+    this.input.keyboard.once('keydown', () => sfx.init());
+    this.input.on('pointerdown', () => sfx.init(), this);
+  }
+  formatTime(ms) { if (!ms) return '--:--'; const minutes = Math.floor(ms / 60000); const seconds = Math.floor((ms % 60000) / 1000); const centis = Math.floor((ms % 1000) / 10); return minutes.toString().padStart(2, '0') + ':' + seconds.toString().padStart(2, '0') + '.' + centis.toString().padStart(2, '0'); }
+}
+
+// ==================== GAME SCENE ====================
+class GameScene extends Phaser.Scene {
+  constructor() {
+    super({ key: 'GameScene' });
+    this.requestedLevelIndex = null;
+  }
+  
+  init(data) {
+    this.requestedLevelIndex = data?.levelIndex ?? null;
+  }
+
+  create() {
     this.player = null; this.guard = null; this.ghost = null;
     this.scannerDrone = null; this.cameras = []; this.motionSensors = [];
     this.dataCore = null; this.keyCard = null; this.hackTerminal = null; this.exitZone = null;
@@ -115,9 +349,9 @@ class MainScene extends Phaser.Scene {
     
     this.input.keyboard.once('keydown', () => sfx.init());
     this.input.on('pointerdown', () => sfx.init(), this);
-    this.applySpeedBoost = gameSave.perks.speed > 0;
-    this.applyStealth = gameSave.perks.stealth > 0;
-    this.currentLevelIndex = Math.floor(Math.random() * LEVEL_LAYOUTS.length);
+    this.applySpeedBoost = saveManager.getPerkLevel('speed') > 0;
+    this.applyStealth = saveManager.getPerkLevel('stealth') > 0;
+    this.currentLevelIndex = this.requestedLevelIndex !== null ? this.requestedLevelIndex : Math.floor(Math.random() * LEVEL_LAYOUTS.length);
     this.currentLayout = LEVEL_LAYOUTS[this.currentLevelIndex];
     this.createMap();
     this.createEntities();
@@ -863,92 +1097,6 @@ class MainScene extends Phaser.Scene {
   }
 }
 
-// ==================== BOOT SCENE ====================
-class BootScene extends Phaser.Scene {
-  constructor() {
-    super({ key: 'BootScene' });
-    this.selectedPerk = null;
-  }
-
-  create() {
-    this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
-    
-    const title = this.add.text(MAP_WIDTH * TILE_SIZE / 2, 40, 'GHOSTSHIFT', { fontSize: '36px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2, 80, 'Infiltrate. Hack. Escape.', { fontSize: '14px', fill: '#666688', fontFamily: 'Courier New' }).setOrigin(0.5);
-    
-    // Stats display
-    const statsY = 120;
-    this.add.text(40, statsY, `Total Runs: ${gameSave.totalRuns}`, { fontSize: '14px', fill: '#888888', fontFamily: 'Courier New' });
-    this.add.text(40, statsY + 25, `Best Time: ${gameSave.bestTime ? this.formatTime(gameSave.bestTime) : '--:--.--'}`, { fontSize: '14px', fill: '#888888', fontFamily: 'Courier New' });
-    this.creditsText = this.add.text(40, statsY + 50, `Credits: ${gameSave.credits}`, { fontSize: '18px', fill: '#ffaa00', fontFamily: 'Courier New' });
-    
-    // Perk shop
-    const shopY = 220;
-    this.add.text(40, shopY, 'PERK SHOP', { fontSize: '16px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' });
-    
-    const perks = ['speed', 'stealth', 'luck'];
-    const perkLabels = { speed: 'SPEED', stealth: 'STEALTH', luck: 'LUCK' };
-    const perkDescs = { speed: '+Move Speed', stealth: '-Detection Range', luck: '+Credit Bonus' };
-    
-    perks.forEach((perk, i) => {
-      const y = shopY + 35 + i * 45;
-      const level = gameSave.perks[perk];
-      const maxLevel = 4;
-      const nextCost = level < maxLevel ? PERK_INFO[perk].costs[level] : 'MAX';
-      const canAfford = level < maxLevel && gameSave.credits >= PERK_INFO[perk].costs[level];
-      
-      const bg = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, y, 350, 40, canAfford ? 0x1a2a1a : 0x1a1a1a);
-      bg.setStrokeStyle(1, canAfford ? 0x44ff44 : 0x333333);
-      bg.setInteractive({ useHandCursor: canAfford });
-      
-      const name = this.add.text(30, y, perkLabels[perk], { fontSize: '14px', fill: '#ffffff', fontFamily: 'Courier New' }).setOrigin(0, 0.5);
-      const desc = this.add.text(30, y + 15, perkDescs[perk], { fontSize: '10px', fill: '#666666', fontFamily: 'Courier New' }).setOrigin(0, 0.5);
-      const lvlStr = '★'.repeat(level) + '☆'.repeat(maxLevel - level);
-      this.add.text(MAP_WIDTH * TILE_SIZE - 100, y, lvlStr, { fontSize: '12px', fill: '#ffaa00', fontFamily: 'Courier New' }).setOrigin(0, 0.5);
-      const costText = this.add.text(MAP_WIDTH * TILE_SIZE - 30, y, level < maxLevel ? `${nextCost}c` : 'MAX', { fontSize: '14px', fill: canAfford ? '#00ff00' : '#666666', fontFamily: 'Courier New' }).setOrigin(1, 0.5);
-      
-      bg.on('pointerdown', () => {
-        if (canAfford) {
-          gameSave.credits -= PERK_INFO[perk].costs[level];
-          gameSave.perks[perk]++;
-          saveSaveData(gameSave);
-          sfx.select();
-          this.scene.restart();
-        }
-      });
-    });
-    
-    // Play button
-    const playBtn = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, 450, 200, 50, 0x2244aa);
-    playBtn.setStrokeStyle(2, 0x4488ff);
-    playBtn.setInteractive({ useHandCursor: true });
-    const playText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, 450, 'START MISSION', { fontSize: '18px', fill: '#ffffff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
-    
-    playBtn.on('pointerdown', () => {
-      sfx.select();
-      this.scene.start('MainScene');
-    });
-    
-    // Controls info
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE - 30, 'ARROWS/WASD: Move | R: Restart | ESC: Pause | SPACE: Start', { fontSize: '10px', fill: '#444455', fontFamily: 'Courier New' }).setOrigin(0.5);
-    
-    // Start game on Space
-    this.input.keyboard.on('keydown-SPACE', () => {
-      this.scene.start('MainScene');
-    });
-    
-    this.input.keyboard.once('keydown', () => sfx.init());
-    this.input.on('pointerdown', () => sfx.init(), this);
-  }
-
-  formatTime(ms) {
-    const minutes = Math.floor(ms / 60000);
-    const seconds = Math.floor((ms % 60000) / 1000);
-    const centis = Math.floor((ms % 1000) / 10);
-    return `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${centis.toString().padStart(2, '0')}`;
-  }
-}
-
 // ==================== GAME CONFIG ====================
 const config = {
   type: Phaser.AUTO,
@@ -960,7 +1108,7 @@ const config = {
     default: 'arcade',
     arcade: { debug: false }
   },
-  scene: [BootScene, MainScene]
+  scene: [BootScene, MainMenuScene, LevelSelectScene, SettingsScene, ResultsScene, GameScene]
 };
 
 const game = new Phaser.Game(config);

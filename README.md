@@ -2,6 +2,33 @@
 
 A stealth evasion game built with Phaser 3 and Tauri.
 
+## Game Flow (Phase 1 Complete)
+
+The game now features a complete menu system and scene architecture:
+
+### Scene Flow
+```
+BootScene → MainMenuScene → LevelSelectScene → GameScene
+                 ↓                              ↑
+            SettingsScene              ResultsScene
+```
+
+### Scenes
+- **BootScene**: Loading screen, transitions to MainMenuScene
+- **MainMenuScene**: Full menu with Play, Level Select, Continue, Settings, Controls, Credits
+- **LevelSelectScene**: Level selection with lock/unlock status and best times
+- **GameScene**: Core gameplay (existing mechanics preserved)
+- **SettingsScene**: Audio toggle and progress reset
+- **ResultsScene**: Mission complete/failed display
+
+### Main Menu Features
+- **Play**: Goes to Level Select
+- **Level Select**: Choose from unlocked levels (progressive unlock)
+- **Continue**: Enabled only when save data exists
+- **Settings**: Audio toggle, reset progress
+- **Controls**: Overlay panel with key bindings
+- **Credits**: Overlay panel with game info
+
 ## Visual Polish (Phase 1-2 Complete)
 
 The game features enhanced visuals including:
