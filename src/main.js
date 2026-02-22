@@ -157,6 +157,18 @@ function safeTween(scene, config, phase, meta = {}) {
 }
 
 function runSceneTransition(scene, sceneKey, data = null, duration = 200) {
+  if (scene._isTransitioning) return;
+  scene._isTransitioning = true;
+
+  if (sceneKey === 'GameScene') {
+    const prepared = prepareLevelStart(scene, data, `${scene.scene?.key ?? 'unknown'}.transition`);
+    if (!prepared) {
+      scene._isTransitioning = false;
+      return;
+    }
+    data = prepared;
+  }
+
   const { width, height } = scene.scale;
   const cx = width / 2;
   const cy = height / 2;
@@ -178,7 +190,10 @@ function runSceneTransition(scene, sceneKey, data = null, duration = 200) {
           alpha: 0,
           duration: duration / 2,
           ease: 'Quad.easeOut',
-          onComplete: () => overlay.destroy()
+          onComplete: () => {
+            overlay.destroy();
+            scene._isTransitioning = false;
+          }
         }, 'transition:fade-out-complete', { to: sceneKey });
       }, { to: sceneKey });
     }
@@ -1333,6 +1348,8 @@ class BootScene extends Phaser.Scene {
   }
 
   create() {
+    attachSceneGuard(this, 'BootScene');
+    setRuntimePhase('boot:create', { sceneKey: this.scene.key });
     // Simple loading screen
     this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
     
@@ -1344,8 +1361,8 @@ class BootScene extends Phaser.Scene {
     this.input.on('pointerdown', () => sfx.init(), this);
     
     // Auto-transition to main menu with faster fade
-    this.time.delayedCall(300, () => {
-      this.scene.start('MainMenuScene');
+    safeDelayedCall(this, 300, 'boot:to-menu', () => {
+      safeSceneStart(this, 'MainMenuScene');
     });
   }
 }
@@ -1357,6 +1374,8 @@ class MainMenuScene extends Phaser.Scene {
   }
 
   create(data) {
+    attachSceneGuard(this, 'MainMenuScene');
+    setRuntimePhase('menu:create', { sceneKey: this.scene.key });
     // Phase 9: Register resize listener for fullscreen handling
     this._resizeListener = () => this._handleResize();
     fullscreenManager.on('resize', this._resizeListener);
@@ -1968,6 +1987,8 @@ class MainMenuScene extends Phaser.Scene {
 class LevelSelectScene extends Phaser.Scene {
   constructor() { super({ key: 'LevelSelectScene' }); }
   create() {
+    attachSceneGuard(this, 'LevelSelectScene');
+    setRuntimePhase('level-select:create', { sceneKey: this.scene.key });
     // Register resize listener
     this._resizeListener = () => this._handleResize();
     fullscreenManager.on('resize', this._resizeListener);
@@ -2048,36 +2069,7 @@ class LevelSelectScene extends Phaser.Scene {
   }
   
   transitionTo(sceneKey, data = null) {
-    const { width, height } = this.scale;
-    const cx = width / 2;
-    const cy = height / 2;
-    
-    const overlay = this.add.rectangle(cx, cy, width, height, 0x000000);
-    overlay.setDepth(100);
-    overlay.setAlpha(0);
-    
-    this.tweens.add({
-      targets: overlay,
-      alpha: 1,
-      duration: 200,
-      ease: 'Quad.easeIn',
-      onComplete: () => {
-        if (data) {
-          this.scene.start(sceneKey, data);
-        } else {
-          this.scene.start(sceneKey);
-        }
-        this.time.delayedCall(50, () => {
-          this.tweens.add({
-            targets: overlay,
-            alpha: 0,
-            duration: 200,
-            ease: 'Quad.easeOut',
-            onComplete: () => overlay.destroy()
-          });
-        });
-      }
-    });
+    runSceneTransition(this, sceneKey, data);
   }
   
   formatTime(ms) { if (!ms) return '--:--'; const minutes = Math.floor(ms / 60000); const seconds = Math.floor((ms % 60000) / 1000); const centis = Math.floor((ms % 1000) / 10); return minutes.toString().padStart(2, '0') + ':' + seconds.toString().padStart(2, '0') + '.' + centis.toString().padStart(2, '0'); }
@@ -2124,6 +2116,8 @@ class LevelSelectScene extends Phaser.Scene {
 class SettingsScene extends Phaser.Scene {
   constructor() { super({ key: 'SettingsScene' }); }
   create() {
+    attachSceneGuard(this, 'SettingsScene');
+    setRuntimePhase('settings:create', { sceneKey: this.scene.key });
     // Phase 9: Register resize listener for fullscreen handling
     this._resizeListener = () => this._handleResize();
     fullscreenManager.on('resize', this._resizeListener);
@@ -2436,32 +2430,7 @@ class SettingsScene extends Phaser.Scene {
   }
   
   transitionTo(sceneKey) {
-    const { width, height } = this.scale;
-    const cx = width / 2;
-    const cy = height / 2;
-    
-    const overlay = this.add.rectangle(cx, cy, width, height, 0x000000);
-    overlay.setDepth(100);
-    overlay.setAlpha(0);
-    
-    this.tweens.add({
-      targets: overlay,
-      alpha: 1,
-      duration: 200,
-      ease: 'Quad.easeIn',
-      onComplete: () => {
-        this.scene.start(sceneKey);
-        this.time.delayedCall(50, () => {
-          this.tweens.add({
-            targets: overlay,
-            alpha: 0,
-            duration: 200,
-            ease: 'Quad.easeOut',
-            onComplete: () => overlay.destroy()
-          });
-        });
-      }
-    });
+    runSceneTransition(this, sceneKey);
   }
 }
 
@@ -2472,6 +2441,8 @@ class ControlsScene extends Phaser.Scene {
   }
 
   create() {
+    attachSceneGuard(this, 'ControlsScene');
+    setRuntimePhase('controls:create', { sceneKey: this.scene.key });
     // Phase 9: Register resize listener for fullscreen handling
     this._resizeListener = () => this._handleResize();
     fullscreenManager.on('resize', this._resizeListener);
@@ -2664,36 +2635,7 @@ class ControlsScene extends Phaser.Scene {
   }
   
   transitionTo(sceneKey, data = null) {
-    const { width, height } = this.scale;
-    const cx = width / 2;
-    const cy = height / 2;
-    
-    const overlay = this.add.rectangle(cx, cy, width, height, 0x000000);
-    overlay.setDepth(100);
-    overlay.setAlpha(0);
-    
-    this.tweens.add({
-      targets: overlay,
-      alpha: 1,
-      duration: 200,
-      ease: 'Quad.easeIn',
-      onComplete: () => {
-        if (data) {
-          this.scene.start(sceneKey, data);
-        } else {
-          this.scene.start(sceneKey);
-        }
-        this.time.delayedCall(50, () => {
-          this.tweens.add({
-            targets: overlay,
-            alpha: 0,
-            duration: 200,
-            ease: 'Quad.easeOut',
-            onComplete: () => overlay.destroy()
-          });
-        });
-      }
-    });
+    runSceneTransition(this, sceneKey, data);
   }
 }
 
@@ -2703,13 +2645,20 @@ class ResultsScene extends Phaser.Scene {
   
   init(data) {
     this.resultData = data || {};
-    this.levelIndex = this.resultData.levelIndex || 0;
+    this.levelIndex = getValidLevelIndex(this.resultData.levelIndex, {
+      fallbackIndex: 0,
+      allowRandom: false,
+      source: 'ResultsScene.init'
+    });
     this.success = this.resultData.success || false;
     this.time = this.resultData.time || 0;
     this.credits = this.resultData.credits || 0;
+    setRuntimePhase('results:init', { sceneKey: this.scene.key, levelIndex: this.levelIndex });
   }
 
   create() {
+    attachSceneGuard(this, 'ResultsScene');
+    setRuntimePhase('results:create', { sceneKey: this.scene.key, levelIndex: this.levelIndex });
     // Phase 9: Register resize listener for fullscreen handling
     this._resizeListener = () => this._handleResize();
     fullscreenManager.on('resize', this._resizeListener);
@@ -2831,14 +2780,16 @@ class ResultsScene extends Phaser.Scene {
     // Keyboard shortcuts
     this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE - 30, '[R] Retry | [ESC] Menu', { fontSize: '12px', fill: '#444455', fontFamily: 'Courier New' }).setOrigin(0.5);
     
-    this.input.keyboard.on('keydown-R', () => {
+    this._retryKeyHandler = () => {
       sfx.select();
       this.transitionTo('GameScene', { levelIndex: this.levelIndex });
-    });
-    this.input.keyboard.on('keydown-ESC', () => {
+    };
+    this._menuKeyHandler = () => {
       sfx.select();
       this.transitionTo('MainMenuScene');
-    });
+    };
+    this.input.keyboard.on('keydown-R', this._retryKeyHandler);
+    this.input.keyboard.on('keydown-ESC', this._menuKeyHandler);
     this.input.keyboard.once('keydown', () => sfx.init());
     this.input.on('pointerdown', () => sfx.init(), this);
   }
@@ -2905,36 +2856,7 @@ class ResultsScene extends Phaser.Scene {
   }
   
   transitionTo(sceneKey, data = null) {
-    const { width, height } = this.scale;
-    const cx = width / 2;
-    const cy = height / 2;
-    
-    const overlay = this.add.rectangle(cx, cy, width, height, 0x000000);
-    overlay.setDepth(100);
-    overlay.setAlpha(0);
-    
-    this.tweens.add({
-      targets: overlay,
-      alpha: 1,
-      duration: 200,
-      ease: 'Quad.easeIn',
-      onComplete: () => {
-        if (data) {
-          this.scene.start(sceneKey, data);
-        } else {
-          this.scene.start(sceneKey);
-        }
-        this.time.delayedCall(50, () => {
-          this.tweens.add({
-            targets: overlay,
-            alpha: 0,
-            duration: 200,
-            ease: 'Quad.easeOut',
-            onComplete: () => overlay.destroy()
-          });
-        });
-      }
-    });
+    runSceneTransition(this, sceneKey, data);
   }
   
   createButton(x, y, width, height, text, bgColor, strokeColor, onClick, disabled = false) {
@@ -2991,11 +2913,19 @@ class GameScene extends Phaser.Scene {
 
   // Manual restart method for testing
   manualRestart() {
+    this.requestRestart('GameScene.manualRestart');
+  }
+
+  requestRestart(source = 'GameScene.requestRestart') {
     this._restarted = true;
-    this.scene.restart();
+    const data = prepareLevelStart(this, { levelIndex: this.currentLevelIndex, continueRun: this.continueRun }, source);
+    if (!data) return;
+    this.scene.restart(data);
   }
   
   create() {
+    attachSceneGuard(this, 'GameScene');
+    setRuntimePhase('level:create:start', { sceneKey: this.scene.key, levelIndex: this.requestedLevelIndex });
     // Phase 9: Register resize listener for fullscreen handling
     this._resizeListener = () => this._handleResize();
     fullscreenManager.on('resize', this._resizeListener);
@@ -3025,19 +2955,26 @@ class GameScene extends Phaser.Scene {
     this.rKey = this.input.keyboard.addKeys({ r: Phaser.Input.Keyboard.KeyCodes.R });
     
     // Listen to keyboard at document level using Phaser's global keyboard
-    this.input.keyboard.on('keydown', (event) => {
+    this._keyRestartHandler = (event) => {
       if (event.code === 'KeyR' || event.key === 'r' || event.key === 'R') {
-        this._restarted = true;
-        this.scene.restart();
+        this.requestRestart('GameScene.keydown');
       }
-    });
+    };
+    this.input.keyboard.on('keydown', this._keyRestartHandler);
     
     this.input.keyboard.once('keydown', () => sfx.init());
     this.input.on('pointerdown', () => sfx.init(), this);
     this.applySpeedBoost = saveManager.getPerkLevel('speed') > 0;
     this.applyStealth = saveManager.getPerkLevel('stealth') > 0;
-    this.currentLevelIndex = this.requestedLevelIndex !== null ? this.requestedLevelIndex : Math.floor(Math.random() * LEVEL_LAYOUTS.length);
+    const resolvedLevelIndex = getValidLevelIndex(this.requestedLevelIndex, {
+      fallbackIndex: 0,
+      allowRandom: this.requestedLevelIndex === null,
+      source: 'GameScene.create'
+    });
+    this.currentLevelIndex = resolvedLevelIndex;
     this.currentLayout = LEVEL_LAYOUTS[this.currentLevelIndex];
+    setRuntimePhase('level:create:layout', { sceneKey: this.scene.key, levelIndex: this.currentLevelIndex });
+    _levelStartGuard.release();
     // Phase 4: Get difficulty settings for this level
     this.levelDifficulty = this.currentLayout.difficulty || 1;
     this.currentGuardSpeed = getGuardSpeedForLevel(this.levelDifficulty);
@@ -3088,6 +3025,10 @@ class GameScene extends Phaser.Scene {
     }
     if (this._resizeListener) {
       fullscreenManager.off(this._resizeListener);
+    }
+    if (this._keyRestartHandler) {
+      this.input.keyboard.off('keydown', this._keyRestartHandler);
+      this._keyRestartHandler = null;
     }
     super.shutdown();
   }
