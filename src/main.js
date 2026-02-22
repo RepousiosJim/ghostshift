@@ -1725,6 +1725,30 @@ class LevelSelectScene extends Phaser.Scene {
   }
   
   formatTime(ms) { if (!ms) return '--:--'; const minutes = Math.floor(ms / 60000); const seconds = Math.floor((ms % 60000) / 1000); const centis = Math.floor((ms % 1000) / 10); return minutes.toString().padStart(2, '0') + ':' + seconds.toString().padStart(2, '0') + '.' + centis.toString().padStart(2, '0'); }
+  
+  // Phase 9: Handle window resize for fullscreen
+  _handleResize() {
+    const { width } = this.scale;
+    const centerX = width / 2;
+    
+    // Update grid position if needed
+    if (this.gridGraphics) {
+      this.gridGraphics.setPosition(centerX, MAP_HEIGHT * TILE_SIZE / 2);
+    }
+  }
+  
+  // Cleanup timers and listeners when scene is destroyed
+  shutdown() {
+    // Clean up grid animation timer
+    if (this._gridTimer) {
+      this._gridTimer.remove();
+      this._gridTimer = null;
+    }
+    if (this._resizeListener) {
+      fullscreenManager.off(this._resizeListener);
+    }
+    super.shutdown();
+  }
 }
 
 // ==================== SETTINGS SCENE (PHASE 8 - MODERNIZED) ====================
@@ -3228,19 +3252,29 @@ class GameScene extends Phaser.Scene {
     if (!this.scannerDrone) return;
     const target = this.scannerDronePatrolPoints[this.scannerPatrolIndex];
     const dx = target.x - this.scannerDrone.x, dy = target.y - this.scannerDrone.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist < 5) this.scannerPatrolIndex = (this.scannerPatrolIndex + 1) % this.scannerDronePatrolPoints.length;
-    else this.scannerDrone.body.setVelocity((dx / dist) * 50, (dy / dist) * 50);
+    // Use squared distance check (5^2 = 25) for waypoint detection
+    const sqDist = dx * dx + dy * dy;
+    if (sqDist < 25) {
+      this.scannerPatrolIndex = (this.scannerPatrolIndex + 1) % this.scannerDronePatrolPoints.length;
+    } else {
+      const dist = Math.sqrt(sqDist);
+      this.scannerDrone.body.setVelocity((dx / dist) * 50, (dy / dist) * 50);
+    }
     this.scannerAngle += 0.03;
-    this.scannerBeam.clear();
-    const beamLength = 120;
-    this.scannerBeam.fillStyle(0x9900ff, 0.2);
-    this.scannerBeam.beginPath();
-    this.scannerBeam.moveTo(this.scannerDrone.x, this.scannerDrone.y);
-    this.scannerBeam.lineTo(this.scannerDrone.x + Math.cos(this.scannerAngle - 0.2) * beamLength, this.scannerDrone.y + Math.sin(this.scannerAngle - 0.2) * beamLength);
-    this.scannerBeam.lineTo(this.scannerDrone.x + Math.cos(this.scannerAngle + 0.2) * beamLength, this.scannerDrone.y + Math.sin(this.scannerAngle + 0.2) * beamLength);
-    this.scannerBeam.closePath();
-    this.scannerBeam.fillPath();
+    
+    // Only clear and redraw beam if player is reasonably close (off-screen culling)
+    const playerSqDist = (this.player.x - this.scannerDrone.x) ** 2 + (this.player.y - this.scannerDrone.y) ** 2;
+    if (playerSqDist < 200 * 200) {
+      this.scannerBeam.clear();
+      const beamLength = 120;
+      this.scannerBeam.fillStyle(0x9900ff, 0.2);
+      this.scannerBeam.beginPath();
+      this.scannerBeam.moveTo(this.scannerDrone.x, this.scannerDrone.y);
+      this.scannerBeam.lineTo(this.scannerDrone.x + Math.cos(this.scannerAngle - 0.2) * beamLength, this.scannerDrone.y + Math.sin(this.scannerAngle - 0.2) * beamLength);
+      this.scannerBeam.lineTo(this.scannerDrone.x + Math.cos(this.scannerAngle + 0.2) * beamLength, this.scannerDrone.y + Math.sin(this.scannerAngle + 0.2) * beamLength);
+      this.scannerBeam.closePath();
+      this.scannerBeam.fillPath();
+    }
   }
 
   updateCameras() {
@@ -3320,17 +3354,22 @@ class GameScene extends Phaser.Scene {
       const target = drone.patrolPoints[drone.patrolIndex];
       const dx = target.x - drone.sprite.x;
       const dy = target.y - drone.sprite.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
+      // Use squared distance check for waypoint detection
+      const sqDist = dx * dx + dy * dy;
       
-      if (dist < 5) {
+      if (sqDist < 25) {
         drone.patrolIndex = (drone.patrolIndex + 1) % drone.patrolPoints.length;
       } else {
         const speed = drone.speed;
+        // Only compute sqrt when actually moving
+        const dist = Math.sqrt(sqDist);
         drone.sprite.body.setVelocity((dx / dist) * speed, (dy / dist) * speed);
       }
       
-      // Rotate towards movement direction
-      drone.sprite.rotation = Math.atan2(dy, dx);
+      // Rotate towards movement direction - only if moving
+      if (sqDist >= 25) {
+        drone.sprite.rotation = Math.atan2(dy, dx);
+      }
     });
   }
 
