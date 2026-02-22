@@ -1,6 +1,7 @@
 // ==================== LEVEL LAYOUTS ====================
 // Phase 4: Added Vault and Training Facility levels with improved balancing
 // Phase 11: Added Comms Tower (D2) bridge level with relay-hack variant
+// Phase 12: Added Penthouse (Level 7) with timed alarm mechanic
 
 const DEFAULT_LEVEL = {
   name: 'Unnamed',
@@ -18,7 +19,8 @@ const DEFAULT_LEVEL = {
   patrolDrones: [],
   securityCode: null,
   powerCell: null,
-  difficulty: 1
+  difficulty: 1,
+  alarmTimer: null  // Seconds until alarm triggers (null = no alarm)
 };
 
 const RAW_LEVEL_LAYOUTS = [
@@ -133,6 +135,57 @@ const RAW_LEVEL_LAYOUTS = [
     securityCode:{x:3,y:4}, 
     powerCell:{x:17,y:12}, 
     difficulty: 3 
+  },
+  // Phase 12: New Level 7 - Penthouse (timed alarm mechanic)
+  // Alarm triggers after 45 seconds, boosting guard speed and triggering alarm state
+  { name: 'Penthouse', obstacles: [
+      // Luxury suite furniture clusters
+      {x:4,y:3},{x:5,y:3},{x:6,y:3},
+      {x:4,y:5},{x:6,y:5},
+      {x:4,y:7},{x:5,y:7},{x:6,y:7},
+      // Central corridor pillars
+      {x:9,y:4},{x:10,y:4},{x:9,y:5},{x:10,y:5},
+      {x:9,y:8},{x:10,y:8},{x:9,y:9},{x:10,y:9},
+      // Right-side office complex
+      {x:13,y:3},{x:14,y:3},{x:15,y:3},
+      {x:13,y:5},{x:15,y:5},
+      {x:13,y:7},{x:14,y:7},{x:15,y:7},
+      // Lower lounge area
+      {x:3,y:10},{x:4,y:10},{x:5,y:10},
+      {x:13,y:10},{x:14,y:10},{x:15,y:10},
+      // VIP exit corridor
+      {x:17,y:6},{x:18,y:6},{x:17,y:7},{x:18,y:7}
+    ], 
+    guardPatrol: [
+      {x:2,y:5},{x:7,y:5},{x:7,y:9},{x:2,y:9},
+      {x:12,y:5},{x:17,y:5},{x:17,y:9},{x:12,y:9},
+      {x:10,y:2},{x:10,y:12}
+    ], 
+    dataCore:{x:18,y:3}, 
+    keyCard:{x:2,y:12}, 
+    hackTerminal:{x:15,y:6}, 
+    playerStart:{x:2,y:2}, 
+    exitZone:{x:19,y:7}, 
+    cameras:[
+      {x:5,y:2},{x:15,y:2},{x:5,y:11},{x:15,y:11},{x:10,y:7}
+    ], 
+    motionSensors:[
+      {x:8,y:6},{x:12,y:6},{x:10,y:4},{x:10,y:10}
+    ], 
+    laserGrids:[
+      {x:8,y:3,h:true},{x:12,y:3,h:true},
+      {x:8,y:11,h:true},{x:12,y:11,h:true}
+    ], 
+    patrolDrones:[
+      {x:8,y:6,patrol:[{x:8,y:6},{x:12,y:6},{x:12,y:8},{x:8,y:8}]},
+      {x:11,y:6,patrol:[{x:11,y:6},{x:11,y:8},{x:8,y:8},{x:8,y:6}]},
+      {x:5,y:9,patrol:[{x:5,y:9},{x:7,y:9},{x:7,y:7},{x:5,y:7}]},
+      {x:14,y:9,patrol:[{x:14,y:9},{x:16,y:9},{x:16,y:7},{x:14,y:7}]}
+    ], 
+    securityCode:{x:4,y:12}, 
+    powerCell:{x:18,y:11}, 
+    difficulty: 3,
+    alarmTimer: 45  // Alarm triggers after 45 seconds
   }
 ];
 
