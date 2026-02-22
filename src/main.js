@@ -2009,6 +2009,41 @@ class LevelSelectScene extends Phaser.Scene {
     backBtn.on('pointerout', () => backBtn.setFill('#888888'));
     backBtn.on('pointerdown', () => this.transitionTo('MainMenuScene'));
     
+    // PROGRESION POLISH: Add progress indicator showing levels completed
+    const totalLevels = LEVEL_LAYOUTS.length;
+    const unlockedCount = saveManager.data.unlockedLevels?.length || 1;
+    const progressPercent = (unlockedCount / totalLevels);
+    
+    // Progress bar background
+    const progressBarX = MAP_WIDTH * TILE_SIZE / 2;
+    const progressBarY = 65;
+    const progressBarW = 300;
+    const progressBarH = 8;
+    
+    const progressBg = this.add.rectangle(progressBarX, progressBarY, progressBarW, progressBarH, 0x1a1a2a);
+    progressBg.setStrokeStyle(1, 0x333344);
+    
+    // Progress bar fill
+    const progressFill = this.add.rectangle(progressBarX - progressBarW/2 + (progressBarW * progressPercent)/2, progressBarY, progressBarW * progressPercent, progressBarH, 0x44ff88);
+    progressFill.setOrigin(0, 0.5);
+    
+    // Progress text
+    const progressText = this.add.text(progressBarX, progressBarY - 12, `${unlockedCount}/${totalLevels} Levels Completed`, { 
+      fontSize: '11px', 
+      fill: '#88aacc', 
+      fontFamily: 'Courier New' 
+    }).setOrigin(0.5);
+    
+    // Animate progress bar on load
+    progressFill.setScale(0, 1);
+    progressFill.setOrigin(0, 0.5);
+    this.tweens.add({
+      targets: progressFill,
+      scaleX: 1,
+      duration: 600,
+      ease: 'Quad.easeOut'
+    });
+    
     // ========== LEVEL CARDS WITH IMPROVED CONTRAST ==========
     const startY = 80, spacingY = 70;
     LEVEL_LAYOUTS.forEach((level, index) => {
@@ -2049,6 +2084,17 @@ class LevelSelectScene extends Phaser.Scene {
       this.add.text(MAP_WIDTH * TILE_SIZE / 2 - 100, y - 10, level.name, { fontSize: '14px', fill: isUnlocked ? '#ffffff' : '#444444', fontFamily: 'Courier New' }).setOrigin(0, 0.5);
       this.add.text(MAP_WIDTH * TILE_SIZE / 2 - 100, y + 10, 'Best: ' + (bestTime ? this.formatTime(bestTime) : '--:--'), { fontSize: '11px', fill: isUnlocked ? '#888888' : '#444444', fontFamily: 'Courier New' });
       this.add.text(MAP_WIDTH * TILE_SIZE / 2 + 140, y, isUnlocked ? '▶ PLAY' : '🔒 LOCKED', { fontSize: '12px', fill: isUnlocked ? '#44ff88' : '#444444', fontFamily: 'Courier New' }).setOrigin(0.5);
+      
+      // PROGRESION POLISH: Add hint for locked levels - show what unlocks it
+      if (!isUnlocked && index > 0) {
+        const prevLevelName = LEVEL_LAYOUTS[index - 1]?.name || `Level ${index}`;
+        const hintText = this.add.text(MAP_WIDTH * TILE_SIZE / 2 + 140, y + 18, 'Beat ' + prevLevelName, { 
+          fontSize: '9px', 
+          fill: '#556677', 
+          fontFamily: 'Courier New',
+          fontStyle: 'italic'
+        }).setOrigin(0.5);
+      }
       
       if (isUnlocked) {
         cardBg.on('pointerover', () => { 
@@ -2831,12 +2877,65 @@ class ResultsScene extends Phaser.Scene {
       const isNewRecord = previousBest === null || this.runTime < previousBest;
       const bestTime = isNewRecord ? this.runTime : previousBest;
       
-      let bestText, newBestText;
+      let bestText, newBestText, newBestY = 55;
       if (isNewRecord) {
         newBestText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY + 55, '★ NEW BEST!', { fontSize: '16px', fill: '#ffdd00', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
         bestText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY + 75, 'Best: ' + this.formatTime(bestTime), { fontSize: '14px', fill: '#4488ff', fontFamily: 'Courier New' }).setOrigin(0.5);
+        newBestY = 75;
       } else {
         bestText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY + 55, 'Best: ' + this.formatTime(bestTime), { fontSize: '14px', fill: '#4488ff', fontFamily: 'Courier New' }).setOrigin(0.5);
+      }
+      
+      // PROGRESION POLISH: Show "NEW LEVEL UNLOCKED!" when a new level was just unlocked
+      const nextLevelIndex = this.levelIndex + 1;
+      const justUnlocked = nextLevelIndex < LEVEL_LAYOUTS.length && saveManager.isLevelUnlocked(nextLevelIndex);
+      let unlockText;
+      
+      if (justUnlocked) {
+        const nextLevelName = LEVEL_LAYOUTS[nextLevelIndex]?.name || `Level ${nextLevelIndex + 1}`;
+        const unlockY = statsY + newBestY + 25;
+        
+        // Create unlock notification with glow effect
+        const unlockBg = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, unlockY, 280, 32, 0x1a3a2a);
+        unlockBg.setStrokeStyle(2, 0x44ff88);
+        
+        // Pulsing glow animation
+        this.tweens.add({
+          targets: unlockBg,
+          alpha: 0.7,
+          duration: 600,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut'
+        });
+        
+        unlockText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, unlockY, '🔓 ' + nextLevelName.toUpperCase() + ' UNLOCKED!', { 
+          fontSize: '14px', 
+          fill: '#44ff88', 
+          fontFamily: 'Courier New', 
+          fontStyle: 'bold' 
+        }).setOrigin(0.5);
+        
+        // Animate unlock text
+        unlockText.setAlpha(0);
+        unlockText.setScale(0.5);
+        this.tweens.add({
+          targets: unlockText,
+          alpha: 1,
+          scale: 1,
+          duration: 400,
+          delay: 500,
+          ease: 'Back.easeOut'
+        });
+        
+        // Also animate unlock background
+        unlockBg.setAlpha(0);
+        this.tweens.add({
+          targets: unlockBg,
+          alpha: 1,
+          duration: 400,
+          delay: 500
+        });
       }
       
       // Animate stats
@@ -3457,6 +3556,11 @@ class GameScene extends Phaser.Scene {
     this.player.setStrokeStyle(2, 0x00ffff);
     this.physics.add.existing(this.player);
     this.player.body.setCollideWorldBounds(true);
+    // Game-feel improvement: Add drag for smoother deceleration and set max velocity
+    // This gives movement a responsive but smooth feel (acceleration + drag)
+    this.player.body.useDamping = true;
+    this.player.body.drag = 0.85;
+    this.player.body.maxVelocity.set(400);  // Cap max speed
     
     // Player movement trail - use object pool (pre-allocate)
     this.playerTrail = this.add.graphics();
@@ -4140,13 +4244,23 @@ class GameScene extends Phaser.Scene {
 
   updatePlayer() {
     const body = this.player.body;
-    body.setVelocity(0);
+    // Game-feel improvement: Use acceleration for smoother, more responsive movement
+    // instead of instant velocity changes. Drag provides natural deceleration.
+    body.setAcceleration(0);
     let speed = BASE_PLAYER_SPEED * (1 + getSpeedBonus());
-    if (this.cursors.left.isDown || this.wasd.left.isDown) body.setVelocityX(-speed);
-    else if (this.cursors.right.isDown || this.wasd.right.isDown) body.setVelocityX(speed);
-    if (this.cursors.up.isDown || this.wasd.up.isDown) body.setVelocityY(-speed);
-    else if (this.cursors.down.isDown || this.wasd.down.isDown) body.setVelocityY(speed);
-    if (body.velocity.x !== 0 && body.velocity.y !== 0) { body.setVelocityX(body.velocity.x * 0.707); body.setVelocityY(body.velocity.y * 0.707); }
+    // Scale acceleration to reach target speed quickly but smoothly
+    const accel = speed * 10;  // High acceleration for responsive feel
+    
+    if (this.cursors.left.isDown || this.wasd.left.isDown) body.setAccelerationX(-accel);
+    else if (this.cursors.right.isDown || this.wasd.right.isDown) body.setAccelerationX(accel);
+    if (this.cursors.up.isDown || this.wasd.up.isDown) body.setAccelerationY(-accel);
+    else if (this.cursors.down.isDown || this.wasd.down.isDown) body.setAccelerationY(accel);
+    
+    // Normalize diagonal movement (acceleration-based)
+    if (body.acceleration.x !== 0 && body.acceleration.y !== 0) {
+      body.setAccelerationX(body.acceleration.x * 0.707);
+      body.setAccelerationY(body.acceleration.y * 0.707);
+    }
     
     // Update player glow position
     if (this.playerGlow) {
