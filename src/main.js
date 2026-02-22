@@ -1,3 +1,5 @@
+import { LEVEL_LAYOUTS, validateLevelLayouts } from './levels.js';
+
 // Dynamic import of Phaser for better loading performance
 // This allows the smaller game.js to load first, then Phaser lazy-loads
 const Phaser = (await import('phaser')).default;
@@ -43,6 +45,145 @@ function _debugLifecycle(event, data) {
 // Expose for external access
 window._lifecycleCounters = _lifecycleCounters;
 window._debugLifecycle = _debugLifecycle;
+
+// ==================== RUNTIME ERROR CONTEXT ====================
+const runtimeErrorContext = {
+  phase: 'boot',
+  sceneKey: null,
+  levelIndex: null,
+  transition: null,
+  lastUpdated: Date.now(),
+  set(phase, data = {}) {
+    this.phase = phase || this.phase;
+    if (data.sceneKey !== undefined) this.sceneKey = data.sceneKey;
+    if (data.levelIndex !== undefined) this.levelIndex = data.levelIndex;
+    if (data.transition !== undefined) this.transition = data.transition;
+    this.lastUpdated = Date.now();
+  },
+  snapshot() {
+    return {
+      phase: this.phase,
+      sceneKey: this.sceneKey,
+      levelIndex: this.levelIndex,
+      transition: this.transition,
+      lastUpdated: this.lastUpdated
+    };
+  }
+};
+
+function setRuntimePhase(phase, data = {}) {
+  runtimeErrorContext.set(phase, data);
+}
+
+function reportRuntimeError(error, data = {}) {
+  console.error('[RuntimeError]', error);
+  console.error('[RuntimeContext]', { ...runtimeErrorContext.snapshot(), ...data });
+}
+
+function attachSceneGuard(scene, label) {
+  if (scene.__guard) return scene.__guard;
+  const guard = {
+    label,
+    isShuttingDown: false,
+    timers: new Set(),
+    tweens: new Set(),
+    timeouts: new Set()
+  };
+  const cleanup = () => {
+    guard.isShuttingDown = true;
+    guard.timers.forEach(timer => timer?.remove?.());
+    guard.tweens.forEach(tween => tween?.stop?.());
+    guard.timeouts.forEach(id => clearTimeout(id));
+    guard.timers.clear();
+    guard.tweens.clear();
+    guard.timeouts.clear();
+  };
+  scene.events.once(Phaser.Scenes.Events.SHUTDOWN, cleanup);
+  scene.events.once(Phaser.Scenes.Events.DESTROY, cleanup);
+  scene.__guard = guard;
+  return guard;
+}
+
+function sceneIsActive(scene) {
+  return !!(scene && !scene.__guard?.isShuttingDown && scene.sys && !scene.sys.isDestroyed);
+}
+
+function guardSceneCallback(scene, phase, fn, meta = {}) {
+  return (...args) => {
+    if (!sceneIsActive(scene)) return;
+    setRuntimePhase(phase, {
+      sceneKey: scene.scene?.key,
+      levelIndex: scene?.currentLevelIndex ?? scene?.levelIndex ?? null
+    });
+    try {
+      return fn(...args);
+    } catch (error) {
+      reportRuntimeError(error, { sceneKey: scene.scene?.key, phase, ...meta });
+    }
+  };
+}
+
+function safeSceneStart(scene, sceneKey, data = null, meta = {}) {
+  if (!sceneIsActive(scene)) return;
+  setRuntimePhase('transition:start', {
+    sceneKey: scene.scene?.key,
+    transition: { from: scene.scene?.key, to: sceneKey },
+    levelIndex: data?.levelIndex ?? scene?.currentLevelIndex ?? null
+  });
+  try {
+    data ? scene.scene.start(sceneKey, data) : scene.scene.start(sceneKey);
+  } catch (error) {
+    reportRuntimeError(error, { sceneKey: scene.scene?.key, to: sceneKey, ...meta });
+  }
+}
+
+function safeDelayedCall(scene, delay, phase, fn, meta = {}) {
+  if (!scene?.time) return null;
+  const guard = attachSceneGuard(scene, scene.scene?.key);
+  const timer = scene.time.delayedCall(delay, guardSceneCallback(scene, phase, fn, meta));
+  guard.timers.add(timer);
+  return timer;
+}
+
+function safeTween(scene, config, phase, meta = {}) {
+  const guard = attachSceneGuard(scene, scene.scene?.key);
+  const wrapped = { ...config };
+  if (config.onComplete) {
+    wrapped.onComplete = guardSceneCallback(scene, phase, config.onComplete, meta);
+  }
+  const tween = scene.tweens.add(wrapped);
+  guard.tweens.add(tween);
+  return tween;
+}
+
+function runSceneTransition(scene, sceneKey, data = null, duration = 200) {
+  const { width, height } = scene.scale;
+  const cx = width / 2;
+  const cy = height / 2;
+
+  const overlay = scene.add.rectangle(cx, cy, width, height, 0x000000);
+  overlay.setDepth(100);
+  overlay.setAlpha(0);
+
+  safeTween(scene, {
+    targets: overlay,
+    alpha: 1,
+    duration: duration / 2,
+    ease: 'Quad.easeIn',
+    onComplete: () => {
+      safeSceneStart(scene, sceneKey, data, { via: 'transition' });
+      safeDelayedCall(scene, 50, 'transition:fade-out', () => {
+        safeTween(scene, {
+          targets: overlay,
+          alpha: 0,
+          duration: duration / 2,
+          ease: 'Quad.easeOut',
+          onComplete: () => overlay.destroy()
+        }, 'transition:fade-out-complete', { to: sceneKey });
+      }, { to: sceneKey });
+    }
+  }, 'transition:fade-in', { to: sceneKey });
+}
 
 // ==================== OPTIMIZED RENDER SYSTEM ====================
 // Render caching system to reduce per-frame graphics redraws
@@ -965,82 +1106,215 @@ class SceneTransitionManager {
   }
 }
 
-// ==================== LEVEL LAYOUTS ====================
-// Phase 4: Added Vault and Training Facility levels with improved balancing
-const LEVEL_LAYOUTS = [
-  { name: 'Warehouse', obstacles: [{x:8,y:4},{x:9,y:4},{x:10,y:4},{x:8,y:5},{x:10,y:5},{x:8,y:6},{x:10,y:6},{x:3,y:10},{x:4,y:10},{x:14,y:8},{x:15,y:8},{x:12,y:3},{x:13,y:3},{x:6,y:8},{x:7,y:8}], guardPatrol:[{x:15,y:7},{x:5,y:7},{x:5,y:12},{x:15,y:12}], dataCore:{x:16,y:3}, keyCard:{x:3,y:12}, hackTerminal:{x:10,y:7}, playerStart:{x:2,y:2}, exitZone:{x:19,y:7}, cameras:[{x:5,y:2},{x:15,y:12}], motionSensors:[{x:8,y:7},{x:12,y:10}], laserGrids:[{x:10,y:9,h:true},{x:6,y:3,v:true}], patrolDrones:[{x:12,y:6,patrol:[{x:12,y:6},{x:16,y:6},{x:16,y:10},{x:12,y:10}]}], securityCode:{x:4,y:8}, powerCell:{x:14,y:4}, difficulty: 1 },
-  { name: 'Labs', obstacles: [{x:5,y:3},{x:5,y:4},{x:5,y:5},{x:5,y:6},{x:10,y:8},{x:11,y:8},{x:12,y:8},{x:10,y:9},{x:12,y:9},{x:10,y:10},{x:11,y:10},{x:12,y:10},{x:15,y:3},{x:16,y:3},{x:17,y:3},{x:3,y:11},{x:4,y:11},{x:5,y:11},{x:8,y:13},{x:9,y:13}], guardPatrol:[{x:14,y:5},{x:6,y:5},{x:6,y:13},{x:14,y:13}], dataCore:{x:17,y:2}, keyCard:{x:2,y:3}, hackTerminal:{x:8,y:5}, playerStart:{x:2,y:13}, exitZone:{x:19,y:3}, cameras:[{x:10,y:2},{x:3,y:8}], motionSensors:[{x:12,y:6},{x:7,y:11}], laserGrids:[{x:8,y:7,h:true},{x:14,y:9,v:true}], patrolDrones:[{x:10,y:10,patrol:[{x:10,y:10},{x:14,y:10},{x:14,y:4},{x:10,y:4}]}], securityCode:{x:6,y:2}, powerCell:{x:16,y:12}, difficulty: 1 },
-  { name: 'Server Farm', obstacles: [{x:4,y:3},{x:5,y:3},{x:9,y:3},{x:10,y:3},{x:4,y:5},{x:10,y:5},{x:4,y:7},{x:5,y:7},{x:9,y:7},{x:10,y:7},{x:7,y:9},{x:8,y:9},{x:3,y:11},{x:7,y:11},{x:12,y:11},{x:16,y:11},{x:3,y:13},{x:4,y:13},{x:15,y:13},{x:16,y:13}], guardPatrol:[{x:2,y:9},{x:18,y:9},{x:18,y:5},{x:2,y:5}], dataCore:{x:18,y:13}, keyCard:{x:7,y:3}, hackTerminal:{x:14,y:9}, playerStart:{x:2,y:2}, exitZone:{x:19,y:7}, cameras:[{x:2,y:5},{x:17,y:11}], motionSensors:[{x:7,y:7},{x:12,y:5}], laserGrids:[{x:6,y:5,v:true},{x:12,y:9,h:true}], patrolDrones:[{x:8,y:6,patrol:[{x:8,y:6},{x:14,y:6},{x:14,y:12},{x:8,y:12}]}], securityCode:{x:2,y:12}, powerCell:{x:18,y:3}, difficulty: 2 },
-  // Phase 4: New Level 4 - The Vault (high security bank vault)
-  { name: 'The Vault', obstacles: [
-      {x:4,y:3},{x:5,y:3},{x:6,y:3},{x:10,y:3},{x:11,y:3},{x:12,y:3},
-      {x:4,y:5},{x:12,y:5},{x:4,y:7},{x:12,y:7},
-      {x:4,y:9},{x:5,y:9},{x:6,y:9},{x:10,y:9},{x:11,y:9},{x:12,y:9},
-      {x:4,y:11},{x:12,y:11},{x:7,y:12},{x:8,y:12}
-    ], 
-    guardPatrol: [
-      {x:7,y:4},{x:10,y:4},{x:10,y:8},{x:7,y:8},
-      {x:2,y:6},{x:17,y:6}
-    ], 
-    dataCore:{x:8,y:2}, 
-    keyCard:{x:2,y:13}, 
-    hackTerminal:{x:15,y:6}, 
-    playerStart:{x:2,y:2}, 
-    exitZone:{x:18,y:7}, 
-    cameras:[
-      {x:8,y:1},{x:2,y:10},{x:16,y:10}
-    ], 
-    motionSensors:[
-      {x:8,y:6},{x:14,y:4},{x:5,y:10}
-    ], 
-    laserGrids:[
-      {x:8,y:4,h:true},{x:3,y:6,v:true},{x:13,y:6,v:true},{x:8,y:10,h:true}
-    ], 
-    patrolDrones:[
-      {x:5,y:7,patrol:[{x:5,y:7},{x:11,y:7},{x:11,y:5},{x:5,y:5}]},
-      {x:15,y:9,patrol:[{x:15,y:9},{x:15,y:3},{x:18,y:3},{x:18,y:9}]}
-    ], 
-    securityCode:{x:6,y:13}, 
-    powerCell:{x:16,y:12}, 
-    difficulty: 3 
+// ==================== LEVEL LOADER CORE ====================
+const LEVEL_SCHEMA = {
+  required: [
+    'name',
+    'obstacles',
+    'guardPatrol',
+    'dataCore',
+    'keyCard',
+    'hackTerminal',
+    'playerStart',
+    'exitZone',
+    'cameras',
+    'motionSensors',
+    'laserGrids',
+    'patrolDrones',
+    'difficulty'
+  ],
+  optional: ['securityCode', 'powerCell']
+};
+
+const _levelValidationCache = new Map();
+const _levelStartGuard = {
+  inProgress: false,
+  lastRequest: null,
+  acquire(scene, levelIndex, source) {
+    if (this.inProgress) {
+      console.warn(`[LevelStart] Ignored duplicate start while transitioning (level ${levelIndex}, source: ${source}).`);
+      return false;
+    }
+    this.inProgress = true;
+    this.lastRequest = { levelIndex, source, at: Date.now() };
+    const release = () => { this.inProgress = false; };
+    if (scene?.time) {
+      scene.time.delayedCall(400, release);
+    } else {
+      setTimeout(release, 400);
+    }
+    return true;
   },
-  // Phase 4: New Level 5 - Training Facility (open area with multiple threats)
-  { name: 'Training Facility', obstacles: [
-      {x:6,y:3},{x:7,y:3},{x:13,y:3},{x:14,y:3},
-      {x:3,y:6},{x:4,y:6},{x:16,y:6},{x:17,y:6},
-      {x:6,y:9},{x:7,y:9},{x:13,y:9},{x:14,y:9},
-      {x:6,y:12},{x:7,y:12},{x:13,y:12},{x:14,y:12},
-      {x:9,y:5},{x:10,y:5},{x:9,y:10},{x:10,y:10}
-    ], 
-    guardPatrol: [
-      {x:2,y:4},{x:18,y:4},
-      {x:2,y:11},{x:18,y:11},
-      {x:10,y:2},{x:10,y:13}
-    ], 
-    dataCore:{x:10,y:7}, 
-    keyCard:{x:2,y:13}, 
-    hackTerminal:{x:17,y:7}, 
-    playerStart:{x:2,y:2}, 
-    exitZone:{x:18,y:2}, 
-    cameras:[
-      {x:5,y:2},{x:15,y:2},{x:5,y:13},{x:15,y:13}
-    ], 
-    motionSensors:[
-      {x:10,y:4},{x:10,y:10},{x:5,y:8},{x:15,y:8}
-    ], 
-    laserGrids:[
-      {x:10,y:3,v:true},{x:10,y:12,v:true},{x:4,y:8,h:true},{x:16,y:8,h:true}
-    ], 
-    patrolDrones:[
-      {x:8,y:4,patrol:[{x:8,y:4},{x:12,y:4},{x:12,y:11},{x:8,y:11}]},
-      {x:5,y:7,patrol:[{x:5,y:7},{x:5,y:10},{x:8,y:10},{x:8,y:7}]},
-      {x:15,y:7,patrol:[{x:15,y:7},{x:15,y:10},{x:12,y:10},{x:12,y:7}]}
-    ], 
-    securityCode:{x:3,y:4}, 
-    powerCell:{x:17,y:12}, 
-    difficulty: 3 
+  release() {
+    this.inProgress = false;
   }
-];
+};
+
+function _isPoint(value) {
+  return value && Number.isFinite(value.x) && Number.isFinite(value.y);
+}
+
+function validateLevelLayout(layout, index) {
+  const errors = [];
+  if (!layout || typeof layout !== 'object') {
+    return ['layout is missing or not an object'];
+  }
+
+  LEVEL_SCHEMA.required.forEach((key) => {
+    if (!(key in layout)) {
+      errors.push(`missing "${key}"`);
+    }
+  });
+
+  if (layout.name && typeof layout.name !== 'string') {
+    errors.push('name must be a string');
+  }
+
+  const arrayFields = ['obstacles', 'guardPatrol', 'cameras', 'motionSensors', 'laserGrids', 'patrolDrones'];
+  arrayFields.forEach((field) => {
+    if (field in layout && !Array.isArray(layout[field])) {
+      errors.push(`${field} must be an array`);
+    }
+  });
+
+  const pointFields = ['dataCore', 'keyCard', 'hackTerminal', 'playerStart', 'exitZone'];
+  pointFields.forEach((field) => {
+    if (field in layout && !_isPoint(layout[field])) {
+      errors.push(`${field} must be a point with x/y`);
+    }
+  });
+
+  LEVEL_SCHEMA.optional.forEach((field) => {
+    if (field in layout && layout[field] !== null && !_isPoint(layout[field])) {
+      errors.push(`${field} must be a point with x/y when provided`);
+    }
+  });
+
+  if ('difficulty' in layout && !Number.isFinite(layout.difficulty)) {
+    errors.push('difficulty must be a number');
+  }
+
+  if (Array.isArray(layout.obstacles)) {
+    layout.obstacles.forEach((point, i) => {
+      if (!_isPoint(point)) errors.push(`obstacles[${i}] must be a point`);
+    });
+  }
+  if (Array.isArray(layout.guardPatrol)) {
+    layout.guardPatrol.forEach((point, i) => {
+      if (!_isPoint(point)) errors.push(`guardPatrol[${i}] must be a point`);
+    });
+  }
+  if (Array.isArray(layout.cameras)) {
+    layout.cameras.forEach((point, i) => {
+      if (!_isPoint(point)) errors.push(`cameras[${i}] must be a point`);
+    });
+  }
+  if (Array.isArray(layout.motionSensors)) {
+    layout.motionSensors.forEach((point, i) => {
+      if (!_isPoint(point)) errors.push(`motionSensors[${i}] must be a point`);
+    });
+  }
+  if (Array.isArray(layout.laserGrids)) {
+    layout.laserGrids.forEach((grid, i) => {
+      if (!_isPoint(grid)) {
+        errors.push(`laserGrids[${i}] must be a point with x/y`);
+      } else if (!grid.h && !grid.v) {
+        errors.push(`laserGrids[${i}] missing "h" or "v" direction`);
+      }
+    });
+  }
+  if (Array.isArray(layout.patrolDrones)) {
+    layout.patrolDrones.forEach((drone, i) => {
+      if (!_isPoint(drone)) {
+        errors.push(`patrolDrones[${i}] must have x/y position`);
+      }
+      if (!Array.isArray(drone?.patrol)) {
+        errors.push(`patrolDrones[${i}].patrol must be an array`);
+      } else {
+        drone.patrol.forEach((point, j) => {
+          if (!_isPoint(point)) errors.push(`patrolDrones[${i}].patrol[${j}] must be a point`);
+        });
+      }
+    });
+  }
+
+  return errors;
+}
+
+function _getLevelValidation(index) {
+  if (_levelValidationCache.has(index)) {
+    return _levelValidationCache.get(index);
+  }
+  const layout = LEVEL_LAYOUTS[index];
+  const errors = validateLevelLayout(layout, index);
+  const result = { layout, errors };
+  _levelValidationCache.set(index, result);
+  if (errors.length > 0) {
+    console.error(`[LevelValidation] Level ${index} (${layout?.name ?? 'Unknown'}): ${errors.join('; ')}`);
+  }
+  return result;
+}
+
+function _findFirstValidLevelIndex() {
+  for (let i = 0; i < LEVEL_LAYOUTS.length; i += 1) {
+    const { errors } = _getLevelValidation(i);
+    if (errors.length === 0) return i;
+  }
+  return null;
+}
+
+function getValidLevelIndex(requestedIndex, { fallbackIndex = 0, allowRandom = false, source = 'unknown' } = {}) {
+  let levelIndex = requestedIndex;
+  if (levelIndex === null || levelIndex === undefined) {
+    if (allowRandom) {
+      levelIndex = Math.floor(Math.random() * LEVEL_LAYOUTS.length);
+    }
+  }
+
+  if (!Number.isInteger(levelIndex)) {
+    const parsed = Number.parseInt(levelIndex, 10);
+    levelIndex = Number.isInteger(parsed) ? parsed : fallbackIndex;
+  }
+
+  if (levelIndex < 0 || levelIndex >= LEVEL_LAYOUTS.length) {
+    console.warn(`[LevelStart] Requested level ${requestedIndex} out of range (source: ${source}). Falling back to ${fallbackIndex}.`);
+    levelIndex = fallbackIndex;
+  }
+
+  const { errors } = _getLevelValidation(levelIndex);
+  if (errors.length > 0) {
+    const fallback = _findFirstValidLevelIndex();
+    if (fallback === null) {
+      throw new Error('[LevelValidation] No valid levels available after validation.');
+    }
+    console.warn(`[LevelStart] Level ${levelIndex} invalid (source: ${source}). Falling back to ${fallback}.`);
+    levelIndex = fallback;
+  }
+
+  return levelIndex;
+}
+
+function prepareLevelStart(scene, data, source) {
+  const levelIndex = getValidLevelIndex(data?.levelIndex, {
+    fallbackIndex: 0,
+    allowRandom: false,
+    source
+  });
+  if (!_levelStartGuard.acquire(scene, levelIndex, source)) {
+    return null;
+  }
+  return {
+    ...data,
+    levelIndex,
+    continueRun: data?.continueRun ?? false
+  };
+}
+
+// ==================== LEVEL LAYOUTS ====================
+const levelValidation = validateLevelLayouts(LEVEL_LAYOUTS);
+if (!levelValidation.ok) {
+  console.error('[LevelValidation] Issues detected:', levelValidation.errors);
+}
 
 // ==================== PERK DEFINITIONS ====================
 const PERK_INFO = {
@@ -1237,36 +1511,7 @@ class MainMenuScene extends Phaser.Scene {
   
   transitionTo(sceneKey, data = null) {
     sfx.click();
-    const { width, height } = this.scale;
-    const cx = width / 2;
-    const cy = height / 2;
-    
-    const overlay = this.add.rectangle(cx, cy, width, height, 0x000000);
-    overlay.setDepth(100);
-    overlay.setAlpha(0);
-    
-    this.tweens.add({
-      targets: overlay,
-      alpha: 1,
-      duration: 200,
-      ease: 'Quad.easeIn',
-      onComplete: () => {
-        if (data) {
-          this.scene.start(sceneKey, data);
-        } else {
-          this.scene.start(sceneKey);
-        }
-        this.time.delayedCall(50, () => {
-          this.tweens.add({
-            targets: overlay,
-            alpha: 0,
-            duration: 200,
-            ease: 'Quad.easeOut',
-            onComplete: () => overlay.destroy()
-          });
-        });
-      }
-    });
+    runSceneTransition(this, sceneKey, data);
   }
   
   createMenuButton(x, y, width, height, text, bgColor, strokeColor, onClick, disabled = false) {
@@ -3020,6 +3265,20 @@ class GameScene extends Phaser.Scene {
     if (this.objectiveText5) {
       this.objectiveText5.setText('[+] Power Cell');
       this.objectiveText5.setFill('#ff00ff');
+    }
+    this.updateExitStatus();
+  }
+
+  updateExitStatus() {
+    if (!this.statusText) return;
+    if (this.hasSecurityCode && this.hasPowerCell) {
+      this.statusText.setText('Secondary objectives complete!');
+      this.statusText.setFill('#ffcc66');
+      return;
+    }
+    if (this.hasSecurityCode && !this.hasPowerCell) {
+      this.statusText.setText('Security code acquired. Find the power cell!');
+      this.statusText.setFill('#00ffff');
     }
   }
 
