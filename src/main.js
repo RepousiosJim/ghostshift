@@ -961,16 +961,28 @@ class MainMenuScene extends Phaser.Scene {
       }
     ];
     
-    let yPos = -panelHeight/2 + 80;
-    const stepSpacing = 68;
+    // Center steps content block within panel - both horizontally and vertically
+    // Available space: title ends at -panelHeight/2 + 70, back button starts at panelHeight/2 - 65
+    const contentTop = -panelHeight/2 + 75;
+    const contentBottom = panelHeight/2 - 70;
+    const contentHeight = contentBottom - contentTop;
+    const numSteps = steps.length;
+    const totalStepsHeight = numSteps * 68;
+    const verticalPadding = (contentHeight - totalStepsHeight) / 2;
+    let yPos = contentTop + verticalPadding;
+    
+    // Center offset for horizontal alignment within panel
+    const centerOffset = 0;
+    const stepCircleX = centerOffset - 100;
+    const stepContentX = centerOffset - 60;
     
     steps.forEach((step, i) => {
-      // Step number circle
-      const stepNum = this.add.circle(-panelWidth/2 + 45, yPos, 18, step.num === '⚠' ? 0xff4444 : 0x4488ff);
+      // Step number circle - centered horizontally
+      const stepNum = this.add.circle(stepCircleX, yPos, 18, step.num === '⚠' ? 0xff4444 : 0x4488ff);
       panel.add(stepNum);
       
-      // Step number text
-      const numText = this.add.text(-panelWidth/2 + 45, yPos, step.num, { 
+      // Step number text - centered on circle
+      const numText = this.add.text(stepCircleX, yPos, step.num, { 
         fontSize: step.num === '⚠' ? '20px' : '16px', 
         fill: '#ffffff', 
         fontFamily: 'Courier New',
@@ -978,8 +990,8 @@ class MainMenuScene extends Phaser.Scene {
       }).setOrigin(0.5);
       panel.add(numText);
       
-      // Step title
-      const titleText = this.add.text(-panelWidth/2 + 80, yPos - 10, step.title, { 
+      // Step title - aligned to right of circle
+      const titleText = this.add.text(stepContentX, yPos - 10, step.title, { 
         fontSize: '15px', 
         fill: step.num === '⚠' ? '#ff6666' : '#ffdd00', 
         fontFamily: 'Courier New',
@@ -988,7 +1000,7 @@ class MainMenuScene extends Phaser.Scene {
       panel.add(titleText);
       
       // Step description (why this matters) with colorized keywords
-      const baseX = -panelWidth/2 + 80;
+      const baseX = stepContentX;
       const baseY = yPos + 12;
       const lineGap = 14;
 
@@ -1007,7 +1019,7 @@ class MainMenuScene extends Phaser.Scene {
         });
       });
       
-      yPos += stepSpacing;
+      yPos += 68;
     });
     
     // Back button - large and clear
@@ -1205,7 +1217,7 @@ class LevelSelectScene extends Phaser.Scene {
   formatTime(ms) { if (!ms) return '--:--'; const minutes = Math.floor(ms / 60000); const seconds = Math.floor((ms % 60000) / 1000); const centis = Math.floor((ms % 1000) / 10); return minutes.toString().padStart(2, '0') + ':' + seconds.toString().padStart(2, '0') + '.' + centis.toString().padStart(2, '0'); }
 }
 
-// ==================== SETTINGS SCENE ====================
+// ==================== SETTINGS SCENE (PHASE 8 - MODERNIZED) ====================
 class SettingsScene extends Phaser.Scene {
   constructor() { super({ key: 'SettingsScene' }); }
   create() {
@@ -1224,44 +1236,156 @@ class SettingsScene extends Phaser.Scene {
       loop: true
     });
     
+    // Title
     this.add.text(MAP_WIDTH * TILE_SIZE / 2, 30, 'SETTINGS', { fontSize: '28px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    
+    // Back button
     const backBtn = this.add.text(20, 15, '< BACK', { fontSize: '14px', fill: '#888888', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
     backBtn.on('pointerover', () => backBtn.setFill('#ffffff'));
     backBtn.on('pointerout', () => backBtn.setFill('#888888'));
     backBtn.on('pointerdown', () => this.transitionTo('MainMenuScene'));
     
-    const panelY = 90;
-    const spacing = 55;
+    // ==================== SECTION HEADERS ====================
+    const sectionHeaderStyle = { fontSize: '12px', fontFamily: 'Courier New', fontStyle: 'bold' };
+    const sectionY = 70;
+    
+    // AUDIO Section
+    this.add.text(40, sectionY, '▸ AUDIO', { fontSize: '13px', fill: '#6699cc', fontFamily: 'Courier New', fontStyle: 'bold' });
+    this.add.line(0, 0, 40, sectionY + 18, MAP_WIDTH * TILE_SIZE - 40, sectionY + 18, 0x334455).setOrigin(0);
+    
+    // GRAPHICS Section
+    const graphicsY = 180;
+    this.add.text(40, graphicsY, '▸ GRAPHICS', { fontSize: '13px', fill: '#6699cc', fontFamily: 'Courier New', fontStyle: 'bold' });
+    this.add.line(0, 0, 40, graphicsY + 18, MAP_WIDTH * TILE_SIZE - 40, graphicsY + 18, 0x334455).setOrigin(0);
+    
+    // GAME Section
+    const gameY = 350;
+    this.add.text(40, gameY, '▸ GAME', { fontSize: '13px', fill: '#6699cc', fontFamily: 'Courier New', fontStyle: 'bold' });
+    this.add.line(0, 0, 40, gameY + 18, MAP_WIDTH * TILE_SIZE - 40, gameY + 18, 0x334455).setOrigin(0);
+    
+    // ==================== AUDIO SETTINGS ====================
+    const audioStartY = sectionY + 35;
+    const rowHeight = 45;
+    const rightAlignX = MAP_WIDTH * TILE_SIZE - 50;
     
     // Audio Enabled toggle
-    this.add.text(40, panelY, 'Audio', { fontSize: '16px', fill: '#ffffff', fontFamily: 'Courier New' });
-    const audioToggle = this.add.text(MAP_WIDTH * TILE_SIZE - 100, panelY, sfx.isEnabled ? '[X] ON' : '[ ] OFF', { fontSize: '14px', fill: sfx.isEnabled ? '#44ff88' : '#ff4444', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
+    this.add.text(40, audioStartY, 'Sound Effects', { fontSize: '15px', fill: '#ffffff', fontFamily: 'Courier New' });
+    const audioToggle = this.add.text(rightAlignX, audioStartY + 2, sfx.isEnabled ? '● ON' : '○ OFF', { fontSize: '14px', fill: sfx.isEnabled ? '#44ff88' : '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
+    audioToggle.setOrigin(1, 0);
+    audioToggle.on('pointerover', () => { if (!sfx.isEnabled) audioToggle.setFill('#ff6666'); });
+    audioToggle.on('pointerout', () => { audioToggle.setFill(sfx.isEnabled ? '#44ff88' : '#ff4444'); });
     audioToggle.on('pointerdown', () => { 
       const newState = !sfx.isEnabled; 
       sfx.setEnabled(newState); 
-      audioToggle.setText(newState ? '[X] ON' : '[ ] OFF'); 
+      audioToggle.setText(newState ? '● ON' : '○ OFF'); 
       audioToggle.setFill(newState ? '#44ff88' : '#ff4444'); 
       sfx.select(); 
     });
     
-    // Master Volume slider
-    const volY = panelY + spacing;
-    this.add.text(40, volY, 'Master Volume', { fontSize: '16px', fill: '#ffffff', fontFamily: 'Courier New' });
-    const volBarBg = this.add.rectangle(MAP_WIDTH * TILE_SIZE - 100, volY, 120, 16, 0x222233);
-    const volBarFill = this.add.rectangle(MAP_WIDTH * TILE_SIZE - 160 + (sfx.volume * 60), volY, sfx.volume * 120, 12, 0x4488ff);
-    const volDown = this.add.text(MAP_WIDTH * TILE_SIZE - 180, volY, '[-]', { fontSize: '14px', fill: '#888888', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
-    const volUp = this.add.text(MAP_WIDTH * TILE_SIZE - 40, volY, '[+]', { fontSize: '14px', fill: '#888888', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
-    const updateVolDisplay = () => { volBarFill.width = sfx.volume * 120; volBarFill.x = MAP_WIDTH * TILE_SIZE - 160 + (sfx.volume * 60); };
-    volDown.on('pointerdown', () => { sfx.setMasterVolume(sfx.volume - 0.1); updateVolDisplay(); sfx.select(); });
-    volUp.on('pointerdown', () => { sfx.setMasterVolume(sfx.volume + 0.1); updateVolDisplay(); sfx.select(); });
+    // Master Volume - Modern slider with thumb and percentage
+    const volY = audioStartY + rowHeight;
+    this.add.text(40, volY, 'Master Volume', { fontSize: '15px', fill: '#ffffff', fontFamily: 'Courier New' });
+    
+    // Volume percentage display
+    const volPercent = Math.round(sfx.volume * 100);
+    const volPercentText = this.add.text(rightAlignX + 30, volY + 2, volPercent + '%', { fontSize: '14px', fill: '#88ccff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(1, 0);
+    
+    // Mute button
+    const muteBtn = this.add.text(rightAlignX + 65, volY + 2, sfx.volume === 0 || !sfx.isEnabled ? '🔇' : '🔊', { fontSize: '16px' }).setInteractive({ useHandCursor: true });
+    muteBtn.on('pointerover', () => muteBtn.setAlpha(0.7));
+    muteBtn.on('pointerout', () => muteBtn.setAlpha(1));
+    muteBtn.on('pointerdown', () => {
+      const wasMuted = sfx.volume === 0 || !sfx.isEnabled;
+      if (wasMuted) {
+        sfx.setEnabled(true);
+        audioToggle.setText('● ON');
+        audioToggle.setFill('#44ff88');
+        sfx.setMasterVolume(sfx.volume || 0.8);
+      } else {
+        sfx.setMasterVolume(0);
+      }
+      updateVolDisplay();
+      muteBtn.setText(sfx.volume === 0 || !sfx.isEnabled ? '🔇' : '🔊');
+      sfx.select();
+    });
+    
+    // Slider track background
+    const sliderX = 180;
+    const sliderWidth = 280;
+    const sliderY = volY + 18;
+    const volBarBg = this.add.rectangle(sliderX + sliderWidth / 2, sliderY, sliderWidth, 8, 0x1a1a2a);
+    volBarBg.setStrokeStyle(1, 0x333344);
+    
+    // Slider fill
+    const volBarFill = this.add.rectangle(sliderX, sliderY, sfx.volume * sliderWidth, 6, 0x4488ff);
+    volBarFill.setOrigin(0, 0.5);
+    
+    // Slider thumb
+    const volThumb = this.add.circle(sliderX + sfx.volume * sliderWidth, sliderY, 10, 0x66aaff);
+    volThumb.setStrokeStyle(2, 0xffffff);
+    volThumb.setInteractive({ useHandCursor: true });
+    volThumb.on('pointerover', () => { volThumb.setFill(0x88bbff); volThumb.setScale(1.2); });
+    volThumb.on('pointerout', () => { volThumb.setFill(0x66aaff); volThumb.setScale(1); });
+    
+    // Volume controls (-/+)
+    const volDown = this.add.text(sliderX - 25, sliderY - 1, '−', { fontSize: '22px', fill: '#888888', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
+    const volUp = this.add.text(sliderX + sliderWidth + 10, sliderY - 1, '+', { fontSize: '22px', fill: '#888888', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
+    
+    // Hover states for volume buttons
+    volDown.on('pointerover', () => volDown.setFill('#ffffff'));
+    volDown.on('pointerout', () => volDown.setFill('#888888'));
+    volUp.on('pointerover', () => volUp.setFill('#ffffff'));
+    volUp.on('pointerout', () => volUp.setFill('#888888'));
+    
+    const updateVolDisplay = () => {
+      const vol = sfx.volume;
+      volPercentText.setText(Math.round(vol * 100) + '%');
+      volBarFill.width = vol * sliderWidth;
+      volThumb.x = sliderX + vol * sliderWidth;
+      muteBtn.setText(vol === 0 || !sfx.isEnabled ? '🔇' : '🔊');
+      // Update audio toggle state
+      audioToggle.setText(sfx.isEnabled ? '● ON' : '○ OFF');
+      audioToggle.setFill(sfx.isEnabled ? '#44ff88' : '#ff4444');
+    };
+    
+    // Volume slider click/drag
+    volBarBg.setInteractive({ useHandCursor: true });
+    volBarBg.on('pointerdown', (pointer) => {
+      const newVol = Math.max(0, Math.min(1, (pointer.x - sliderX) / sliderWidth));
+      sfx.setMasterVolume(newVol);
+      updateVolDisplay();
+      sfx.select();
+    });
+    
+    volThumb.on('pointerdown', (pointer) => {
+      this.input.on('pointermove', (movePtr) => {
+        const newVol = Math.max(0, Math.min(1, (movePtr.x - sliderX) / sliderWidth));
+        sfx.setMasterVolume(newVol);
+        updateVolDisplay();
+      });
+      this.input.once('pointerup', () => {
+        this.input.off('pointermove');
+        sfx.select();
+      });
+    });
+    
+    volDown.on('pointerdown', () => { sfx.setMasterVolume(Math.max(0, sfx.volume - 0.1)); updateVolDisplay(); sfx.select(); });
+    volUp.on('pointerdown', () => { sfx.setMasterVolume(Math.min(1, sfx.volume + 0.1)); updateVolDisplay(); sfx.select(); });
+    
+    // ==================== GRAPHICS SETTINGS ====================
+    const graphicsStartY = graphicsY + 35;
     
     // Effects Quality
-    const qualY = volY + spacing;
-    this.add.text(40, qualY, 'Effects Quality', { fontSize: '16px', fill: '#ffffff', fontFamily: 'Courier New' });
+    this.add.text(40, graphicsStartY, 'Effects Quality', { fontSize: '15px', fill: '#ffffff', fontFamily: 'Courier New' });
+    this.add.text(40, graphicsStartY + 18, 'Visual detail level', { fontSize: '11px', fill: '#666677', fontFamily: 'Courier New' });
+    
     const currentQuality = saveManager.getSetting('effectsQuality') || 'high';
-    const qualityBtn = this.add.text(MAP_WIDTH * TILE_SIZE - 100, qualY, currentQuality.toUpperCase(), { fontSize: '14px', fill: '#ffaa00', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
+    const qualityBtn = this.add.text(rightAlignX, graphicsStartY + 2, currentQuality.toUpperCase(), { fontSize: '14px', fill: '#ffaa00', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
+    qualityBtn.setOrigin(1, 0);
     const qualities = ['low', 'medium', 'high'];
     let qualIndex = qualities.indexOf(currentQuality);
+    qualityBtn.on('pointerover', () => qualityBtn.setFill('#ffcc44'));
+    qualityBtn.on('pointerout', () => qualityBtn.setFill('#ffaa00'));
     qualityBtn.on('pointerdown', () => { 
       qualIndex = (qualIndex + 1) % qualities.length; 
       const newQual = qualities[qualIndex];
@@ -1271,16 +1395,20 @@ class SettingsScene extends Phaser.Scene {
     });
     
     // Fullscreen toggle
-    const fullY = qualY + spacing;
-    this.add.text(40, fullY, 'Fullscreen', { fontSize: '16px', fill: '#ffffff', fontFamily: 'Courier New' });
+    const fullY = graphicsStartY + rowHeight;
+    this.add.text(40, fullY, 'Fullscreen', { fontSize: '15px', fill: '#ffffff', fontFamily: 'Courier New' });
+    this.add.text(40, fullY + 18, 'Stretch to fill screen', { fontSize: '11px', fill: '#666677', fontFamily: 'Courier New' });
+    
     const isFullscreen = saveManager.getSetting('fullscreen') || false;
-    const fullToggle = this.add.text(MAP_WIDTH * TILE_SIZE - 100, fullY, isFullscreen ? '[X] ON' : '[ ] OFF', { fontSize: '14px', fill: isFullscreen ? '#44ff88' : '#ff4444', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
+    const fullToggle = this.add.text(rightAlignX, fullY + 2, isFullscreen ? '● ON' : '○ OFF', { fontSize: '14px', fill: isFullscreen ? '#44ff88' : '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
+    fullToggle.setOrigin(1, 0);
+    fullToggle.on('pointerover', () => { if (!saveManager.getSetting('fullscreen')) fullToggle.setFill('#ff6666'); });
+    fullToggle.on('pointerout', () => { fullToggle.setFill(saveManager.getSetting('fullscreen') ? '#44ff88' : '#ff4444'); });
     fullToggle.on('pointerdown', () => { 
       const newState = !saveManager.getSetting('fullscreen');
       saveManager.setSetting('fullscreen', newState);
-      fullToggle.setText(newState ? '[X] ON' : '[ ] OFF');
+      fullToggle.setText(newState ? '● ON' : '○ OFF');
       fullToggle.setFill(newState ? '#44ff88' : '#ff4444');
-      // Apply fullscreen
       if (newState) {
         this.scale.startFullscreen();
       } else {
@@ -1289,23 +1417,33 @@ class SettingsScene extends Phaser.Scene {
       sfx.select();
     });
     
+    // ==================== GAME SETTINGS ====================
+    const gameStartY = gameY + 35;
+    
     // Reduced Motion toggle
-    const motionY = fullY + spacing;
-    this.add.text(40, motionY, 'Reduced Motion', { fontSize: '16px', fill: '#ffffff', fontFamily: 'Courier New' });
+    this.add.text(40, gameStartY, 'Reduced Motion', { fontSize: '15px', fill: '#ffffff', fontFamily: 'Courier New' });
+    this.add.text(40, gameStartY + 18, 'Minimize animations', { fontSize: '11px', fill: '#666677', fontFamily: 'Courier New' });
+    
     const reducedMotion = saveManager.getSetting('reducedMotion') || false;
-    const motionToggle = this.add.text(MAP_WIDTH * TILE_SIZE - 100, motionY, reducedMotion ? '[X] ON' : '[ ] OFF', { fontSize: '14px', fill: reducedMotion ? '#44ff88' : '#ff4444', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
+    const motionToggle = this.add.text(rightAlignX, gameStartY + 2, reducedMotion ? '● ON' : '○ OFF', { fontSize: '14px', fill: reducedMotion ? '#44ff88' : '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
+    motionToggle.setOrigin(1, 0);
+    motionToggle.on('pointerover', () => { if (!saveManager.getSetting('reducedMotion')) motionToggle.setFill('#ff6666'); });
+    motionToggle.on('pointerout', () => { motionToggle.setFill(saveManager.getSetting('reducedMotion') ? '#44ff88' : '#ff4444'); });
     motionToggle.on('pointerdown', () => { 
       const newState = !saveManager.getSetting('reducedMotion');
       saveManager.setSetting('reducedMotion', newState);
-      motionToggle.setText(newState ? '[X] ON' : '[ ] OFF');
+      motionToggle.setText(newState ? '● ON' : '○ OFF');
       motionToggle.setFill(newState ? '#44ff88' : '#ff4444');
       sfx.select();
     });
     
     // Reset Progress
-    const resetY = motionY + spacing + 20;
-    this.add.text(40, resetY, 'Reset Progress', { fontSize: '16px', fill: '#ffffff', fontFamily: 'Courier New' });
-    const resetBtn = this.add.text(MAP_WIDTH * TILE_SIZE - 100, resetY, '[RESET]', { fontSize: '14px', fill: '#ff4444', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
+    const resetY = gameStartY + rowHeight + 15;
+    this.add.text(40, resetY, 'Reset Progress', { fontSize: '15px', fill: '#ffffff', fontFamily: 'Courier New' });
+    this.add.text(40, resetY + 18, 'Clear all save data', { fontSize: '11px', fill: '#666677', fontFamily: 'Courier New' });
+    
+    const resetBtn = this.add.text(rightAlignX, resetY + 2, 'RESET', { fontSize: '14px', fill: '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
+    resetBtn.setOrigin(1, 0);
     resetBtn.on('pointerover', () => resetBtn.setFill('#ff6666'));
     resetBtn.on('pointerout', () => resetBtn.setFill('#ff4444'));
     resetBtn.on('pointerdown', () => { 
@@ -1316,7 +1454,10 @@ class SettingsScene extends Phaser.Scene {
       } 
     });
     
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE - 30, 'GhostShift v0.6.0 - Phase 6', { fontSize: '12px', fill: '#444455', fontFamily: 'Courier New' }).setOrigin(0.5);
+    // Version info
+    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE - 30, 'GhostShift v0.6.1 - Phase 8', { fontSize: '12px', fill: '#444455', fontFamily: 'Courier New' }).setOrigin(0.5);
+    
+    // Initialize audio on first interaction
     this.input.keyboard.once('keydown', () => sfx.init());
     this.input.on('pointerdown', () => sfx.init(), this);
   }
