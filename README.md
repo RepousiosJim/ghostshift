@@ -2,6 +2,18 @@
 
 A stealth evasion game built with Phaser 3 and Tauri.
 
+## Visual Polish (Phase 1-2 Complete)
+
+The game features enhanced visuals including:
+- **Atmospheric depth** - Multi-layer backgrounds with subtle grid patterns and scanline textures
+- **Entity glow effects** - Player, guard, and objectives have pulsing glows
+- **Enhanced FOV cones** - Guard vision cones with gradient and pulse animations
+- **Movement trails** - Player leaves subtle cyan trail when moving
+- **Dynamic lighting** - Exit zone glows when unlocked, vignette corners for atmosphere
+- **Improved silhouettes** - Clear, high-contrast entity visuals for stealth gameplay
+
+*See `docs/VISUAL_STYLE.md` for the full visual style guide.*
+
 ## Quickstart
 
 ### Prerequisites
