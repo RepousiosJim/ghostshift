@@ -2869,10 +2869,10 @@ class ResultsScene extends Phaser.Scene {
       });
     }
     
-    // Buttons
+    // Buttons - consistent sizing with MainMenuScene
     const buttonY = 230;
     const buttonWidth = 180;
-    const buttonHeight = 40;
+    const buttonHeight = 48;  // Increased from 40 to match MainMenuScene (52)
     const spacing = 55;
     
     // Retry button
@@ -3003,7 +3003,7 @@ class ResultsScene extends Phaser.Scene {
     const bg = this.add.rectangle(x, y, width, height, disabled ? 0x1a1a1a : bgColor);
     bg.setStrokeStyle(2, disabled ? 0x333333 : strokeColor);
     bg.setInteractive({ useHandCursor: !disabled });
-    const label = this.add.text(x, y, text, { fontSize: '14px', fill: disabled ? '#444444' : '#ffffff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    const label = this.add.text(x, y, text, { fontSize: '16px', fill: disabled ? '#444444' : '#ffffff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
     
     // Enhanced hover effects
     bg.on('pointerover', () => { 
