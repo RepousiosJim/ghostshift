@@ -414,9 +414,10 @@ function saveSaveData(data) { saveManager.data = data; saveManager.save(); }
 
 // ==================== GAME CONSTANTS ====================
 // Phase 4: Improved balancing with difficulty scaling
-const TILE_SIZE = 32;
-const MAP_WIDTH = 20;
-const MAP_HEIGHT = 15;
+// Phase 7: Increased scale for desktop/web - larger game canvas for better UI visibility
+const TILE_SIZE = 48; // Increased from 32 for better visibility
+const MAP_WIDTH = 16; // Reduced from 20 to maintain aspect ratio while increasing tile size
+const MAP_HEIGHT = 12; // Reduced from 15 to maintain aspect ratio
 const BASE_PLAYER_SPEED = 180;
 // Guard speed now scales with difficulty (base 65, max 90)
 const BASE_GUARD_SPEED = 65;
@@ -685,23 +686,27 @@ class MainMenuScene extends Phaser.Scene {
     // Credits
     this.creditsText = this.add.text(MAP_WIDTH * TILE_SIZE - 40, 20, 'Credits: ' + saveManager.data.credits, { fontSize: '16px', fill: '#ffaa00', fontFamily: 'Courier New' }).setOrigin(1, 0);
     
-    // Buttons
-    const buttonWidth = 250, buttonHeight = 45, startY = 180, spacing = 60;
+    // Phase 7: Larger buttons with better spacing
+    const buttonWidth = 300, buttonHeight = 52, startY = 190, spacing = 65;
     
-    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY, buttonWidth, buttonHeight, '▶  PLAY', 0x2244aa, 0x4488ff, () => this.transitionTo('LevelSelectScene'));
-    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing, buttonWidth, buttonHeight, '▣  LEVEL SELECT', 0x1a2a3a, 0x4488ff, () => this.transitionTo('LevelSelectScene'));
+    // Main play button (larger, more prominent)
+    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY, buttonWidth, buttonHeight, '▶  PLAY', 0x2244aa, 0x66aaff, () => this.transitionTo('LevelSelectScene'));
     
     const canContinue = saveManager.hasSave();
     const lastPlayedLevel = saveManager.getLastPlayed() ? saveManager.data.unlockedLevels[saveManager.data.unlockedLevels.length - 1] : 0;
-    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 2, buttonWidth, buttonHeight, '↻  CONTINUE', canContinue ? 0x1a3a2a : 0x1a1a1a, canContinue ? 0x44ff88 : 0x444444, () => { 
+    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing, buttonWidth, buttonHeight, '↻  CONTINUE', canContinue ? 0x1a4a2a : 0x1a1a1a, canContinue ? 0x66ff88 : 0x444444, () => { 
       if (canContinue) {
         this.transitionTo('GameScene', { levelIndex: lastPlayedLevel, continueRun: true }); 
       }
     }, !canContinue);
     
-    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 3, buttonWidth, buttonHeight, '⚙  SETTINGS', 0x2a2a3a, 0x8888aa, () => this.transitionTo('SettingsScene'));
-    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 4, buttonWidth, buttonHeight, '?  CONTROLS', 0x2a2a3a, 0x8888aa, () => this.showControlsOverlay());
-    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 5, buttonWidth, buttonHeight, '★  CREDITS', 0x2a2a3a, 0x8888aa, () => this.showCreditsOverlay());
+    // How to Play (new - kid-friendly guide)
+    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 2, buttonWidth, buttonHeight, '📖  HOW TO PLAY', 0x1a3a5a, 0x66ccff, () => this.showHowToPlayOverlay());
+    
+    // Controls and other menu items
+    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 3, buttonWidth, buttonHeight, '🎮  CONTROLS', 0x2a3a4a, 0xaaaacc, () => this.showControlsOverlay());
+    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 4, buttonWidth, buttonHeight, '⚙  SETTINGS', 0x2a3a4a, 0xaaaacc, () => this.transitionTo('SettingsScene'));
+    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 5, buttonWidth, buttonHeight, '★  CREDITS', 0x2a3a4a, 0xaaaacc, () => this.showCreditsOverlay());
     
     this.input.keyboard.once('keydown', () => sfx.init());
     this.input.on('pointerdown', () => sfx.init(), this);
@@ -868,6 +873,123 @@ class MainMenuScene extends Phaser.Scene {
     const closeHandler = () => { this.input.keyboard.off('keydown', closeHandler); this.input.off('pointerdown', closeHandler); overlay.destroy(); panel.destroy(); };
     this.input.keyboard.on('keydown', closeHandler);
     this.input.on('pointerdown', closeHandler);
+  }
+  
+  // Phase 7: Kid-friendly How to Play guide
+  showHowToPlayOverlay() {
+    const overlay = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x000000, 0.92);
+    overlay.setDepth(100);
+    overlay.setInteractive({ useHandCursor: true });
+    
+    const panel = this.add.container(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2);
+    panel.setDepth(101);
+    
+    // Main panel - larger for better readability
+    const panelWidth = 520;
+    const panelHeight = 440;
+    const bg = this.add.rectangle(0, 0, panelWidth, panelHeight, 0x1a1a2a);
+    bg.setStrokeStyle(3, 0x66ccff);
+    panel.add(bg);
+    
+    // Title
+    const title = this.add.text(0, -panelHeight/2 + 35, '📖 HOW TO PLAY', { fontSize: '28px', fill: '#66ccff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    title.setShadow(0, 0, '#66ccff', 8, true, true);
+    panel.add(title);
+    
+    // Step-by-step instructions - kid-friendly with clear explanations
+    const steps = [
+      { num: '1', title: 'FIND THE KEY', desc: 'Look for the blue key card on the map. Pick it up to unlock doors!' },
+      { num: '2', title: 'HACK THE TERMINAL', desc: 'Find the green computer and stand near it. Wait for the hacking to finish!' },
+      { num: '3', title: 'GET THE DATA', desc: 'Grab the golden data core. It\'s worth points and unlocks the exit!' },
+      { num: '4', title: 'ESCAPE!', desc: 'Run to the exit zone (the green area). You win when you reach it!' },
+      { num: '⚠', title: 'AVOID GUARDS!', desc: 'Don\'t let red guards or cameras see you. Stay in the shadows!' }
+    ];
+    
+    let yPos = -panelHeight/2 + 80;
+    const stepSpacing = 68;
+    
+    steps.forEach((step, i) => {
+      // Step number circle
+      const stepNum = this.add.circle(-panelWidth/2 + 45, yPos, 18, step.num === '⚠' ? 0xff4444 : 0x4488ff);
+      panel.add(stepNum);
+      
+      // Step number text
+      const numText = this.add.text(-panelWidth/2 + 45, yPos, step.num, { 
+        fontSize: step.num === '⚠' ? '20px' : '16px', 
+        fill: '#ffffff', 
+        fontFamily: 'Courier New',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      panel.add(numText);
+      
+      // Step title
+      const titleText = this.add.text(-panelWidth/2 + 80, yPos - 10, step.title, { 
+        fontSize: '15px', 
+        fill: step.num === '⚠' ? '#ff6666' : '#ffdd00', 
+        fontFamily: 'Courier New',
+        fontStyle: 'bold'
+      }).setOrigin(0, 0.5);
+      panel.add(titleText);
+      
+      // Step description (why this matters)
+      const descText = this.add.text(-panelWidth/2 + 80, yPos + 12, step.desc, { 
+        fontSize: '12px', 
+        fill: '#aaaaaa', 
+        fontFamily: 'Courier New',
+        wordWrap: { width: 380 }
+      }).setOrigin(0, 0.5);
+      panel.add(descText);
+      
+      yPos += stepSpacing;
+    });
+    
+    // Back button - large and clear
+    const backBtnBg = this.add.rectangle(0, panelHeight/2 - 40, 180, 45, 0x2244aa);
+    backBtnBg.setStrokeStyle(2, 0x66aaff);
+    backBtnBg.setInteractive({ useHandCursor: true });
+    panel.add(backBtnBg);
+    
+    const backBtnText = this.add.text(0, panelHeight/2 - 40, '⬅ BACK TO MENU', { 
+      fontSize: '16px', 
+      fill: '#ffffff', 
+      fontFamily: 'Courier New',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+    panel.add(backBtnText);
+    
+    // Button hover effects
+    backBtnBg.on('pointerover', () => { 
+      backBtnBg.setFillStyle(0x3366cc);
+      backBtnBg.setStrokeStyle(2, 0xffffff);
+    });
+    backBtnBg.on('pointerout', () => { 
+      backBtnBg.setFillStyle(0x2244aa);
+      backBtnBg.setStrokeStyle(2, 0x66aaff);
+    });
+    backBtnBg.on('pointerdown', () => { 
+      sfx.click();
+      overlay.destroy();
+      panel.destroy();
+    });
+    
+    // Also allow clicking outside to close
+    overlay.on('pointerdown', () => {
+      sfx.click();
+      overlay.destroy();
+      panel.destroy();
+    });
+    
+    // Keyboard close
+    const closeHandler = (e) => {
+      // Don't close on other keys, only Escape
+      if (e.code === 'Escape') {
+        sfx.click();
+        this.input.keyboard.off('keydown', closeHandler);
+        overlay.destroy();
+        panel.destroy();
+      }
+    };
+    this.input.keyboard.on('keydown', closeHandler);
   }
   
   showCreditsOverlay() {
