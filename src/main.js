@@ -897,12 +897,78 @@ class MainMenuScene extends Phaser.Scene {
     panel.add(title);
     
     // Step-by-step instructions - kid-friendly with clear explanations
+    // Use colorized keyword parts so color words are shown in their actual color.
     const steps = [
-      { num: '1', title: 'FIND THE KEY', desc: 'Look for the blue key card on the map. Pick it up to unlock doors!' },
-      { num: '2', title: 'HACK THE TERMINAL', desc: 'Find the green computer and stand near it. Wait for the hacking to finish!' },
-      { num: '3', title: 'GET THE DATA', desc: 'Grab the golden data core. It\'s worth points and unlocks the exit!' },
-      { num: '4', title: 'ESCAPE!', desc: 'Run to the exit zone (the green area). You win when you reach it!' },
-      { num: '⚠', title: 'AVOID GUARDS!', desc: 'Don\'t let red guards or cameras see you. Stay in the shadows!' }
+      {
+        num: '1',
+        title: 'FIND THE KEY',
+        lines: [
+          [
+            { text: 'Look for the ', color: '#aaaaaa' },
+            { text: 'blue key card', color: '#66aaff' },
+            { text: ' on the map.', color: '#aaaaaa' }
+          ],
+          [
+            { text: 'Pick it up to unlock doors!', color: '#aaaaaa' }
+          ]
+        ]
+      },
+      {
+        num: '2',
+        title: 'HACK THE TERMINAL',
+        lines: [
+          [
+            { text: 'Find the ', color: '#aaaaaa' },
+            { text: 'green computer', color: '#66ff88' },
+            { text: ' and stand near it.', color: '#aaaaaa' }
+          ],
+          [
+            { text: 'Wait for the hacking to finish!', color: '#aaaaaa' }
+          ]
+        ]
+      },
+      {
+        num: '3',
+        title: 'GET THE DATA',
+        lines: [
+          [
+            { text: 'Grab the ', color: '#aaaaaa' },
+            { text: 'golden data core', color: '#ffd54a' },
+            { text: '.', color: '#aaaaaa' }
+          ],
+          [
+            { text: "It gives points and unlocks the exit!", color: '#aaaaaa' }
+          ]
+        ]
+      },
+      {
+        num: '4',
+        title: 'ESCAPE!',
+        lines: [
+          [
+            { text: 'Run to the ', color: '#aaaaaa' },
+            { text: 'green exit zone', color: '#66ff88' },
+            { text: '.', color: '#aaaaaa' }
+          ],
+          [
+            { text: 'You win when you reach it!', color: '#aaaaaa' }
+          ]
+        ]
+      },
+      {
+        num: '⚠',
+        title: 'AVOID GUARDS!',
+        lines: [
+          [
+            { text: "Don\'t let ", color: '#aaaaaa' },
+            { text: 'red guards', color: '#ff6666' },
+            { text: ' or cameras see you.', color: '#aaaaaa' }
+          ],
+          [
+            { text: 'Stay in the shadows!', color: '#aaaaaa' }
+          ]
+        ]
+      }
     ];
     
     let yPos = -panelHeight/2 + 80;
@@ -931,14 +997,25 @@ class MainMenuScene extends Phaser.Scene {
       }).setOrigin(0, 0.5);
       panel.add(titleText);
       
-      // Step description (why this matters)
-      const descText = this.add.text(-panelWidth/2 + 80, yPos + 12, step.desc, { 
-        fontSize: '12px', 
-        fill: '#aaaaaa', 
-        fontFamily: 'Courier New',
-        wordWrap: { width: 380 }
-      }).setOrigin(0, 0.5);
-      panel.add(descText);
+      // Step description (why this matters) with colorized keywords
+      const baseX = -panelWidth/2 + 80;
+      const baseY = yPos + 12;
+      const lineGap = 14;
+
+      step.lines.forEach((segments, lineIndex) => {
+        let xCursor = baseX;
+        const yLine = baseY + (lineIndex * lineGap);
+
+        segments.forEach((seg) => {
+          const segText = this.add.text(xCursor, yLine, seg.text, {
+            fontSize: '12px',
+            fill: seg.color,
+            fontFamily: 'Courier New'
+          }).setOrigin(0, 0.5);
+          panel.add(segText);
+          xCursor += segText.width;
+        });
+      });
       
       yPos += stepSpacing;
     });
