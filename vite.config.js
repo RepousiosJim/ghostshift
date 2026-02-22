@@ -11,7 +11,11 @@ export default defineConfig({
       output: {
         entryFileNames: 'assets/game.js',
         chunkFileNames: 'assets/[name].js',
-        assetFileNames: 'assets/[name][extname]'
+        assetFileNames: 'assets/[name][extname]',
+        manualChunks: {
+          // Separate Phaser into its own chunk for better caching
+          'phaser': ['phaser']
+        }
       }
     }
   }
