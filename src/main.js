@@ -2954,7 +2954,12 @@ class ControlsScene extends Phaser.Scene {
   
   // Cleanup listeners when scene is destroyed
   shutdown() {
-    // Clean up grid animation timer
+    // Clean up BackgroundComposer
+    if (this.backgroundComposer) {
+      this.backgroundComposer.destroy();
+      this.backgroundComposer = null;
+    }
+    // Legacy cleanup (if any)
     if (this._gridTimer) {
       this._gridTimer.remove();
       this._gridTimer = null;
