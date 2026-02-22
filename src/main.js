@@ -81,13 +81,33 @@ function reportRuntimeError(error, data = {}) {
 }
 
 function attachSceneGuard(scene, label) {
-  if (scene.__guard) return scene.__guard;
+  if (scene.__guard) {
+    const guard = scene.__guard;
+    guard.label = label || guard.label;
+    guard.isShuttingDown = false;
+    if (!guard.timers) guard.timers = new Set();
+    if (!guard.tweens) guard.tweens = new Set();
+    if (!guard.timeouts) guard.timeouts = new Set();
+    if (scene._transitionOverlay) {
+      scene._transitionOverlay.destroy();
+      scene._transitionOverlay = null;
+    }
+    scene._isTransitioning = false;
+    if (guard._cleanup) {
+      scene.events.off(Phaser.Scenes.Events.SHUTDOWN, guard._cleanup);
+      scene.events.off(Phaser.Scenes.Events.DESTROY, guard._cleanup);
+      scene.events.once(Phaser.Scenes.Events.SHUTDOWN, guard._cleanup);
+      scene.events.once(Phaser.Scenes.Events.DESTROY, guard._cleanup);
+    }
+    return guard;
+  }
   const guard = {
     label,
     isShuttingDown: false,
     timers: new Set(),
     tweens: new Set(),
-    timeouts: new Set()
+    timeouts: new Set(),
+    _cleanup: null
   };
   const cleanup = () => {
     guard.isShuttingDown = true;
@@ -97,7 +117,13 @@ function attachSceneGuard(scene, label) {
     guard.timers.clear();
     guard.tweens.clear();
     guard.timeouts.clear();
+    if (scene._transitionOverlay) {
+      scene._transitionOverlay.destroy();
+      scene._transitionOverlay = null;
+    }
+    scene._isTransitioning = false;
   };
+  guard._cleanup = cleanup;
   scene.events.once(Phaser.Scenes.Events.SHUTDOWN, cleanup);
   scene.events.once(Phaser.Scenes.Events.DESTROY, cleanup);
   scene.__guard = guard;
@@ -174,6 +200,7 @@ function runSceneTransition(scene, sceneKey, data = null, duration = 200) {
   const cy = height / 2;
 
   const overlay = scene.add.rectangle(cx, cy, width, height, 0x000000);
+  scene._transitionOverlay = overlay;
   overlay.setDepth(100);
   overlay.setAlpha(0);
 
@@ -192,6 +219,9 @@ function runSceneTransition(scene, sceneKey, data = null, duration = 200) {
           ease: 'Quad.easeOut',
           onComplete: () => {
             overlay.destroy();
+            if (scene._transitionOverlay === overlay) {
+              scene._transitionOverlay = null;
+            }
             scene._isTransitioning = false;
           }
         }, 'transition:fade-out-complete', { to: sceneKey });
@@ -2297,7 +2327,10 @@ class SettingsScene extends Phaser.Scene {
     attachSceneGuard(this, 'SettingsScene');
     setRuntimePhase('settings:create', { sceneKey: this.scene.key });
     // Phase 9: Register resize listener for fullscreen handling
-    this._resizeListener = () => this._handleResize();
+    this._resizeListener = () => {
+      this._handleResize();
+      this._relayoutUI();
+    };
     fullscreenManager.on('resize', this._resizeListener);
     
     // Background
@@ -2492,12 +2525,7 @@ class SettingsScene extends Phaser.Scene {
     };
     fullscreenManager.on('fullscreenchange', this._fullscreenListener);
     
-    // Listen for resize events to trigger scene relayout
-    this._resizeListener = () => {
-      this._relayoutUI();
-    };
-    fullscreenManager.on('resize', this._resizeListener);
-    
+    // Resize listener already registered above.
     fullToggle.on('pointerover', () => { if (!fullscreenManager.isFullscreen) fullToggle.setFill('#ff6666'); });
     fullToggle.on('pointerout', () => { fullToggle.setFill(fullscreenManager.isFullscreen ? '#44ff88' : '#ff4444'); });
     fullToggle.on('pointerdown', async () => { 
@@ -2653,10 +2681,11 @@ class ControlsScene extends Phaser.Scene {
     });
     
     // Keyboard shortcut for back
-    this.input.keyboard.on('keydown-ESC', () => {
+    this._escKeyHandler = () => {
       sfx.click();
       this.transitionTo('MainMenuScene');
-    });
+    };
+    this.input.keyboard.on('keydown-ESC', this._escKeyHandler);
     
     // Scrollable content container
     const panelWidth = 520;
@@ -2791,6 +2820,10 @@ class ControlsScene extends Phaser.Scene {
     }
     if (this._resizeListener) {
       fullscreenManager.off(this._resizeListener);
+    }
+    if (this._escKeyHandler) {
+      this.input.keyboard.off('keydown-ESC', this._escKeyHandler);
+      this._escKeyHandler = null;
     }
     super.shutdown();
   }
@@ -3455,6 +3488,9 @@ class GameScene extends Phaser.Scene {
     this.currentRun = []; this.previousRun = null; this.ghostFrame = 0;
     this.guardPatrolPoints = []; this.currentPatrolIndex = 0; this.guardAngle = 0;
     this.visionGraphics = null; this.walls = null;
+    this.warningIndicator = null; // Phase 12: Proximity warning
+    this._proximityWarningActive = false;
+    this._proximityIntensity = 0;
     this.scannerAngle = 0; this.applySpeedBoost = false; this.applyStealth = false;
     this.hasWon = false;
     this._restarted = false;
@@ -4218,6 +4254,7 @@ class GameScene extends Phaser.Scene {
     this.checkDetection();
     this.checkScannerDetection();
     this.checkCameraDetection();
+    this.checkProximityWarning();
     perfManager.endMarker('checkDetection');
     
     // Record frame time
@@ -4521,8 +4558,15 @@ class GameScene extends Phaser.Scene {
     const rightY = tipY + Math.sin(rightAngle) * coneLength;
     
     // Pulse animation - visible but not distracting (0.12 to 0.25 range)
-    const pulsePhase = Math.floor(this.time.now / 300) % 64;
-    const pulseAlpha = 0.18 + Math.sin(pulsePhase * Math.PI / 32) * 0.07;
+    // Speed up pulse when player is in proximity warning zone (detection telegraphing)
+    const pulseSpeed = this._proximityWarningActive ? 100 : 300;
+    const pulsePhase = Math.floor(this.time.now / pulseSpeed) % 64;
+    let pulseAlpha = 0.18 + Math.sin(pulsePhase * Math.PI / 32) * 0.07;
+    
+    // Intensify cone when player is near (detection telegraphing)
+    if (this._proximityWarningActive && this._proximityIntensity) {
+      pulseAlpha = Math.min(0.5, pulseAlpha + this._proximityIntensity * 0.15);
+    }
     
     // Outer cone (faded warning area)
     this.visionGraphics.fillStyle(0xff2200, pulseAlpha * 0.6);
@@ -4533,8 +4577,9 @@ class GameScene extends Phaser.Scene {
     this.visionGraphics.closePath();
     this.visionGraphics.fillPath();
     
-    // Inner cone (brighter danger zone)
-    this.visionGraphics.fillStyle(0xff4422, pulseAlpha * 1.0);
+    // Inner cone (brighter danger zone) - also intensifies with proximity
+    const innerAlpha = this._proximityWarningActive ? pulseAlpha * 1.5 : pulseAlpha * 1.0;
+    this.visionGraphics.fillStyle(0xff4422, Math.min(1.0, innerAlpha));
   }
 
   updateGhost() {
@@ -4642,6 +4687,90 @@ class GameScene extends Phaser.Scene {
 
   checkMotionSensorDetection() {
     // Handled in updateMotionSensors
+  }
+
+  // Phase 12: Detection telegraphing - proximity warning system
+  // Gives players visual feedback when they're near guard's vision cone but not yet detected
+  checkProximityWarning() {
+    if (!this.guard || !this.player || this.isDetected) {
+      this._clearProximityWarning();
+      return;
+    }
+
+    const sqDist = this._SQUARED_DIST(this.player.x, this.player.y, this.guard.x, this.guard.y);
+    
+    // Warning zone: 1.5x the vision cone distance (gives player time to react)
+    const warningDistSq = this._GUARD_VISION_DIST_SQ ? this._GUARD_VISION_DIST_SQ * 2.25 : this.currentVisionDistance * this.currentVisionDistance * 2.25;
+    
+    // Only check if player is within warning distance
+    if (sqDist < warningDistSq) {
+      const angleToPlayer = Math.atan2(this.player.y - this.guard.y, this.player.x - this.guard.x);
+      let angleDiff = angleToPlayer - this.guardAngle;
+      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+      
+      // Check if player is in the cone or just outside it (within 1.5x angle)
+      const inWarningZone = Math.abs(angleDiff) < this.currentVisionAngle * 0.75;
+      
+      if (inWarningZone && !this.isLineBlocked(this.guard.x, this.guard.y, this.player.x, this.player.y)) {
+        // Player is in warning zone - show visual feedback
+        this._showProximityWarning(sqDist, warningDistSq);
+        return;
+      }
+    }
+    
+    this._clearProximityWarning();
+  }
+
+  _showProximityWarning(sqDist, maxDist) {
+    // Create warning indicator if it doesn't exist
+    if (!this.warningIndicator) {
+      const { width, height } = this.scale;
+      this.warningIndicator = this.add.graphics();
+      this.warningIndicator.setDepth(100); // Above most elements
+    }
+    
+    this.warningIndicator.clear();
+    
+    // Calculate warning intensity based on distance (closer = more intense)
+    const intensity = 1 - (Math.sqrt(sqDist) / Math.sqrt(this._GUARD_VISION_DIST_SQ || 19600));
+    const clampedIntensity = Math.max(0.2, Math.min(1, intensity));
+    
+    // Pulsing warning effect - faster pulse when closer
+    const pulseSpeed = 150 - (clampedIntensity * 100); // 50-150ms based on proximity
+    const pulse = 0.3 + Math.sin(this.time.now / pulseSpeed) * 0.2 * clampedIntensity;
+    
+    // Draw warning triangle around player
+    const px = this.player.x;
+    const py = this.player.y;
+    
+    // Orange/yellow warning color - intensifies with proximity
+    const r = 255;
+    const g = Math.floor(150 + clampedIntensity * 50);
+    const b = 0;
+    const color = (r << 16) | (g << 8) | b;
+    
+    // Draw outer warning ring
+    this.warningIndicator.fillStyle(color, pulse * 0.5);
+    this.warningIndicator.fillCircle(px, py, 25 + clampedIntensity * 10);
+    
+    // Draw inner warning ring
+    this.warningIndicator.fillStyle(color, pulse * 0.8);
+    this.warningIndicator.fillCircle(px, py, 15 + clampedIntensity * 5);
+    
+    // Make vision cone pulse faster when player is near (detection telegraphing)
+    this._proximityWarningActive = true;
+    this._proximityIntensity = clampedIntensity;
+  }
+
+  _clearProximityWarning() {
+    if (this.warningIndicator) {
+      this.warningIndicator.clear();
+      this.warningIndicator.destroy();
+      this.warningIndicator = null;
+    }
+    this._proximityWarningActive = false;
+    this._proximityIntensity = 0;
   }
 
   isLineBlocked(x1, y1, x2, y2) {

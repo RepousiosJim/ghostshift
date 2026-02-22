@@ -18,6 +18,18 @@ function assertNoRuntimeCrashes(pageErrors, consoleErrors) {
   ).toEqual([])
 }
 
+const GAME_WIDTH = 16 * 48
+const GAME_HEIGHT = 12 * 48
+
+async function clickGamePoint(page, x, y) {
+  const canvas = page.locator('canvas')
+  const box = await canvas.boundingBox()
+  expect(box).toBeTruthy()
+  const scaleX = box.width / GAME_WIDTH
+  const scaleY = box.height / GAME_HEIGHT
+  await page.mouse.click(box.x + x * scaleX, box.y + y * scaleY)
+}
+
 async function startGameScene(page, levelIndex = 0) {
   await page.waitForFunction(() => window.__ghostGame?.scene)
   const started = await page.evaluate((idx) => {
@@ -48,6 +60,29 @@ test('GhostShift boots and survives basic play input without runtime errors', as
 
   await page.keyboard.press('r')
   await page.waitForTimeout(800)
+
+  assertNoRuntimeCrashes(pageErrors, consoleErrors)
+})
+
+test('Main menu settings -> back -> controls navigation works', async ({ page }) => {
+  const { pageErrors, consoleErrors } = attachErrorCollectors(page)
+
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('canvas')).toHaveCount(1)
+  await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('MainMenuScene'))
+
+  const centerX = GAME_WIDTH / 2
+  const startY = 190
+  const spacing = 65
+
+  await clickGamePoint(page, centerX, startY + spacing * 4)
+  await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('SettingsScene'))
+
+  await clickGamePoint(page, 40, 20)
+  await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('MainMenuScene'))
+
+  await clickGamePoint(page, centerX, startY + spacing * 3)
+  await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('ControlsScene'))
 
   assertNoRuntimeCrashes(pageErrors, consoleErrors)
 })
