@@ -1837,8 +1837,21 @@ class LevelSelectScene extends Phaser.Scene {
   
   formatTime(ms) { if (!ms) return '--:--'; const minutes = Math.floor(ms / 60000); const seconds = Math.floor((ms % 60000) / 1000); const centis = Math.floor((ms % 1000) / 10); return minutes.toString().padStart(2, '0') + ':' + seconds.toString().padStart(2, '0') + '.' + centis.toString().padStart(2, '0'); }
   
+  drawGrid() {
+    if (!this.gridGraphics) return;
+    this.gridGraphics.clear();
+    this.gridGraphics.lineStyle(1, 0x1a1a2a, 0.3);
+    for (let x = 0; x <= MAP_WIDTH; x++) {
+      this.gridGraphics.lineBetween(x * 32, 0, x * 32, MAP_HEIGHT * TILE_SIZE);
+    }
+    for (let y = 0; y <= MAP_HEIGHT; y++) {
+      this.gridGraphics.lineBetween(0, y * 32, MAP_WIDTH * TILE_SIZE, y * 32);
+    }
+  }
+  
   // Phase 9: Handle window resize for fullscreen
   _handleResize() {
+
     const { width } = this.scale;
     const centerX = width / 2;
     
