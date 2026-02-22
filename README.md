@@ -10,9 +10,18 @@ A stealth evasion game built with Phaser 3 and Tauri.
 - Build passes with no errors
 - Tests: `npm run test:e2e`
 
-## Game Flow (Phase 6 Complete)
+## Game Flow (Phase 8 Complete)
 
-The game now features 5 playable levels with progressive difficulty and Phase 6 polish improvements:
+The game now features 5 playable levels with progressive difficulty and **Phase 8 Settings UI Modernization**:
+
+### Phase 8: Settings UI Modernization
+- **Modernized visual design** - Cleaner spacing, section grouping (Audio/Graphics/Game)
+- **Master Volume overhaul** - Interactive slider with draggable thumb, live percentage display (0-100%)
+- **Mute button** - Quick toggle between mute/unmute with visual icon feedback
+- **Better +/- controls** - Improved hover/active states, 10% step adjustment
+- **Consistent row styling** - Helper text, right-aligned controls, modern toggle states
+- **Visual polish** - Smooth hover animations, professional color scheme
+- **Version bump**: v0.6.0 → v0.6.1
 
 ### Scene Flow
 ```
