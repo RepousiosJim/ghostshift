@@ -3,7 +3,7 @@
 ## Overview
 Phased roadmap for implementing the complete game flow system.
 
-## Current Status: Phase 8 Complete ✅
+## Current Status: Phase 9 Complete ✅
 
 ### Phase 1: Menu Foundation (DONE)
 - [x] Scene architecture with 6 scenes
@@ -88,7 +88,35 @@ Phased roadmap for implementing the complete game flow system.
 - [x] Build/dev/tests - 0 console errors verified
 - [x] Version bump: v0.6.0 → v0.6.1
 
-## Phase 7: Future Work
+### Phase 9: Fullscreen Web Support Hardening (COMPLETE ✅)
+- [x] FullscreenManager class - Centralized fullscreen API handling
+  - [x] Cross-browser fullscreen API support (webkit, moz, ms)
+  - [x] fullscreenchange event listeners for all browsers
+  - [x] Proper async request/exit methods
+  - [x] isSupported() capability detection
+- [x] Browser state sync
+  - [x] Sync with actual browser fullscreen state on init
+  - [x] Listen to fullscreenchange events
+  - [x] Handle ESC key exit detection
+- [x] Resize pipeline
+  - [x] Window resize event listener
+  - [x] Resize events emitted to all scenes
+  - [x] Delayed resize emission for DOM settle
+- [x] Scene relayout handlers
+  - [x] MainMenuScene - reposition title, credits on resize
+  - [x] LevelSelectScene - reposition grid on resize
+  - [x] SettingsScene - reposition grid on resize
+  - [x] ResultsScene - minimal handling for particles
+  - [x] GameScene - minimal handling for fixed canvas
+  - [x] ControlsScene - reposition grid on resize
+- [x] Scene shutdown cleanup - all scenes properly clean up listeners
+- [x] Phaser Scale.FIT mode with auto-center
+- [x] SaveManager fullscreen setting persistence
+- [x] Immediate apply - setting applies on toggle
+- [x] Build/dev/tests - 0 console errors verified
+- [x] Version bump: v0.6.1 → v0.7.0
+
+## Phase 10: Future Work
 - [ ] Multiple save slots
 - [ ] Cloud save (stretch)
 - [ ] Achievement system

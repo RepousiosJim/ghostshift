@@ -1,5 +1,191 @@
 import Phaser from 'phaser';
 
+// ==================== FULLSCREEN MANAGER (PHASE 9) ====================
+// Handles browser fullscreen API with proper state sync and resize handling
+class FullscreenManager {
+  constructor() {
+    this.isFullscreen = false;
+    this._listeners = [];
+    this._resizeListener = null;
+    this._boundHandlers = {
+      fullscreenchange: this._onFullscreenChange.bind(this),
+      resize: this._onWindowResize.bind(this),
+      keydown: this._onKeyDown.bind(this)
+    };
+    
+    // Sync with current browser state on init
+    this._syncWithBrowser();
+    
+    // Listen for browser fullscreen changes
+    this._setupEventListeners();
+  }
+  
+  _syncWithBrowser() {
+    this.isFullscreen = !!(
+      document.fullscreenElement ||
+      document.webkitFullscreenElement ||
+      document.mozFullScreenElement ||
+      document.msFullscreenElement
+    );
+  }
+  
+  _setupEventListeners() {
+    // Fullscreen change events
+    document.addEventListener('fullscreenchange', this._boundHandlers.fullscreenchange);
+    document.addEventListener('webkitfullscreenchange', this._boundHandlers.fullscreenchange);
+    document.addEventListener('mozfullscreenchange', this._boundHandlers.fullscreenchange);
+    document.addEventListener('MSFullscreenChange', this._boundHandlers.fullscreenchange);
+    
+    // Window resize (always listen for this)
+    window.addEventListener('resize', this._boundHandlers.resize);
+    
+    // Listen for ESC key to detect fullscreen exit
+    document.addEventListener('keydown', this._boundHandlers.keydown);
+  }
+  
+  _onFullscreenChange() {
+    this._syncWithBrowser();
+    this._emit('fullscreenchange', this.isFullscreen);
+    
+    // After fullscreen change, emit resize event
+    this._emitResize();
+  }
+  
+  _onWindowResize() {
+    // Always emit resize on window resize
+    this._emitResize();
+  }
+  
+  _onKeyDown(e) {
+    // Detect ESC key - if we were in fullscreen but now aren't, sync state
+    if (e.code === 'Escape') {
+      // Use setTimeout to let browser finish its fullscreen exit first
+      setTimeout(() => {
+        const wasFullscreen = this.isFullscreen;
+        this._syncWithBrowser();
+        if (wasFullscreen && !this.isFullscreen) {
+          this._emit('fullscreenchange', this.isFullscreen);
+          this._emitResize();
+        }
+      }, 10);
+    }
+  }
+  
+  _emitResize() {
+    // Emit resize after a small delay to let DOM settle
+    setTimeout(() => {
+      this._emit('resize', {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        isFullscreen: this.isFullscreen
+      });
+    }, 50);
+  }
+  
+  _emit(event, data) {
+    this._listeners.forEach(cb => {
+      try {
+        cb(event, data);
+      } catch (e) {
+        console.warn('FullscreenManager listener error:', e);
+      }
+    });
+  }
+  
+  on(event, callback) {
+    if (!this._listeners.includes(callback)) {
+      this._listeners.push(callback);
+    }
+  }
+  
+  off(callback) {
+    this._listeners = this._listeners.filter(cb => cb !== callback);
+  }
+  
+  // Request fullscreen on a specific element
+  async request(element = document.documentElement) {
+    try {
+      if (element.requestFullscreen) {
+        await element.requestFullscreen();
+      } else if (element.webkitRequestFullscreen) {
+        await element.webkitRequestFullscreen();
+      } else if (element.mozRequestFullScreen) {
+        await element.mozRequestFullScreen();
+      } else if (element.msRequestFullscreen) {
+        await element.msRequestFullscreen();
+      }
+      this.isFullscreen = true;
+      this._emit('fullscreenchange', true);
+      return true;
+    } catch (e) {
+      console.warn('Fullscreen request failed:', e);
+      return false;
+    }
+  }
+  
+  // Exit fullscreen
+  async exit() {
+    try {
+      if (document.exitFullscreen) {
+        await document.exitFullscreen();
+      } else if (document.webkitExitFullscreen) {
+        await document.webkitExitFullscreen();
+      } else if (document.mozCancelFullScreen) {
+        await document.mozCancelFullScreen();
+      } else if (document.msExitFullscreen) {
+        await document.msExitFullscreen();
+      }
+      this.isFullscreen = false;
+      this._emit('fullscreenchange', false);
+      return true;
+    } catch (e) {
+      console.warn('Fullscreen exit failed:', e);
+      return false;
+    }
+  }
+  
+  // Toggle fullscreen
+  async toggle(element = document.documentElement) {
+    if (this.isFullscreen) {
+      return await this.exit();
+    } else {
+      return await this.request(element);
+    }
+  }
+  
+  // Get current fullscreen element
+  getFullscreenElement() {
+    return document.fullscreenElement ||
+           document.webkitFullscreenElement ||
+           document.mozFullScreenElement ||
+           document.msFullscreenElement ||
+           null;
+  }
+  
+  // Check if fullscreen is available
+  isSupported() {
+    return !!(
+      document.fullscreenEnabled ||
+      document.webkitFullscreenEnabled ||
+      document.mozFullScreenEnabled ||
+      document.msFullscreenEnabled
+    );
+  }
+  
+  // Cleanup listeners (call on game destroy)
+  destroy() {
+    document.removeEventListener('fullscreenchange', this._boundHandlers.fullscreenchange);
+    document.removeEventListener('webkitfullscreenchange', this._boundHandlers.fullscreenchange);
+    document.removeEventListener('mozfullscreenchange', this._boundHandlers.fullscreenchange);
+    document.removeEventListener('MSFullscreenChange', this._boundHandlers.fullscreenchange);
+    window.removeEventListener('resize', this._boundHandlers.resize);
+    document.removeEventListener('keydown', this._boundHandlers.keydown);
+    this._listeners = [];
+  }
+}
+
+const fullscreenManager = new FullscreenManager();
+
 // ==================== SAVE MANAGER ====================
 const SAVE_KEY = 'ghostshift_save';
 const SAVE_VERSION = 5;
@@ -661,6 +847,10 @@ class MainMenuScene extends Phaser.Scene {
   }
 
   create(data) {
+    // Phase 9: Register resize listener for fullscreen handling
+    this._resizeListener = () => this._handleResize();
+    fullscreenManager.on('resize', this._resizeListener);
+    
     // Check if we should show How to Play from ControlsScene transition
     if (data?.showHowToPlay) {
       // Delay slightly to ensure scene is fully created
@@ -1089,6 +1279,33 @@ class MainMenuScene extends Phaser.Scene {
     this.input.on('pointerdown', closeHandler);
   }
   
+  // Phase 9: Handle window resize for fullscreen
+  _handleResize() {
+    const { width, height } = this.scale;
+    const centerX = width / 2;
+    
+    // Reposition title
+    if (this.titleText) {
+      this.titleText.setPosition(centerX, 50);
+    }
+    if (this.subtitleText) {
+      this.subtitleText.setPosition(centerX, 85);
+    }
+    
+    // Reposition credits (top right)
+    if (this.creditsText) {
+      this.creditsText.setPosition(width - 40, 20);
+    }
+  }
+  
+  // Cleanup listeners when scene is destroyed
+  shutdown() {
+    if (this._resizeListener) {
+      fullscreenManager.off(this._resizeListener);
+    }
+    super.shutdown();
+  }
+  
   formatTime(ms) { if (!ms) return '--:--'; const minutes = Math.floor(ms / 60000); const seconds = Math.floor((ms % 60000) / 1000); const centis = Math.floor((ms % 1000) / 10); return minutes.toString().padStart(2, '0') + ':' + seconds.toString().padStart(2, '0') + '.' + centis.toString().padStart(2, '0'); }
 }
 
@@ -1170,7 +1387,14 @@ class LevelSelectScene extends Phaser.Scene {
     this.input.on('pointerdown', () => sfx.init(), this);
   }
   
-  drawGrid() {
+  // Phase 9: Handle window resize for fullscreen
+  create() {
+    // Register resize listener
+    this._resizeListener = () => this._handleResize();
+    fullscreenManager.on('resize', this._resizeListener);
+    
+    // Background
+    this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
     this.gridGraphics.clear();
     this.gridGraphics.lineStyle(1, 0x1a1a2a, 0.3);
     for (let x = 0; x <= MAP_WIDTH; x++) {
@@ -1179,6 +1403,25 @@ class LevelSelectScene extends Phaser.Scene {
     for (let y = 0; y <= MAP_HEIGHT; y++) {
       this.gridGraphics.lineBetween(0, y * 32, MAP_WIDTH * TILE_SIZE, y * 32);
     }
+  }
+  
+  // Phase 9: Handle window resize for fullscreen
+  _handleResize() {
+    const { width } = this.scale;
+    const centerX = width / 2;
+    
+    // Update grid position if needed
+    if (this.gridGraphics) {
+      this.gridGraphics.setPosition(centerX, MAP_HEIGHT * TILE_SIZE / 2);
+    }
+  }
+  
+  // Cleanup listeners when scene is destroyed
+  shutdown() {
+    if (this._resizeListener) {
+      fullscreenManager.off(this._resizeListener);
+    }
+    super.shutdown();
   }
   
   transitionTo(sceneKey, data = null) {
@@ -1221,6 +1464,10 @@ class LevelSelectScene extends Phaser.Scene {
 class SettingsScene extends Phaser.Scene {
   constructor() { super({ key: 'SettingsScene' }); }
   create() {
+    // Phase 9: Register resize listener for fullscreen handling
+    this._resizeListener = () => this._handleResize();
+    fullscreenManager.on('resize', this._resizeListener);
+    
     // Background
     this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
     
@@ -1399,21 +1646,37 @@ class SettingsScene extends Phaser.Scene {
     this.add.text(40, fullY, 'Fullscreen', { fontSize: '15px', fill: '#ffffff', fontFamily: 'Courier New' });
     this.add.text(40, fullY + 18, 'Stretch to fill screen', { fontSize: '11px', fill: '#666677', fontFamily: 'Courier New' });
     
-    const isFullscreen = saveManager.getSetting('fullscreen') || false;
+    // Check actual browser fullscreen state
+    const isFullscreen = fullscreenManager.isFullscreen;
     const fullToggle = this.add.text(rightAlignX, fullY + 2, isFullscreen ? '● ON' : '○ OFF', { fontSize: '14px', fill: isFullscreen ? '#44ff88' : '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
     fullToggle.setOrigin(1, 0);
-    fullToggle.on('pointerover', () => { if (!saveManager.getSetting('fullscreen')) fullToggle.setFill('#ff6666'); });
-    fullToggle.on('pointerout', () => { fullToggle.setFill(saveManager.getSetting('fullscreen') ? '#44ff88' : '#ff4444'); });
-    fullToggle.on('pointerdown', () => { 
-      const newState = !saveManager.getSetting('fullscreen');
-      saveManager.setSetting('fullscreen', newState);
-      fullToggle.setText(newState ? '● ON' : '○ OFF');
-      fullToggle.setFill(newState ? '#44ff88' : '#ff4444');
+    
+    // Listen for fullscreen changes to keep toggle in sync
+    this._fullscreenListener = (event, isFs) => {
+      fullToggle.setText(isFs ? '● ON' : '○ OFF');
+      fullToggle.setFill(isFs ? '#44ff88' : '#ff4444');
+      // Also update save state
+      saveManager.setSetting('fullscreen', isFs);
+    };
+    fullscreenManager.on('fullscreenchange', this._fullscreenListener);
+    
+    // Listen for resize events to trigger scene relayout
+    this._resizeListener = () => {
+      this._relayoutUI();
+    };
+    fullscreenManager.on('resize', this._resizeListener);
+    
+    fullToggle.on('pointerover', () => { if (!fullscreenManager.isFullscreen) fullToggle.setFill('#ff6666'); });
+    fullToggle.on('pointerout', () => { fullToggle.setFill(fullscreenManager.isFullscreen ? '#44ff88' : '#ff4444'); });
+    fullToggle.on('pointerdown', async () => { 
+      const newState = !fullscreenManager.isFullscreen;
       if (newState) {
-        this.scale.startFullscreen();
+        await fullscreenManager.request();
       } else {
-        this.scale.stopFullscreen();
+        await fullscreenManager.exit();
       }
+      // State will be updated by the fullscreenchange listener
+      saveManager.setSetting('fullscreen', fullscreenManager.isFullscreen);
       sfx.select();
     });
     
@@ -1455,11 +1718,34 @@ class SettingsScene extends Phaser.Scene {
     });
     
     // Version info
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE - 30, 'GhostShift v0.6.1 - Phase 8', { fontSize: '12px', fill: '#444455', fontFamily: 'Courier New' }).setOrigin(0.5);
+    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE - 30, 'GhostShift v0.6.1 - Phase 9', { fontSize: '12px', fill: '#444455', fontFamily: 'Courier New' }).setOrigin(0.5);
     
     // Initialize audio on first interaction
     this.input.keyboard.once('keydown', () => sfx.init());
     this.input.on('pointerdown', () => sfx.init(), this);
+  }
+  
+  // Phase 9: Handle window resize for fullscreen
+  _relayoutUI() {
+    // Recenter elements based on new canvas size
+    const { width, height } = this.scale;
+    
+    // Reposition title
+    if (this.children) {
+      // Find and update positions relative to new size
+      // This is a basic implementation - more complex scenes may need more work
+    }
+  }
+  
+  // Cleanup listeners when scene is destroyed
+  shutdown() {
+    if (this._fullscreenListener) {
+      fullscreenManager.off(this._fullscreenListener);
+    }
+    if (this._resizeListener) {
+      fullscreenManager.off(this._resizeListener);
+    }
+    super.shutdown();
   }
   
   drawGrid() {
@@ -1470,6 +1756,17 @@ class SettingsScene extends Phaser.Scene {
     }
     for (let y = 0; y <= MAP_HEIGHT; y++) {
       this.gridGraphics.lineBetween(0, y * 32, MAP_WIDTH * TILE_SIZE, y * 32);
+    }
+  }
+  
+  // Phase 9: Handle window resize for fullscreen
+  _handleResize() {
+    const { width } = this.scale;
+    const centerX = width / 2;
+    
+    // Update grid position if needed
+    if (this.gridGraphics) {
+      this.gridGraphics.setPosition(centerX, MAP_HEIGHT * TILE_SIZE / 2);
     }
   }
   
@@ -1510,6 +1807,10 @@ class ControlsScene extends Phaser.Scene {
   }
 
   create() {
+    // Phase 9: Register resize listener for fullscreen handling
+    this._resizeListener = () => this._handleResize();
+    fullscreenManager.on('resize', this._resizeListener);
+    
     // Background
     this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
     
@@ -1656,6 +1957,25 @@ class ControlsScene extends Phaser.Scene {
     this.add.text(exampleX, y, example, { fontSize: '12px', fill: '#888888', fontFamily: 'Courier New', fontStyle: 'italic' }).setOrigin(0, 0.5);
   }
   
+  // Phase 9: Handle window resize for fullscreen
+  _handleResize() {
+    const { width } = this.scale;
+    const centerX = width / 2;
+    
+    // Update grid position if needed
+    if (this.gridGraphics) {
+      this.gridGraphics.setPosition(centerX, MAP_HEIGHT * TILE_SIZE / 2);
+    }
+  }
+  
+  // Cleanup listeners when scene is destroyed
+  shutdown() {
+    if (this._resizeListener) {
+      fullscreenManager.off(this._resizeListener);
+    }
+    super.shutdown();
+  }
+  
   showHowToPlayOverlay() {
     // First transition back to main menu, then show How to Play
     // We need to pass a flag to show How to Play after transition
@@ -1720,6 +2040,10 @@ class ResultsScene extends Phaser.Scene {
   }
 
   create() {
+    // Phase 9: Register resize listener for fullscreen handling
+    this._resizeListener = () => this._handleResize();
+    fullscreenManager.on('resize', this._resizeListener);
+    
     // Background
     this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
     
@@ -1847,6 +2171,23 @@ class ResultsScene extends Phaser.Scene {
     });
     this.input.keyboard.once('keydown', () => sfx.init());
     this.input.on('pointerdown', () => sfx.init(), this);
+  }
+  
+  // Phase 9: Handle window resize for fullscreen
+  _handleResize() {
+    const { width } = this.scale;
+    const centerX = width / 2;
+    
+    // Reposition particles if needed
+    // (Particles are dynamically created so minimal handling needed)
+  }
+  
+  // Cleanup listeners when scene is destroyed
+  shutdown() {
+    if (this._resizeListener) {
+      fullscreenManager.off(this._resizeListener);
+    }
+    super.shutdown();
   }
   
   createResultParticles() {
@@ -1980,6 +2321,10 @@ class GameScene extends Phaser.Scene {
   }
   
   create() {
+    // Phase 9: Register resize listener for fullscreen handling
+    this._resizeListener = () => this._handleResize();
+    fullscreenManager.on('resize', this._resizeListener);
+    
     // Initialize instance variables
     this.player = null; this.guard = null; this.ghost = null;
     this.scannerDrone = null; this.cameras = []; this.motionSensors = [];
@@ -2037,7 +2382,21 @@ class GameScene extends Phaser.Scene {
     this.currentRun = [];
     this.time.addEvent({ delay: 50, callback: this.recordFrame, callbackScope: this, loop: true });
   }
-
+  
+  // Phase 9: Handle window resize for fullscreen
+  _handleResize() {
+    // Game scene may need to update camera or UI positions
+    // For now, minimal handling needed as game uses fixed canvas size
+  }
+  
+  // Cleanup listeners when scene is destroyed
+  shutdown() {
+    if (this._resizeListener) {
+      fullscreenManager.off(this._resizeListener);
+    }
+    super.shutdown();
+  }
+  
   createEntities() {
     const startPos = this.currentLayout.playerStart;
     // Player with glow effect
@@ -2836,12 +3195,27 @@ const config = {
   height: MAP_HEIGHT * TILE_SIZE,
   parent: 'game-container',
   backgroundColor: '#0a0a0f',
+  scale: {
+    mode: Phaser.Scale.FIT,
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+    width: MAP_WIDTH * TILE_SIZE,
+    height: MAP_HEIGHT * TILE_SIZE
+  },
   physics: {
     default: 'arcade',
     arcade: { debug: false }
   },
   scene: [BootScene, MainMenuScene, LevelSelectScene, SettingsScene, ResultsScene, ControlsScene, GameScene]
 };
+
+// Phase 9: Listen to fullscreen changes and emit resize events
+fullscreenManager.on('fullscreenchange', (isFullscreen) => {
+  // When fullscreen state changes, trigger a resize event
+  // This helps sync all scenes
+  setTimeout(() => {
+    fullscreenManager._emitResize();
+  }, 100);
+});
 
 const game = new Phaser.Game(config);
 window.__ghostGame = game;

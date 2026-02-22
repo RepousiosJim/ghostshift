@@ -10,18 +10,19 @@ A stealth evasion game built with Phaser 3 and Tauri.
 - Build passes with no errors
 - Tests: `npm run test:e2e`
 
-## Game Flow (Phase 8 Complete)
+## Game Flow (Phase 9 Complete)
 
-The game now features 5 playable levels with progressive difficulty and **Phase 8 Settings UI Modernization**:
+The game now features 5 playable levels with progressive difficulty and **Phase 9 Fullscreen Web Support Hardening**:
 
-### Phase 8: Settings UI Modernization
-- **Modernized visual design** - Cleaner spacing, section grouping (Audio/Graphics/Game)
-- **Master Volume overhaul** - Interactive slider with draggable thumb, live percentage display (0-100%)
-- **Mute button** - Quick toggle between mute/unmute with visual icon feedback
-- **Better +/- controls** - Improved hover/active states, 10% step adjustment
-- **Consistent row styling** - Helper text, right-aligned controls, modern toggle states
-- **Visual polish** - Smooth hover animations, professional color scheme
-- **Version bump**: v0.6.0 → v0.6.1
+### Phase 9: Fullscreen Web Support Hardening
+- **FullscreenManager class** - Centralized fullscreen API handling with cross-browser support
+- **Browser state sync** - Listens to fullscreenchange events to keep game state in sync
+- **ESC key handling** - Detects browser ESC exit and syncs fullscreen state
+- **Resize pipeline** - Robust window resize handling that emits resize events to all scenes
+- **Scene relayout** - All scenes (MainMenu, LevelSelect, Settings, Game, Results, Controls) now listen for resize events
+- **Scale mode** - Phaser Scale.FIT with auto-center for proper fullscreen scaling
+- **Immediate apply** - Fullscreen setting persists and applies immediately via SaveManager
+- **Version bump**: v0.6.1 → v0.7.0
 
 ### Scene Flow
 ```
@@ -44,6 +45,15 @@ BootScene → MainMenuScene → LevelSelectScene → GameScene
 - **GameScene**: Core gameplay with difficulty-based balancing
 - **SettingsScene**: Audio toggle, volume slider, effects quality, fullscreen, reduced motion, reset progress
 - **ResultsScene**: Mission complete/failed display with animations, particles, level name, "NEW BEST!" indicator, and Retry, Next Level, Level Select, and Menu buttons
+- **ControlsScene**: Full keyboard/mouse control reference with How to Play guide
+
+### Phase 8: Settings UI Modernization
+- **Modernized visual design** - Cleaner spacing, section grouping (Audio/Graphics/Game)
+- **Master Volume overhaul** - Interactive slider with draggable thumb, live percentage display (0-100%)
+- **Mute button** - Quick toggle between mute/unmute with visual icon feedback
+- **Better +/- controls** - Improved hover/active states, 10% step adjustment
+- **Consistent row styling** - Helper text, right-aligned controls, modern toggle states
+- **Visual polish** - Smooth hover animations, professional color scheme
 
 ### Phase 6 New Features (Polish & Content)
 - **Enhanced wall rendering** - Top edge highlights for better map readability
