@@ -3489,10 +3489,10 @@ class VictoryScene extends Phaser.Scene {
     this._resizeListener = () => this._handleResize();
     fullscreenManager.on('resize', this._resizeListener);
     
-    // Background
-    this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
+    // Premium background using BackgroundComposer (victory variant)
+    this.backgroundComposer = new BackgroundComposer(this, { variant: 'victory' });
     
-    // Celebration particles - gold/rainbow colors
+    // Celebration particles - gold/rainbow colors (additional to background particles)
     this.createVictoryParticles();
     
     // Main title - dramatic game complete
@@ -3638,6 +3638,11 @@ class VictoryScene extends Phaser.Scene {
   
   // Cleanup on shutdown
   shutdown() {
+    // Clean up BackgroundComposer
+    if (this.backgroundComposer) {
+      this.backgroundComposer.destroy();
+      this.backgroundComposer = null;
+    }
     if (this._particleTimer) {
       this._particleTimer.remove();
       this._particleTimer = null;
@@ -3861,6 +3866,11 @@ class GameScene extends Phaser.Scene {
   
   // Cleanup listeners when scene is destroyed
   shutdown() {
+    // Clean up HUD backdrop accents
+    if (this._hudAccents) {
+      this._hudAccents.destroy();
+      this._hudAccents = null;
+    }
     // Clean up frame recording timer
     if (this._frameTimer) {
       this._frameTimer.remove();
@@ -4139,6 +4149,9 @@ class GameScene extends Phaser.Scene {
   }
 
   createUI() {
+    // Lightweight HUD backdrop accents - subtle cyber-heist tech frame
+    this._createHUDBackdropAccents();
+    
     this.timerText = this.add.text(10, 10, '00:00.00', { fontSize: '20px', fill: '#00ffaa', fontFamily: 'Courier New' });
     this.creditsText = this.add.text(10, 35, 'Credits: ' + saveManager.data.credits, { fontSize: '12px', fill: '#ffaa00', fontFamily: 'Courier New' });
     this.runText = this.add.text(10, 55, 'Run: ' + this.runCount, { fontSize: '12px', fill: '#888888', fontFamily: 'Courier New' });
@@ -4170,6 +4183,36 @@ class GameScene extends Phaser.Scene {
       this.alarmText = null;
     }
     this.add.text(10, MAP_HEIGHT * TILE_SIZE - 25, 'ARROWS/WASD: Move | R: Restart | ESC: Pause', { fontSize: '10px', fill: '#444455', fontFamily: 'Courier New' });
+  }
+  
+  // Lightweight HUD backdrop accents - creates subtle tech frame around HUD
+  _createHUDBackdropAccents() {
+    // Corner bracket at top-left of HUD area
+    const hudCorner = this.add.graphics();
+    const cornerSize = 15;
+    const cornerX = 5;
+    const cornerY = 5;
+    
+    // Top-left corner bracket
+    hudCorner.lineStyle(2, 0x334455, 0.4);
+    hudCorner.lineBetween(cornerX, cornerY, cornerX + cornerSize, cornerY);
+    hudCorner.lineBetween(cornerX, cornerY, cornerX, cornerY + cornerSize);
+    
+    // Bottom edge of HUD panel (subtle line)
+    hudCorner.lineStyle(1, 0x223344, 0.25);
+    hudCorner.lineBetween(cornerX, cornerY + 155, cornerX + 180, cornerY + 155);
+    
+    // Top-right corner bracket for difficulty display
+    hudCorner.lineStyle(2, 0x334455, 0.3);
+    hudCorner.lineBetween(MAP_WIDTH * TILE_SIZE - 5, 5, MAP_WIDTH * TILE_SIZE - 5 - cornerSize, 5);
+    hudCorner.lineBetween(MAP_WIDTH * TILE_SIZE - 5, 5, MAP_WIDTH * TILE_SIZE - 5, 5 + cornerSize);
+    
+    // Bottom control hints bar accent
+    hudCorner.lineStyle(1, 0x223344, 0.2);
+    hudCorner.lineBetween(5, MAP_HEIGHT * TILE_SIZE - 30, MAP_WIDTH * TILE_SIZE - 5, MAP_HEIGHT * TILE_SIZE - 30);
+    
+    // Store for cleanup
+    this._hudAccents = hudCorner;
   }
 
   // Phase 11: Level start briefing for onboarding - shows contextual tips

@@ -103,6 +103,12 @@ export class BackgroundComposer {
       case 'controls':
         this._createControlsVariant();
         break;
+      case 'results':
+        this._createResultsVariant();
+        break;
+      case 'victory':
+        this._createVictoryVariant();
+        break;
       default:
         this._createStandardVariant();
     }
@@ -345,8 +351,10 @@ export class BackgroundComposer {
   _updateLightAccents() {
     this.lightAccents.forEach(accent => {
       accent.phase += 0.003;
-      const alpha = 0.018 + Math.sin(accent.phase * 0.4) * 0.012;
-      accent.graphics.setAlpha(Math.max(0.008, Math.min(0.035, alpha)));
+      // Golden accents pulse differently
+      const baseAlpha = accent.isGolden ? 0.025 : 0.018;
+      const alpha = baseAlpha + Math.sin(accent.phase * 0.4) * 0.015;
+      accent.graphics.setAlpha(Math.max(0.008, Math.min(0.045, alpha)));
     });
   }
   
@@ -477,6 +485,204 @@ export class BackgroundComposer {
     
     // Subtle accents
     this._createSubtleAccents();
+  }
+  
+  _createResultsVariant() {
+    // Results variant - Dynamic, success/failure themed
+    this._createBaseLayers();
+    
+    // Grid - tactical but minimal
+    this._createTacticalGrid();
+    
+    // Result-specific decorations
+    this._createResultDecorations();
+    
+    // Particles that respond to success/failure (color set in scene)
+    this._createResultParticles();
+    
+    // Light accents
+    this._createLightAccents();
+  }
+  
+  _createVictoryVariant() {
+    // Victory variant - Celebratory, grand, golden
+    this._createBaseLayers();
+    
+    // Enhanced grid with celebratory feel
+    this._createTacticalGrid();
+    
+    // Victory decorations - golden rays, celebration elements
+    this._createVictoryDecorations();
+    
+    // More particles for celebration
+    this._createVictoryParticles();
+    
+    // Golden light accents
+    this._createGoldenAccents();
+  }
+  
+  // ========== RESULT & VICTORY DECORATIONS ==========
+  
+  _createResultDecorations() {
+    const decor = this.scene.add.graphics();
+    decor.setDepth(LAYER_DEPTHS.DECORATIVE);
+    
+    // Subtle horizontal scan lines (like a terminal readout)
+    decor.lineStyle(1, 0x334455, 0.15);
+    for (let y = this.height * 0.3; y < this.height * 0.7; y += 40) {
+      decor.lineBetween(50, y, this.width - 50, y);
+    }
+    
+    // Corner accents
+    const cornerSize = 30;
+    const cornerColor = 0x4488aa;
+    
+    // Top-left
+    decor.lineStyle(2, cornerColor, 0.3);
+    decor.lineBetween(20, 20, 20 + cornerSize, 20);
+    decor.lineBetween(20, 20, 20, 20 + cornerSize);
+    
+    // Top-right
+    decor.lineBetween(this.width - 20, 20, this.width - 20 - cornerSize, 20);
+    decor.lineBetween(this.width - 20, 20, this.width - 20, 20 + cornerSize);
+    
+    // Bottom-left
+    decor.lineBetween(20, this.height - 20, 20 + cornerSize, this.height - 20);
+    decor.lineBetween(20, this.height - 20, 20, this.height - 20 - cornerSize);
+    
+    // Bottom-right
+    decor.lineBetween(this.width - 20, this.height - 20, this.width - 20 - cornerSize, this.height - 20);
+    decor.lineBetween(this.width - 20, this.height - 20, this.width - 20, this.height - 20 - cornerSize);
+    
+    this.cachedLayers.set('resultDecor', decor);
+  }
+  
+  _createResultParticles() {
+    // Fewer, more subtle particles for results
+    const count = this.qualitySettings.particleCount * 0.5;
+    const colors = [0x4488ff, 0x44ffaa, 0xffaa00];
+    
+    for (let i = 0; i < count; i++) {
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      const particle = this.scene.add.circle(
+        Math.random() * this.width,
+        Math.random() * this.height,
+        1 + Math.random() * 2,
+        color,
+        0.08 + Math.random() * 0.1
+      );
+      particle.setDepth(LAYER_DEPTHS.PARTICLES);
+      particle.speedX = (Math.random() - 0.5) * 0.3;
+      particle.speedY = (Math.random() - 0.5) * 0.3;
+      this.particles.push(particle);
+    }
+  }
+  
+  _createVictoryDecorations() {
+    const decor = this.scene.add.graphics();
+    decor.setDepth(LAYER_DEPTHS.DECORATIVE);
+    
+    // Golden radial lines from center-top (celebratory rays)
+    const centerX = this.width / 2;
+    const rayCount = 12;
+    const rayLength = Math.min(this.width, this.height) * 0.4;
+    
+    decor.lineStyle(2, 0xffd700, 0.08);
+    for (let i = 0; i < rayCount; i++) {
+      const angle = (Math.PI * 2 * i) / rayCount - Math.PI / 2;
+      const startY = this.height * 0.15;
+      decor.lineBetween(
+        centerX,
+        startY,
+        centerX + Math.cos(angle) * rayLength,
+        startY + Math.sin(angle) * rayLength
+      );
+    }
+    
+    // Horizontal celebration lines
+    decor.lineStyle(1, 0xffd700, 0.1);
+    for (let y = this.height * 0.2; y < this.height * 0.8; y += 60) {
+      const startX = 80 + Math.random() * 40;
+      const endX = this.width - 80 - Math.random() * 40;
+      decor.lineBetween(startX, y, endX, y);
+    }
+    
+    // Corner brackets - golden
+    const cornerSize = 40;
+    const cornerColor = 0xffd700;
+    
+    decor.lineStyle(2, cornerColor, 0.25);
+    // Top-left
+    decor.lineBetween(20, 20, 20 + cornerSize, 20);
+    decor.lineBetween(20, 20, 20, 20 + cornerSize);
+    // Top-right
+    decor.lineBetween(this.width - 20, 20, this.width - 20 - cornerSize, 20);
+    decor.lineBetween(this.width - 20, 20, this.width - 20, 20 + cornerSize);
+    // Bottom-left
+    decor.lineBetween(20, this.height - 20, 20 + cornerSize, this.height - 20);
+    decor.lineBetween(20, this.height - 20, 20, this.height - 20 - cornerSize);
+    // Bottom-right
+    decor.lineBetween(this.width - 20, this.height - 20, this.width - 20 - cornerSize, this.height - 20);
+    decor.lineBetween(this.width - 20, this.height - 20, this.width - 20, this.height - 20 - cornerSize);
+    
+    this.cachedLayers.set('victoryDecor', decor);
+  }
+  
+  _createVictoryParticles() {
+    // More particles for victory celebration
+    const count = this.qualitySettings.particleCount * 1.5;
+    const colors = [0xffd700, 0xffaa00, 0x00ff88, 0x44ffaa, 0x88ffcc, 0xff66aa];
+    
+    for (let i = 0; i < count; i++) {
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      const particle = this.scene.add.circle(
+        Math.random() * this.width,
+        Math.random() * this.height,
+        1.5 + Math.random() * 2.5,
+        color,
+        0.12 + Math.random() * 0.15
+      );
+      particle.setDepth(LAYER_DEPTHS.PARTICLES);
+      particle.speedX = (Math.random() - 0.5) * 0.4;
+      particle.speedY = (Math.random() - 0.5) * 0.4 - 0.2; // Slight upward drift
+      this.particles.push(particle);
+    }
+  }
+  
+  _createGoldenAccents() {
+    // Golden light beams from corners
+    const accentPositions = [
+      { x: 0.05, y: 0.1, angle: 0.4 },
+      { x: 0.95, y: 0.1, angle: Math.PI - 0.4 },
+      { x: 0.5, y: 0.98, angle: -Math.PI / 2 }
+    ];
+    
+    accentPositions.forEach(pos => {
+      const accent = this.scene.add.graphics();
+      const startX = this.width * pos.x;
+      const startY = this.height * pos.y;
+      
+      // Golden light beam
+      accent.fillStyle(0xffd700, 0.02);
+      accent.fillTriangle(
+        startX, startY,
+        startX + Math.cos(pos.angle - 0.15) * 350,
+        startY + Math.sin(pos.angle - 0.15) * 350,
+        startX + Math.cos(pos.angle + 0.15) * 350,
+        startY + Math.sin(pos.angle + 0.15) * 350
+      );
+      
+      accent.setDepth(LAYER_DEPTHS.LIGHT_ACCENTS);
+      
+      this.lightAccents.push({
+        graphics: accent,
+        baseX: startX,
+        baseY: startY,
+        angle: pos.angle,
+        phase: Math.random() * Math.PI * 2,
+        isGolden: true
+      });
+    });
   }
   
   // ========== ENHANCED GRID SYSTEMS ==========
