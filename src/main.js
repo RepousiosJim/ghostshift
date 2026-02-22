@@ -2,6 +2,48 @@
 // This allows the smaller game.js to load first, then Phaser lazy-loads
 const Phaser = (await import('phaser')).default;
 
+// ==================== DEBUG LIFECYCLE TRACKING ====================
+// Low-noise debug counters for scene lifecycle - set DEBUG_LIFECYCLE=true to enable
+const DEBUG_LIFECYCLE = typeof window !== 'undefined' && window.DEBUG_LIFECYCLE === true;
+const _lifecycleCounters = {
+  sceneCreates: 0,
+  sceneShutdowns: 0,
+  timersCreated: 0,
+  timersCleaned: 0,
+  transitions: 0
+};
+
+function _debugLifecycle(event, data) {
+  if (!DEBUG_LIFECYCLE) return;
+  switch(event) {
+    case 'scene:create':
+      _lifecycleCounters.sceneCreates++;
+      console.log(`[Lifecycle] Scene created: ${data}, total: ${_lifecycleCounters.sceneCreates}`);
+      break;
+    case 'scene:shutdown':
+      _lifecycleCounters.sceneShutdowns++;
+      console.log(`[Lifecycle] Scene shutdown: ${data}, total: ${_lifecycleCounters.sceneShutdowns}`);
+      break;
+    case 'timer:created':
+      _lifecycleCounters.timersCreated++;
+      break;
+    case 'timer:cleaned':
+      _lifecycleCounters.timersCleaned++;
+      break;
+    case 'transition':
+      _lifecycleCounters.transitions++;
+      console.log(`[Lifecycle] Transition: ${data.from} -> ${data.to}`);
+      break;
+    case 'summary':
+      console.log('[Lifecycle] Summary:', _lifecycleCounters);
+      break;
+  }
+}
+
+// Expose for external access
+window._lifecycleCounters = _lifecycleCounters;
+window._debugLifecycle = _debugLifecycle;
+
 // ==================== OPTIMIZED RENDER SYSTEM ====================
 // Render caching system to reduce per-frame graphics redraws
 class RenderCache {
@@ -1688,11 +1730,12 @@ class LevelSelectScene extends Phaser.Scene {
     // Background
     this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
     
-    // Animated grid
+    // OPTIMIZATION: Static grid with slower animation (100ms instead of 50ms)
+    // Menu grids don't need high frame rate animation
     this.gridGraphics = this.add.graphics();
     this.gridOffset = 0;
     this._gridTimer = this.time.addEvent({
-      delay: 50,
+      delay: 100,  // Reduced from 50ms - half the draw calls
       callback: () => {
         this.gridOffset = (this.gridOffset + 0.3) % 32;
         this.drawGrid();
@@ -1830,11 +1873,11 @@ class SettingsScene extends Phaser.Scene {
     // Background
     this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
     
-    // Animated grid - store timer for cleanup
+    // OPTIMIZATION: Static grid with slower animation (100ms instead of 50ms)
     this.gridGraphics = this.add.graphics();
     this.gridOffset = 0;
     this._gridTimer = this.time.addEvent({
-      delay: 50,
+      delay: 100,  // Reduced from 50ms - half the draw calls
       callback: () => {
         this.gridOffset = (this.gridOffset + 0.3) % 32;
         this.drawGrid();
@@ -2178,11 +2221,11 @@ class ControlsScene extends Phaser.Scene {
     // Background
     this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
     
-    // Animated grid - store timer for cleanup
+    // OPTIMIZATION: Static grid with slower animation (100ms instead of 50ms)
     this.gridGraphics = this.add.graphics();
     this.gridOffset = 0;
     this._gridTimer = this.time.addEvent({
-      delay: 50,
+      delay: 100,  // Reduced from 50ms - half the draw calls
       callback: () => {
         this.gridOffset = (this.gridOffset + 0.3) % 32;
         this.drawGrid();
@@ -3437,12 +3480,21 @@ class GameScene extends Phaser.Scene {
       });
     }
     
+    // OPTIMIZATION: Only redraw sensor graphics every 2nd frame
+    // Reduces draw calls by 50% while maintaining visual quality
+    this._sensorFrameCount = (this._sensorFrameCount || 0) + 1;
+    const shouldRedraw = this._sensorFrameCount % 2 === 0;
+    
     this.motionSensors.forEach(sensor => {
+      // Don't redraw graphics every frame - skip frames for performance
+      if (!shouldRedraw && !sensor.cooldown) return;
+      
       sensor.graphics.clear();
       // Don't redraw if player is far away (skip off-screen optimization)
       const dx = this.player.x - sensor.x;
       const dy = this.player.y - sensor.y;
-      if (dx * dx + dy * dy > 200 * 200) return; // Skip if > 200px away
+      // OPTIMIZATION: Increased culling distance - skip if > 300px away
+      if (dx * dx + dy * dy > 300 * 300) return; 
       
       const active = sensor.cooldown > 0;
       sensor.graphics.fillStyle(0xff0066, active ? 0.5 : 0.2);
