@@ -1073,40 +1073,38 @@ class SceneTransitionManager {
   async transition(targetSceneKey, data = null, duration = 200) {
     if (this.isTransitioning) return;
     this.isTransitioning = true;
-    
+
+    attachSceneGuard(this.scene, this.scene.scene?.key || 'SceneTransition');
+
     const { width, height } = this.scene.scale;
     const cx = width / 2;
     const cy = height / 2;
-    
+
     // Create fade overlay
     const overlay = this.scene.add.rectangle(cx, cy, width, height, 0x000000);
     overlay.setDepth(999);
     overlay.setAlpha(0);
-    
+
     // Fade in
     await new Promise(resolve => {
-      this.scene.tweens.add({
+      safeTween(this.scene, {
         targets: overlay,
         alpha: 1,
         duration: duration / 2,
         ease: 'Quad.easeIn',
         onComplete: resolve
-      });
+      }, 'transition:fade-in', { to: targetSceneKey });
     });
-    
+
     // Start new scene
-    if (data) {
-      this.scene.scene.start(targetSceneKey, data);
-    } else {
-      this.scene.scene.start(targetSceneKey);
-    }
-    
+    safeSceneStart(this.scene, targetSceneKey, data, { via: 'SceneTransitionManager' });
+
     // Small delay to let scene initialize
-    await new Promise(resolve => this.scene.time.delayedCall(50, resolve));
-    
+    await new Promise(resolve => safeDelayedCall(this.scene, 50, 'transition:post-start', resolve, { to: targetSceneKey }));
+
     // Fade out
     await new Promise(resolve => {
-      this.scene.tweens.add({
+      safeTween(this.scene, {
         targets: overlay,
         alpha: 0,
         duration: duration / 2,
@@ -1116,7 +1114,7 @@ class SceneTransitionManager {
           this.isTransitioning = false;
           resolve();
         }
-      });
+      }, 'transition:fade-out', { to: targetSceneKey });
     });
   }
 }
@@ -1310,6 +1308,11 @@ function getValidLevelIndex(requestedIndex, { fallbackIndex = 0, allowRandom = f
 }
 
 function prepareLevelStart(scene, data, source) {
+  setRuntimePhase('level:prepare', {
+    sceneKey: scene?.scene?.key,
+    levelIndex: data?.levelIndex ?? null,
+    transition: { from: scene?.scene?.key, to: 'GameScene' }
+  });
   const levelIndex = getValidLevelIndex(data?.levelIndex, {
     fallbackIndex: 0,
     allowRandom: false,
@@ -1989,41 +1992,47 @@ class LevelSelectScene extends Phaser.Scene {
   create() {
     attachSceneGuard(this, 'LevelSelectScene');
     setRuntimePhase('level-select:create', { sceneKey: this.scene.key });
+    
     // Register resize listener
     this._resizeListener = () => this._handleResize();
     fullscreenManager.on('resize', this._resizeListener);
     
-    // Background
-    this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
+    // ========== MODERN CYBER-HEIST THEME BACKGROUND ==========
+    this.createCyberBackground();
     
-    // OPTIMIZATION: Static grid with slower animation (100ms instead of 50ms)
-    // Menu grids don't need high frame rate animation
-    this.gridGraphics = this.add.graphics();
-    this.gridOffset = 0;
-    this._gridTimer = this.time.addEvent({
-      delay: 100,  // Reduced from 50ms - half the draw calls
-      callback: () => {
-        this.gridOffset = (this.gridOffset + 0.3) % 32;
-        this.drawGrid();
-      },
-      loop: true
-    });
-    
+    // Title
     this.add.text(MAP_WIDTH * TILE_SIZE / 2, 30, 'SELECT LEVEL', { fontSize: '28px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
     
+    // Back button
     const backBtn = this.add.text(20, 15, '< BACK', { fontSize: '14px', fill: '#888888', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
     backBtn.on('pointerover', () => backBtn.setFill('#ffffff'));
     backBtn.on('pointerout', () => backBtn.setFill('#888888'));
     backBtn.on('pointerdown', () => this.transitionTo('MainMenuScene'));
     
+    // ========== LEVEL CARDS WITH IMPROVED CONTRAST ==========
     const startY = 80, spacingY = 70;
     LEVEL_LAYOUTS.forEach((level, index) => {
       const isUnlocked = saveManager.isLevelUnlocked(index);
       const bestTime = saveManager.getBestTime(index);
       const y = startY + index * spacingY;
-      const cardBg = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, y, 400, 55, isUnlocked ? 0x1a2a3a : 0x1a1a1a);
-      cardBg.setStrokeStyle(2, isUnlocked ? 0x4488ff : 0x333333);
+      
+      // Enhanced card background - stronger contrast for readability
+      const cardBg = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, y, 400, 55, isUnlocked ? 0x1a2a3a : 0x0e0e16);
+      cardBg.setStrokeStyle(2, isUnlocked ? 0x4488ff : 0x282835);
       cardBg.setInteractive({ useHandCursor: isUnlocked });
+      
+      // Card glow effect for unlocked levels - adds premium feel
+      if (isUnlocked) {
+        const cardGlow = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, y, 404, 59, 0x4488ff, 0.06);
+        this.tweens.add({
+          targets: cardGlow,
+          alpha: 0.12,
+          duration: 1500,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut'
+        });
+      }
       
       // Level number with glow
       const levelNum = this.add.text(MAP_WIDTH * TILE_SIZE / 2 - 160, y, String(index + 1), { fontSize: '20px', fill: isUnlocked ? '#4488ff' : '#444444', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
@@ -2068,27 +2077,145 @@ class LevelSelectScene extends Phaser.Scene {
     this.input.on('pointerdown', () => sfx.init(), this);
   }
   
+  // ========== CYBER BACKGROUND RENDERING ==========
+  createCyberBackground() {
+    const w = MAP_WIDTH * TILE_SIZE;
+    const h = MAP_HEIGHT * TILE_SIZE;
+    
+    // 1. Deep gradient background - subtle vertical depth
+    const bgGradient = this.add.graphics();
+    // Top slightly lighter, bottom slightly darker for depth
+    bgGradient.fillGradientStyle(0x0c0c16, 0x0c0c16, 0x080810, 0x080810, 1);
+    bgGradient.fillRect(0, 0, w, h);
+    bgGradient.setDepth(-10);
+    
+    // 2. Ambient scanlines - retro CRT feel (static, performance-friendly)
+    const scanlines = this.add.graphics();
+    scanlines.lineStyle(1, 0x000000, 0.06);
+    for (let y = 0; y < h; y += 2) {
+      scanlines.lineBetween(0, y, w, y);
+    }
+    scanlines.setDepth(-9);
+    
+    // 3. Animated cyber grid - optimized timing
+    this.gridGraphics = this.add.graphics();
+    this.gridOffset = 0;
+    this._gridTimer = this.time.addEvent({
+      delay: 100,
+      callback: () => {
+        this.gridOffset = (this.gridOffset + 0.3) % 32;
+        this.drawCyberGrid();
+      },
+      loop: true
+    });
+    
+    // 4. Floating light accents (subtle, not noisy)
+    this.createLightAccents();
+    
+    // 5. Corner vignette for depth
+    const vignette = this.add.graphics();
+    vignette.fillStyle(0x000000, 0);
+    vignette.fillRect(0, 0, w, 60);
+    vignette.fillRect(0, h - 60, w, 60);
+    vignette.fillRect(0, 0, 60, h);
+    vignette.fillRect(w - 60, 0, 60, h);
+    vignette.setDepth(-5);
+  }
+  
+  createLightAccents() {
+    // Subtle floating light beams - performance optimized
+    this.lightAccents = [];
+    
+    // Create accent lines that drift slowly
+    const accentPositions = [
+      { x: 0.12, y: 0.15, angle: -0.25 },
+      { x: 0.88, y: 0.75, angle: 0.2 },
+      { x: 0.5, y: 0.92, angle: -0.12 }
+    ];
+    
+    accentPositions.forEach(pos => {
+      const accent = this.add.graphics();
+      const startX = MAP_WIDTH * TILE_SIZE * pos.x;
+      const startY = MAP_HEIGHT * TILE_SIZE * pos.y;
+      
+      // Draw subtle light beam
+      accent.fillStyle(0x3366cc, 0.025);
+      accent.fillTriangle(
+        startX, startY,
+        startX + Math.cos(pos.angle - 0.08) * 250,
+        startY + Math.sin(pos.angle - 0.08) * 250,
+        startX + Math.cos(pos.angle + 0.08) * 250,
+        startY + Math.sin(pos.angle + 0.08) * 250
+      );
+      accent.setDepth(-6);
+      
+      this.lightAccents.push({
+        graphics: accent,
+        baseX: startX,
+        baseY: startY,
+        angle: pos.angle,
+        phase: Math.random() * Math.PI * 2
+      });
+    });
+    
+    // Animate light accents - slower for performance
+    this._lightTimer = this.time.addEvent({
+      delay: 50,
+      callback: () => {
+        this.lightAccents.forEach(accent => {
+          accent.phase += 0.003;
+          // Subtle alpha pulse
+          const alpha = 0.018 + Math.sin(accent.phase * 0.4) * 0.012;
+          accent.graphics.setAlpha(Math.max(0.008, Math.min(0.035, alpha)));
+        });
+      },
+      loop: true
+    });
+  }
+  
+  drawCyberGrid() {
+    if (!this.gridGraphics) return;
+    this.gridGraphics.clear();
+    
+    // Main grid lines - cyber blue with low opacity
+    this.gridGraphics.lineStyle(1, 0x1a2a3a, 0.35);
+    
+    const tileSize = 32;
+    const offsetX = this.gridOffset;
+    const offsetY = this.gridOffset * 0.5;
+    
+    // Vertical lines with subtle offset animation
+    for (let x = 0; x <= MAP_WIDTH + 1; x++) {
+      const drawX = x * tileSize - (offsetX % tileSize);
+      this.gridGraphics.lineBetween(drawX, 0, drawX, MAP_HEIGHT * TILE_SIZE);
+    }
+    
+    // Horizontal lines with slower offset
+    for (let y = 0; y <= MAP_HEIGHT + 1; y++) {
+      const drawY = y * tileSize - (offsetY % tileSize);
+      this.gridGraphics.lineBetween(0, drawY, MAP_WIDTH * TILE_SIZE, drawY);
+    }
+    
+    // Accent grid lines - brighter, every 4th for performance
+    this.gridGraphics.lineStyle(1, 0x2a4060, 0.12);
+    for (let x = 0; x <= MAP_WIDTH; x += 4) {
+      const drawX = x * tileSize - (offsetX % tileSize);
+      this.gridGraphics.lineBetween(drawX, 0, drawX, MAP_HEIGHT * TILE_SIZE);
+    }
+    for (let y = 0; y <= MAP_HEIGHT; y += 4) {
+      const drawY = y * tileSize - (offsetY % tileSize);
+      this.gridGraphics.lineBetween(0, drawY, MAP_WIDTH * TILE_SIZE, drawY);
+    }
+  }
+  
   transitionTo(sceneKey, data = null) {
     runSceneTransition(this, sceneKey, data);
   }
   
   formatTime(ms) { if (!ms) return '--:--'; const minutes = Math.floor(ms / 60000); const seconds = Math.floor((ms % 60000) / 1000); const centis = Math.floor((ms % 1000) / 10); return minutes.toString().padStart(2, '0') + ':' + seconds.toString().padStart(2, '0') + '.' + centis.toString().padStart(2, '0'); }
   
-  drawGrid() {
-    if (!this.gridGraphics) return;
-    this.gridGraphics.clear();
-    this.gridGraphics.lineStyle(1, 0x1a1a2a, 0.3);
-    for (let x = 0; x <= MAP_WIDTH; x++) {
-      this.gridGraphics.lineBetween(x * 32, 0, x * 32, MAP_HEIGHT * TILE_SIZE);
-    }
-    for (let y = 0; y <= MAP_HEIGHT; y++) {
-      this.gridGraphics.lineBetween(0, y * 32, MAP_WIDTH * TILE_SIZE, y * 32);
-    }
-  }
-  
   // Phase 9: Handle window resize for fullscreen
   _handleResize() {
-
     const { width } = this.scale;
     const centerX = width / 2;
     
@@ -2104,6 +2231,11 @@ class LevelSelectScene extends Phaser.Scene {
     if (this._gridTimer) {
       this._gridTimer.remove();
       this._gridTimer = null;
+    }
+    // Clean up light accent timer
+    if (this._lightTimer) {
+      this._lightTimer.remove();
+      this._lightTimer = null;
     }
     if (this._resizeListener) {
       fullscreenManager.off(this._resizeListener);
@@ -2813,6 +2945,14 @@ class ResultsScene extends Phaser.Scene {
     if (this._resizeListener) {
       fullscreenManager.off(this._resizeListener);
     }
+    if (this._retryKeyHandler) {
+      this.input.keyboard.off('keydown-R', this._retryKeyHandler);
+      this._retryKeyHandler = null;
+    }
+    if (this._menuKeyHandler) {
+      this.input.keyboard.off('keydown-ESC', this._menuKeyHandler);
+      this._menuKeyHandler = null;
+    }
     super.shutdown();
   }
   
@@ -3296,7 +3436,7 @@ class GameScene extends Phaser.Scene {
     resumeBtn.on('pointerdown', () => this.togglePause());
     const quitBtn = this.add.text(0, 60, 'Main Menu [M]', { fontSize: '12px', fill: '#888888', fontFamily: 'Courier New' }).setOrigin(0.5);
     quitBtn.setInteractive({ useHandCursor: true });
-    quitBtn.on('pointerdown', () => this.scene.start('BootScene'));
+    quitBtn.on('pointerdown', () => safeSceneStart(this, 'BootScene', null, { via: 'pauseMenu' }));
     this.pauseMenu.add([bg, title, audioBtn, resumeBtn, quitBtn]);
   }
 
@@ -3996,7 +4136,12 @@ class GameScene extends Phaser.Scene {
     }
     // Phase 6: Enhanced vignette effect on detection
     if (this.vignette) {
-      this.vignette.setFillStyle(0xff0000, 0.3);
+      this.vignette.clear();
+      this.vignette.fillStyle(0xff0000, 0.3);
+      this.vignette.fillRect(0, 0, MAP_WIDTH * TILE_SIZE, 40);
+      this.vignette.fillRect(0, MAP_HEIGHT * TILE_SIZE - 40, MAP_WIDTH * TILE_SIZE, 40);
+      this.vignette.fillRect(0, 0, 40, MAP_HEIGHT * TILE_SIZE);
+      this.vignette.fillRect(MAP_WIDTH * TILE_SIZE - 40, 0, 40, MAP_HEIGHT * TILE_SIZE);
       this.tweens.add({
         targets: this.vignette,
         alpha: 0.8,
@@ -4015,12 +4160,12 @@ class GameScene extends Phaser.Scene {
     this.detectedSceneEvent = this.time.addEvent({ delay: 1500, callback: () => {
       // Only transition if we're still the same scene instance and not restarted
       if (sceneRef.isDetected && sceneRef.scene.key === sceneKey && !sceneRef._restarted) {
-        sceneRef.scene.start('ResultsScene', { 
+        safeSceneStart(sceneRef, 'ResultsScene', {
           levelIndex: levelIdx,
-          success: false, 
-          time: sceneRef.elapsedTime, 
-          credits: 0 
-        });
+          success: false,
+          time: sceneRef.elapsedTime,
+          credits: 0
+        }, { via: 'detected' });
       }
     }, callbackScope: this });
   }
@@ -4039,12 +4184,12 @@ class GameScene extends Phaser.Scene {
     this.hasWon = true;
     
     // Transition to ResultsScene
-    this.scene.start('ResultsScene', { 
+    safeSceneStart(this, 'ResultsScene', { 
       levelIndex: this.currentLevelIndex,
       success: true, 
       time: this.elapsedTime, 
       credits: creditsEarned 
-    });
+    }, { via: 'winGame' });
   }
 }
 
