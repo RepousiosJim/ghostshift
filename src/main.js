@@ -884,9 +884,9 @@ class MainMenuScene extends Phaser.Scene {
     const panel = this.add.container(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2);
     panel.setDepth(101);
     
-    // Main panel - larger for better readability
-    const panelWidth = 520;
-    const panelHeight = 440;
+    // Main panel - larger for better readability and to avoid content overlap
+    const panelWidth = 560;
+    const panelHeight = 520;
     const bg = this.add.rectangle(0, 0, panelWidth, panelHeight, 0x1a1a2a);
     bg.setStrokeStyle(3, 0x66ccff);
     panel.add(bg);
