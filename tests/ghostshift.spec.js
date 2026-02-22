@@ -49,7 +49,7 @@ test('Fail flow triggers and restart recovers safely', async ({ page }) => {
   // Force fail flow directly via scene API
   const failStatus = await page.evaluate(() => {
     const game = window.__ghostGame
-    const scene = game?.scene?.getScene('MainScene')
+    const scene = game?.scene?.getScene('GameScene')
     if (!scene) return { ok: false }
     scene.detected()
     return { ok: true, isDetected: scene.isDetected }
@@ -63,7 +63,7 @@ test('Fail flow triggers and restart recovers safely', async ({ page }) => {
 
   const recovered = await page.evaluate(() => {
     const game = window.__ghostGame
-    const scene = game?.scene?.getScene('MainScene')
+    const scene = game?.scene?.getScene('GameScene')
     return { isDetected: scene?.isDetected, isRunning: scene?.isRunning }
   })
 
@@ -80,7 +80,7 @@ test('Win flow + upgrade selection applies perk without crashing', async ({ page
 
   const won = await page.evaluate(() => {
     const game = window.__ghostGame
-    const scene = game?.scene?.getScene('MainScene')
+    const scene = game?.scene?.getScene('GameScene')
     if (!scene) return false
     scene.hasDataCore = true
     scene.winGame()
@@ -93,7 +93,7 @@ test('Win flow + upgrade selection applies perk without crashing', async ({ page
 
   const upgradeApplied = await page.evaluate(() => {
     const game = window.__ghostGame
-    const scene = game?.scene?.getScene('MainScene')
+    const scene = game?.scene?.getScene('GameScene')
     return { speed: scene?.applySpeedBoost, running: scene?.isRunning }
   })
 

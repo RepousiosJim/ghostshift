@@ -2,6 +2,14 @@
 
 A stealth evasion game built with Phaser 3 and Tauri.
 
+## Console-Zero Verification (2026-02-22)
+
+✅ **Verified: Zero console errors/warnings in runtime**
+- Playwright E2E tests pass with no console errors
+- Full game flow tested: boot → play → detection → restart → win
+- Build passes with no errors
+- Tests: `npm run test:e2e`
+
 ## Game Flow (Phase 5 Complete)
 
 The game now features 5 playable levels with progressive difficulty and hardened save system:
