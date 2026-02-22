@@ -1820,10 +1820,10 @@ class MainMenuScene extends Phaser.Scene {
       { title: 'DEVELOPMENT', items: [
         { label: 'Lead Developer', value: 'GhostShift Team' },
         { label: 'Game Engine', value: 'Phaser 3' },
-        { label: 'Version', value: '0.6.1 (Phase 9)' }
+        { label: 'Version', value: '0.7.0 (Phase 11)' }
       ]},
       { title: 'GAME FEATURES', items: [
-        { label: 'Total Levels', value: '5 Unique Maps' },
+        { label: 'Total Levels', value: '6 Unique Maps' },
         { label: 'Save System', value: 'Hardened v5' },
         { label: 'Perk System', value: 'Speed, Stealth, Luck' }
       ]},
@@ -2504,7 +2504,7 @@ class SettingsScene extends Phaser.Scene {
     });
     
     // Version info
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE - 30, 'GhostShift v0.6.1 - Phase 9', { fontSize: '12px', fill: '#444455', fontFamily: 'Courier New' }).setOrigin(0.5);
+    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE - 30, 'GhostShift v0.7.0 - Phase 11', { fontSize: '12px', fill: '#444455', fontFamily: 'Courier New' }).setOrigin(0.5);
     
     // Initialize audio on first interaction
     this.input.keyboard.once('keydown', () => sfx.init());
@@ -3088,7 +3088,7 @@ class VictoryScene extends Phaser.Scene {
     });
     
     // Subtitle
-    const subtitle = this.add.text(MAP_WIDTH * TILE_SIZE / 2, 90, 'You have conquered all 5 levels!', { fontSize: '14px', fill: '#88aacc', fontFamily: 'Courier New' }).setOrigin(0.5);
+    const subtitle = this.add.text(MAP_WIDTH * TILE_SIZE / 2, 90, 'You have conquered all 6 levels!', { fontSize: '14px', fill: '#88aacc', fontFamily: 'Courier New' }).setOrigin(0.5);
     subtitle.setAlpha(0);
     this.tweens.add({
       targets: subtitle,
@@ -3352,6 +3352,7 @@ class GameScene extends Phaser.Scene {
     this.statusText = null; this.creditsText = null; this.perksText = null;
     this.elapsedTime = 0; this.isRunning = false; this.isPaused = false;
     this.isDetected = false; this.hasDataCore = false; this.hasKeyCard = false; this.isHacking = false; this.hackProgress = 0;
+    this.hackStage = 0; // 0=not started, 1=primary hacked, 2=relay hacked (if relay exists)
     this.currentRun = []; this.previousRun = null; this.ghostFrame = 0;
     this.guardPatrolPoints = []; this.currentPatrolIndex = 0; this.guardAngle = 0;
     this.visionGraphics = null; this.walls = null;
@@ -3398,6 +3399,8 @@ class GameScene extends Phaser.Scene {
     this.createEntities();
     this.createUI();
     this.createPauseMenu();
+    // Phase 11: Add level start briefing for onboarding - shows tips for first-time players
+    this.showLevelStartBriefing();
     // Vignette effect for atmosphere (using a large soft-edged circle approach via gradient simulation)
     this.vignette = this.add.graphics();
     const vignetteSize = Math.max(MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE) * 0.8;
@@ -3500,6 +3503,19 @@ class GameScene extends Phaser.Scene {
     this.physics.add.existing(this.hackTerminal, true);
     this.hackTerminalArea = this.add.zone(htPos.x * TILE_SIZE, htPos.y * TILE_SIZE, TILE_SIZE * 2, TILE_SIZE * 2);
 
+    // Phase 11: Relay Terminal (optional second hack point)
+    this.relayTerminal = null;
+    this.relayTerminalArea = null;
+    this.hasRelayTerminal = !!this.currentLayout.relayTerminal;
+    if (this.currentLayout.relayTerminal) {
+      const rtPos = this.currentLayout.relayTerminal;
+      this.relayTerminal = this.add.rectangle(rtPos.x * TILE_SIZE, rtPos.y * TILE_SIZE, TILE_SIZE, TILE_SIZE, 0x00cc66);
+      this.relayTerminal.setStrokeStyle(2, 0x66ffaa);
+      this.physics.add.existing(this.relayTerminal, true);
+      this.tweens.add({ targets: this.relayTerminal, alpha: 0.5, duration: 400, yoyo: true, repeat: -1 });
+      this.relayTerminalArea = this.add.zone(rtPos.x * TILE_SIZE, rtPos.y * TILE_SIZE, TILE_SIZE * 2, TILE_SIZE * 2);
+    }
+
     // New objectives: Security Code and Power Cell
     this.hasSecurityCode = false;
     this.hasPowerCell = false;
@@ -3545,6 +3561,9 @@ class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.dataCore, this.collectDataCore, null, this);
     this.physics.add.overlap(this.player, this.keyCard, this.collectKeyCard, null, this);
     this.physics.add.overlap(this.player, this.hackTerminalArea, this.startHack, null, this);
+    if (this.relayTerminalArea) {
+      this.physics.add.overlap(this.player, this.relayTerminalArea, this.startRelayHack, null, this);
+    }
     this.physics.add.overlap(this.player, this.exitZone, this.reachExit, null, this);
     if (this.securityCode) this.physics.add.overlap(this.player, this.securityCode, this.collectSecurityCode, null, this);
     if (this.powerCell) this.physics.add.overlap(this.player, this.powerCell, this.collectPowerCell, null, this);
@@ -3668,7 +3687,10 @@ class GameScene extends Phaser.Scene {
     });
   }
 
-  createVisionCone() { this.visionGraphics = this.add.graphics(); }
+  createVisionCone() { 
+    this.visionGraphics = this.add.graphics();
+    this.visionGraphics.setDepth(5); // Above floor, below UI
+  }
 
   createUI() {
     this.timerText = this.add.text(10, 10, '00:00.00', { fontSize: '20px', fill: '#00ffaa', fontFamily: 'Courier New' });
@@ -3678,16 +3700,145 @@ class GameScene extends Phaser.Scene {
     this.objectiveText = this.add.text(10, 90, '[O] Key Card', { fontSize: '12px', fill: '#00aaff', fontFamily: 'Courier New' });
     this.objectiveText2 = this.add.text(10, 105, '[O] Hack Terminal', { fontSize: '12px', fill: '#00ff88', fontFamily: 'Courier New' });
     this.objectiveText3 = this.add.text(10, 120, '[O] Data Core', { fontSize: '12px', fill: '#ffaa00', fontFamily: 'Courier New' });
+    // Phase 11: Relay Terminal objective (only shown if level has one)
+    let nextObjY = 135;
+    if (this.hasRelayTerminal) {
+      this.objectiveTextRelay = this.add.text(10, nextObjY, '[O] Relay Terminal', { fontSize: '12px', fill: '#66ffaa', fontFamily: 'Courier New' });
+      nextObjY += 15;
+    } else {
+      this.objectiveTextRelay = null;
+    }
     // Phase 4: Additional objectives
-    this.objectiveText4 = this.add.text(10, 135, '[O] Security Code', { fontSize: '12px', fill: '#00ffff', fontFamily: 'Courier New' });
-    this.objectiveText5 = this.add.text(10, 150, '[O] Power Cell', { fontSize: '12px', fill: '#ff00ff', fontFamily: 'Courier New' });
-    this.statusText = this.add.text(10, 170, 'Find the Key Card!', { fontSize: '11px', fill: '#666666', fontFamily: 'Courier New' });
-    this.perksText = this.add.text(10, 185, 'Perks: S' + gameSave.perks.speed + '/L' + gameSave.perks.luck + '/St' + gameSave.perks.stealth, { fontSize: '10px', fill: '#666666', fontFamily: 'Courier New' });
+    this.objectiveText4 = this.add.text(10, nextObjY, '[O] Security Code', { fontSize: '12px', fill: '#00ffff', fontFamily: 'Courier New' });
+    this.objectiveText5 = this.add.text(10, nextObjY + 15, '[O] Power Cell', { fontSize: '12px', fill: '#ff00ff', fontFamily: 'Courier New' });
+    this.statusText = this.add.text(10, nextObjY + 35, 'Find the Key Card!', { fontSize: '11px', fill: '#666666', fontFamily: 'Courier New' });
+    this.perksText = this.add.text(10, nextObjY + 50, 'Perks: S' + gameSave.perks.speed + '/L' + gameSave.perks.luck + '/St' + gameSave.perks.stealth, { fontSize: '10px', fill: '#666666', fontFamily: 'Courier New' });
     // Phase 4: Add difficulty indicator - Phase 6: improved color coding
     const diffColor = this.levelDifficulty === 1 ? '#44ff88' : (this.levelDifficulty === 2 ? '#ffaa00' : '#ff4444');
     const diffLabel = this.levelDifficulty === 1 ? 'EASY' : (this.levelDifficulty === 2 ? 'MEDIUM' : 'HARD');
     this.difficultyText = this.add.text(MAP_WIDTH * TILE_SIZE - 10, 10, diffLabel, { fontSize: '12px', fill: diffColor, fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(1, 0);
     this.add.text(10, MAP_HEIGHT * TILE_SIZE - 25, 'ARROWS/WASD: Move | R: Restart | ESC: Pause', { fontSize: '10px', fill: '#444455', fontFamily: 'Courier New' });
+  }
+
+  // Phase 11: Level start briefing for onboarding - shows contextual tips
+  showLevelStartBriefing() {
+    const level = this.currentLayout;
+    const levelNum = this.currentLevelIndex + 1;
+    
+    // Determine what's in this level for targeted tips
+    const hasKeyCard = level.keyCard !== null;
+    const hasHackTerminal = level.hackTerminal !== null;
+    const hasDataCore = level.dataCore !== null;
+    const hasSecurityCode = level.securityCode !== null;
+    const hasPowerCell = level.powerCell !== null;
+    const hasRelayTerminal = level.relayTerminal !== null;
+    
+    // Build contextual tip based on level contents
+    let tip = '';
+    if (hasKeyCard && hasHackTerminal && hasDataCore) {
+      tip = '🎯 Get Key Card → Hack Terminal → Grab Data Core → Exit!';
+    } else if (hasKeyCard && hasHackTerminal) {
+      tip = '🎯 Find Key Card, hack the terminal, then escape!';
+    } else if (hasKeyCard && hasDataCore) {
+      tip = '🎯 Grab Key Card and Data Core, then reach the exit!';
+    } else if (hasRelayTerminal) {
+      tip = '🎯 Hack both terminals in sequence to unlock the exit!';
+    } else if (hasKeyCard) {
+      tip = '🎯 Find the Key Card to unlock the exit!';
+    } else if (hasDataCore) {
+      tip = '🎯 Grab the Data Core and escape through the exit!';
+    }
+    
+    // Add secondary objectives hint if present
+    const extras = [];
+    if (hasSecurityCode) extras.push('Security Code');
+    if (hasPowerCell) extras.push('Power Cell');
+    if (extras.length > 0) {
+      tip += `\n💎 Bonus: ${extras.join(' + ')} available!`;
+    }
+    
+    // Show difficulty hint
+    const diffHint = this.levelDifficulty === 1 ? '🤖 Easy - Guards move slowly' : 
+                     this.levelDifficulty === 2 ? '⚠️ Medium - Stay out of sight!' : 
+                     '🔥 Hard - Use stealth perks!';
+    
+    // Create briefing overlay
+    const panelWidth = 500;
+    const panelHeight = 180;
+    const centerX = MAP_WIDTH * TILE_SIZE / 2;
+    const centerY = MAP_HEIGHT * TILE_SIZE / 2;
+    
+    // Semi-transparent backdrop
+    const backdrop = this.add.rectangle(centerX, centerY, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x000000, 0.75);
+    backdrop.setDepth(50);
+    
+    // Briefing panel
+    const panel = this.add.container(centerX, centerY);
+    panel.setDepth(51);
+    
+    // Panel background
+    const bg = this.add.rectangle(0, 0, panelWidth, panelHeight, 0x1a1a2a);
+    bg.setStrokeStyle(3, 0x66ccff);
+    panel.add(bg);
+    
+    // Level title
+    const titleText = this.add.text(0, -panelHeight/2 + 30, `📍 LEVEL ${levelNum}: ${level.name.toUpperCase()}`, { 
+      fontSize: '22px', fill: '#66ccff', fontFamily: 'Courier New', fontStyle: 'bold' 
+    }).setOrigin(0.5);
+    panel.add(titleText);
+    
+    // Difficulty badge
+    const diffText = this.add.text(panelWidth/2 - 60, -panelHeight/2 + 30, diffHint, {
+      fontSize: '11px', fill: this.levelDifficulty === 1 ? '#44ff88' : (this.levelDifficulty === 2 ? '#ffaa00' : '#ff4444'), 
+      fontFamily: 'Courier New'
+    }).setOrigin(0.5);
+    panel.add(diffText);
+    
+    // Main tip
+    const tipLines = tip.split('\n');
+    tipLines.forEach((line, i) => {
+      const tipText = this.add.text(0, -panelHeight/2 + 65 + (i * 20), line, {
+        fontSize: '13px', fill: i === 0 ? '#ffffff' : '#aaaaaa',
+        fontFamily: 'Courier New'
+      }).setOrigin(0.5);
+      panel.add(tipText);
+    });
+    
+    // Dismiss hint
+    const dismissText = this.add.text(0, panelHeight/2 - 25, '⏱️ Starting in 3 seconds... (Move to skip)', {
+      fontSize: '11px', fill: '#666688', fontFamily: 'Courier New'
+    }).setOrigin(0.5);
+    panel.add(dismissText);
+    
+    // Track if player has moved to auto-dismiss
+    let dismissed = false;
+    const dismissBriefing = () => {
+      if (dismissed) return;
+      dismissed = true;
+      this.tweens.add({
+        targets: [backdrop, panel],
+        alpha: 0,
+        duration: 200,
+        onComplete: () => {
+          backdrop.destroy();
+          panel.destroy();
+        }
+      });
+    };
+    
+    // Auto-dismiss after 3 seconds
+    this.time.delayedCall(3000, dismissBriefing);
+    
+    // Dismiss on first player input
+    const inputHandler = () => {
+      dismissBriefing();
+      this.input.off('pointerdown', inputHandler);
+      if (this.cursors) {
+        this.input.keyboard.off('anykey', inputHandler);
+      }
+    };
+    this.input.on('pointerdown', inputHandler);
+    this.input.keyboard.on('anykey', inputHandler);
   }
 
   createPauseMenu() {
@@ -3800,7 +3951,7 @@ class GameScene extends Phaser.Scene {
   }
 
   collectDataCore(player, dataCore) {
-    if (!this.hasDataCore && this.isHacking) {
+    if (!this.hasDataCore && this.hackStage >= 2) {
       this.hasDataCore = true;
       dataCore.setVisible(false);
       if (dataCore.body) dataCore.body.enable = false;
@@ -3824,25 +3975,67 @@ class GameScene extends Phaser.Scene {
 
   startHack(player, zone) {
     if (!this.hasKeyCard || this.isHacking) return;
+    // Can only hack primary terminal at stage 0
+    if (this.hackStage !== 0) return;
     this.isHacking = true;
     this.hackProgress = 0;
     this.statusText.setText('HACKING... Stay in area!');
     this.statusText.setFill('#00ff88');
-    this.hackTimer = this.time.addEvent({ delay: 100, callback: this.updateHack, callbackScope: this, loop: true });
+    this.hackTimer = this.time.addEvent({ delay: 100, callback: () => this.updateHack('primary'), callbackScope: this, loop: true });
   }
 
-  updateHack() {
+  startRelayHack(player, zone) {
+    if (!this.hasKeyCard || this.isHacking) return;
+    // Relay terminal requires primary hack to be complete (stage 1)
+    if (this.hackStage !== 1) return;
+    this.isHacking = true;
+    this.hackProgress = 0;
+    this.statusText.setText('RELAY HACK... Stay in area!');
+    this.statusText.setFill('#66ffaa');
+    this.hackTimer = this.time.addEvent({ delay: 100, callback: () => this.updateHack('relay'), callbackScope: this, loop: true });
+  }
+
+  updateHack(terminal = 'primary') {
     if (!this.isHacking || this.isPaused) return;
     this.hackProgress += 2;
     if (this.hackProgress >= 100) {
       this.isHacking = false;
       if (this.hackTimer) this.hackTimer.remove();
-      this.objectiveText2.setText('[+] Hack Terminal');
-      this.objectiveText2.setFill('#00ff00');
-      this.statusText.setText('Terminal hacked! Get the data core!');
-      this.statusText.setFill('#ffaa00');
-      sfx.win();
-      this.cameras.main.flash(200, 255, 255, 100);
+
+      if (terminal === 'primary') {
+        this.hackStage = 1;
+        this.objectiveText2.setText('[+] Hack Terminal');
+        this.objectiveText2.setFill('#00ff00');
+
+        if (this.hasRelayTerminal) {
+          // Need relay hack next
+          this.statusText.setText('Primary hacked! Find the relay terminal!');
+          this.statusText.setFill('#66ffaa');
+          if (this.objectiveTextRelay) {
+            this.objectiveTextRelay.setText('[>] Relay Terminal');
+            this.objectiveTextRelay.setFill('#66ffaa');
+          }
+          sfx.collect();
+          this.cameras.main.flash(200, 0, 200, 100);
+        } else {
+          // No relay - go straight to data core
+          this.hackStage = 2;
+          this.statusText.setText('Terminal hacked! Get the data core!');
+          this.statusText.setFill('#ffaa00');
+          sfx.win();
+          this.cameras.main.flash(200, 255, 255, 100);
+        }
+      } else if (terminal === 'relay') {
+        this.hackStage = 2;
+        if (this.objectiveTextRelay) {
+          this.objectiveTextRelay.setText('[+] Relay Terminal');
+          this.objectiveTextRelay.setFill('#00ff00');
+        }
+        this.statusText.setText('Relay complete! Get the data core!');
+        this.statusText.setFill('#ffaa00');
+        sfx.win();
+        this.cameras.main.flash(200, 255, 255, 100);
+      }
     }
   }
 
@@ -4213,12 +4406,12 @@ class GameScene extends Phaser.Scene {
     const rightX = tipX + Math.cos(rightAngle) * coneLength;
     const rightY = tipY + Math.sin(rightAngle) * coneLength;
     
-    // OPTIMIZATION: Reduced precision for pulse - use integer division
+    // Pulse animation - visible but not distracting (0.12 to 0.25 range)
     const pulsePhase = Math.floor(this.time.now / 300) % 64;
-    const pulseAlpha = 0.08 + (pulsePhase / 1600) - 0.04;  // Approximate sin without Math.sin
+    const pulseAlpha = 0.18 + Math.sin(pulsePhase * Math.PI / 32) * 0.07;
     
-    // Outer cone (faded) - simplified drawing
-    this.visionGraphics.fillStyle(0xff2200, pulseAlpha * 0.5);
+    // Outer cone (faded warning area)
+    this.visionGraphics.fillStyle(0xff2200, pulseAlpha * 0.6);
     this.visionGraphics.beginPath();
     this.visionGraphics.moveTo(tipX, tipY);
     this.visionGraphics.lineTo(leftX, leftY);
@@ -4226,20 +4419,8 @@ class GameScene extends Phaser.Scene {
     this.visionGraphics.closePath();
     this.visionGraphics.fillPath();
     
-    // Inner cone (brighter, gradient feel)
-    const innerLength = coneLength * 0.6;
-    const innerLeftX = tipX + Math.cos(leftAngle) * innerLength;
-    const innerLeftY = tipY + Math.sin(leftAngle) * innerLength;
-    const innerRightX = tipX + Math.cos(rightAngle) * innerLength;
-    const innerRightY = tipY + Math.sin(rightAngle) * innerLength;
-    
-    this.visionGraphics.fillStyle(0xff4422, pulseAlpha * 1.5);
-    this.visionGraphics.beginPath();
-    this.visionGraphics.moveTo(tipX, tipY);
-    this.visionGraphics.lineTo(innerLeftX, innerLeftY);
-    this.visionGraphics.lineTo(innerRightX, innerRightY);
-    this.visionGraphics.closePath();
-    this.visionGraphics.fillPath();
+    // Inner cone (brighter danger zone)
+    this.visionGraphics.fillStyle(0xff4422, pulseAlpha * 1.0);
   }
 
   updateGhost() {

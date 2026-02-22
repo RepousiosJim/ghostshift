@@ -1,5 +1,6 @@
 // ==================== LEVEL LAYOUTS ====================
 // Phase 4: Added Vault and Training Facility levels with improved balancing
+// Phase 11: Added Comms Tower (D2) bridge level with relay-hack variant
 
 const DEFAULT_LEVEL = {
   name: 'Unnamed',
@@ -8,6 +9,7 @@ const DEFAULT_LEVEL = {
   dataCore: null,
   keyCard: null,
   hackTerminal: null,
+  relayTerminal: null,
   playerStart: null,
   exitZone: null,
   cameras: [],
@@ -23,6 +25,46 @@ const RAW_LEVEL_LAYOUTS = [
   { name: 'Warehouse', obstacles: [{x:8,y:4},{x:9,y:4},{x:10,y:4},{x:8,y:5},{x:10,y:5},{x:8,y:6},{x:10,y:6},{x:3,y:10},{x:4,y:10},{x:14,y:8},{x:15,y:8},{x:12,y:3},{x:13,y:3},{x:6,y:8},{x:7,y:8}], guardPatrol:[{x:15,y:7},{x:5,y:7},{x:5,y:12},{x:15,y:12}], dataCore:{x:16,y:3}, keyCard:{x:3,y:12}, hackTerminal:{x:10,y:7}, playerStart:{x:2,y:2}, exitZone:{x:19,y:7}, cameras:[{x:5,y:2},{x:15,y:12}], motionSensors:[{x:8,y:7},{x:12,y:10}], laserGrids:[{x:10,y:9,h:true},{x:6,y:3,v:true}], patrolDrones:[{x:12,y:6,patrol:[{x:12,y:6},{x:16,y:6},{x:16,y:10},{x:12,y:10}]}], securityCode:{x:4,y:8}, powerCell:{x:14,y:4}, difficulty: 1 },
   { name: 'Labs', obstacles: [{x:5,y:3},{x:5,y:4},{x:5,y:5},{x:5,y:6},{x:10,y:8},{x:11,y:8},{x:12,y:8},{x:10,y:9},{x:12,y:9},{x:10,y:10},{x:11,y:10},{x:12,y:10},{x:15,y:3},{x:16,y:3},{x:17,y:3},{x:3,y:11},{x:4,y:11},{x:5,y:11},{x:8,y:13},{x:9,y:13}], guardPatrol:[{x:14,y:5},{x:6,y:5},{x:6,y:13},{x:14,y:13}], dataCore:{x:17,y:2}, keyCard:{x:2,y:3}, hackTerminal:{x:8,y:5}, playerStart:{x:2,y:13}, exitZone:{x:19,y:3}, cameras:[{x:10,y:2},{x:3,y:8}], motionSensors:[{x:12,y:6},{x:7,y:11}], laserGrids:[{x:8,y:7,h:true},{x:14,y:9,v:true}], patrolDrones:[{x:10,y:10,patrol:[{x:10,y:10},{x:14,y:10},{x:14,y:4},{x:10,y:4}]}], securityCode:{x:6,y:2}, powerCell:{x:16,y:12}, difficulty: 1 },
   { name: 'Server Farm', obstacles: [{x:4,y:3},{x:5,y:3},{x:9,y:3},{x:10,y:3},{x:4,y:5},{x:10,y:5},{x:4,y:7},{x:5,y:7},{x:9,y:7},{x:10,y:7},{x:7,y:9},{x:8,y:9},{x:3,y:11},{x:7,y:11},{x:12,y:11},{x:16,y:11},{x:3,y:13},{x:4,y:13},{x:15,y:13},{x:16,y:13}], guardPatrol:[{x:2,y:9},{x:18,y:9},{x:18,y:5},{x:2,y:5}], dataCore:{x:18,y:13}, keyCard:{x:7,y:3}, hackTerminal:{x:14,y:9}, playerStart:{x:2,y:2}, exitZone:{x:19,y:7}, cameras:[{x:2,y:5},{x:17,y:11}], motionSensors:[{x:7,y:7},{x:12,y:5}], laserGrids:[{x:6,y:5,v:true},{x:12,y:9,h:true}], patrolDrones:[{x:8,y:6,patrol:[{x:8,y:6},{x:14,y:6},{x:14,y:12},{x:8,y:12}]}], securityCode:{x:2,y:12}, powerCell:{x:18,y:3}, difficulty: 2 },
+  // Phase 11: New Level 4 - Comms Tower (D2 bridge with relay-hack variant)
+  // Two terminals must be hacked in sequence; dense drone corridor in center
+  { name: 'Comms Tower', obstacles: [
+      // Upper antenna array (top-left cluster)
+      {x:3,y:2},{x:4,y:2},{x:5,y:2},{x:3,y:3},{x:5,y:3},
+      // Central server rack corridor walls
+      {x:7,y:4},{x:8,y:4},{x:7,y:5},{x:8,y:5},
+      {x:7,y:7},{x:8,y:7},{x:7,y:8},{x:8,y:8},
+      // Right-side comms room
+      {x:12,y:3},{x:13,y:3},{x:14,y:3},{x:12,y:4},{x:14,y:4},
+      // Lower equipment bays
+      {x:3,y:8},{x:4,y:8},{x:3,y:9},{x:4,y:9},
+      {x:12,y:9},{x:13,y:9},{x:14,y:9}
+    ],
+    guardPatrol: [
+      {x:6,y:3},{x:10,y:3},{x:10,y:9},{x:6,y:9}
+    ],
+    dataCore:{x:13,y:7},
+    keyCard:{x:4,y:10},
+    hackTerminal:{x:4,y:4},
+    relayTerminal:{x:13,y:5},
+    playerStart:{x:2,y:6},
+    exitZone:{x:15,y:7},
+    cameras:[
+      {x:6,y:2},{x:10,y:10},{x:14,y:6}
+    ],
+    motionSensors:[
+      {x:9,y:6},{x:5,y:7}
+    ],
+    laserGrids:[
+      {x:6,y:6,h:true},{x:10,y:6,h:true}
+    ],
+    patrolDrones:[
+      {x:9,y:4,patrol:[{x:9,y:4},{x:9,y:8},{x:6,y:8},{x:6,y:4}]},
+      {x:11,y:5,patrol:[{x:11,y:5},{x:11,y:9},{x:14,y:9},{x:14,y:5}]}
+    ],
+    securityCode:{x:14,y:10},
+    powerCell:{x:2,y:2},
+    difficulty: 2
+  },
   // Phase 4: New Level 4 - The Vault (high security bank vault)
   { name: 'The Vault', obstacles: [
       {x:4,y:3},{x:5,y:3},{x:6,y:3},{x:10,y:3},{x:11,y:3},{x:12,y:3},
