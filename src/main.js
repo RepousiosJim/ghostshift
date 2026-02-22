@@ -1138,8 +1138,8 @@ function saveSaveData(data) { saveManager.data = data; saveManager.save(); }
 // Phase 4: Improved balancing with difficulty scaling
 // Phase 7: Increased scale for desktop/web - larger game canvas for better UI visibility
 const TILE_SIZE = 48; // Increased from 32 for better visibility
-const MAP_WIDTH = 16; // Reduced from 20 to maintain aspect ratio while increasing tile size
-const MAP_HEIGHT = 12; // Reduced from 15 to maintain aspect ratio
+const MAP_WIDTH = 22; // Expanded from 16 (+3 tiles for Phase 13, +3 more for Phase 14)
+const MAP_HEIGHT = 18; // Expanded from 12 (+3 tiles for Phase 13, +3 more for Phase 14)
 const BASE_PLAYER_SPEED = 180;
 // Guard speed now scales with difficulty (base 65, max 90)
 const BASE_GUARD_SPEED = 65;
@@ -2152,7 +2152,7 @@ class LevelSelectScene extends Phaser.Scene {
     fullscreenManager.on('resize', this._resizeListener);
     
     // ========== Premium cyber-heist background ==========
-    this.backgroundComposer = new BackgroundComposer(this, { variant: 'tactical' });
+    this.backgroundComposer = new BackgroundComposer(this, { variant: 'levelselect' });
     
     // Title
     this.add.text(MAP_WIDTH * TILE_SIZE / 2, 30, 'SELECT LEVEL', { fontSize: '28px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
@@ -2198,87 +2198,177 @@ class LevelSelectScene extends Phaser.Scene {
       ease: 'Quad.easeOut'
     });
     
-    // ========== LEVEL CARDS WITH IMPROVED CONTRAST ==========
-    const startY = 80, spacingY = 70;
+    // ========== PREMIUM LEVEL CARDS ==========
+    const startY = 80, spacingY = 75;
     LEVEL_LAYOUTS.forEach((level, index) => {
       const isUnlocked = saveManager.isLevelUnlocked(index);
       const bestTime = saveManager.getBestTime(index);
+      const mastery = saveManager.getMastery(index);
+      const stars = mastery?.stars || 0;
       const y = startY + index * spacingY;
+      const cardWidth = 420;
+      const cardHeight = 60;
+      const centerX = MAP_WIDTH * TILE_SIZE / 2;
       
-      // Enhanced card background - stronger contrast for readability
-      const cardBg = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, y, 400, 55, isUnlocked ? 0x1a2a3a : 0x0e0e16);
-      cardBg.setStrokeStyle(2, isUnlocked ? 0x4488ff : 0x282835);
-      cardBg.setInteractive({ useHandCursor: isUnlocked });
-      
-      // Card glow effect for unlocked levels - adds premium feel
+      // ===== CARD HIERARCHY =====
+      // Outer glow for unlocked levels
       if (isUnlocked) {
-        const cardGlow = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, y, 404, 59, 0x4488ff, 0.06);
+        const outerGlow = this.add.rectangle(centerX, y, cardWidth + 8, cardHeight + 8, 0x4488ff, 0.08);
         this.tweens.add({
-          targets: cardGlow,
-          alpha: 0.12,
-          duration: 1500,
+          targets: outerGlow,
+          alpha: 0.15,
+          duration: 2000,
           yoyo: true,
           repeat: -1,
           ease: 'Sine.easeInOut'
         });
       }
       
-      // Level number with glow
-      const levelNum = this.add.text(MAP_WIDTH * TILE_SIZE / 2 - 160, y, String(index + 1), { fontSize: '20px', fill: isUnlocked ? '#4488ff' : '#444444', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+      // Main card background - premium dark with subtle gradient feel
+      const cardBg = this.add.rectangle(centerX, y, cardWidth, cardHeight, isUnlocked ? 0x141a24 : 0x0a0c10);
+      cardBg.setStrokeStyle(isUnlocked ? 2 : 1, isUnlocked ? 0x3a5a8a : 0x252530);
+      cardBg.setInteractive({ useHandCursor: isUnlocked });
+      cardBg.setDepth(1);
+      
+      // Left accent bar - shows progression status
+      const accentBar = this.add.rectangle(centerX - cardWidth/2 + 4, y, 6, cardHeight - 16, isUnlocked ? (stars >= 5 ? 0xffdd00 : (stars >= 3 ? 0x88ccff : 0x44ff88)) : 0x333340);
+      accentBar.setDepth(2);
+      
+      // Level number badge - circular with glow for unlocked
+      const badgeRadius = 18;
+      const badgeX = centerX - cardWidth/2 + 40;
+      const badgeBg = this.add.circle(badgeX, y, badgeRadius, isUnlocked ? 0x1a2a3a : 0x0a0c10);
+      badgeBg.setStrokeStyle(2, isUnlocked ? 0x4488ff : 0x333340);
+      badgeBg.setDepth(2);
+      
+      const levelNum = this.add.text(badgeX, y, String(index + 1), { 
+        fontSize: '18px', 
+        fill: isUnlocked ? '#66aaff' : '#444448', 
+        fontFamily: 'Courier New', 
+        fontStyle: 'bold' 
+      }).setOrigin(0.5).setDepth(3);
+      
+      // Level name - prominent, clear
+      const nameX = centerX - cardWidth/2 + 80;
+      this.add.text(nameX, y - 12, level.name, { 
+        fontSize: '15px', 
+        fill: isUnlocked ? '#ffffff' : '#444448', 
+        fontFamily: 'Courier New',
+        fontStyle: 'bold'
+      }).setOrigin(0, 0.5).setDepth(3);
+      
+      // Stats row - Best time and stars
+      const statsY = y + 12;
+      const bestTimeStr = bestTime ? this.formatTime(bestTime) : '--:--';
+      const bestTimeLabel = this.add.text(nameX, statsY, 'Best: ' + bestTimeStr, { 
+        fontSize: '11px', 
+        fill: isUnlocked ? (bestTime ? '#88aacc' : '#556677') : '#333338', 
+        fontFamily: 'Courier New' 
+      }).setOrigin(0, 0.5).setDepth(3);
+      
+      // Stars display - colored by performance
       if (isUnlocked) {
-        this.tweens.add({
-          targets: levelNum,
-          alpha: 0.7,
-          duration: 1000,
-          yoyo: true,
-          repeat: -1
-        });
+        const starsX = nameX + 110;
+        const starColors = ['#333340', '#cd7f32', '#c0c0c0', '#c0c0c0', '#ffdd00', '#ffdd00'];
+        let starStr = '';
+        for (let s = 0; s < 5; s++) {
+          starStr += s < stars ? '★' : '☆';
+        }
+        this.add.text(starsX, statsY, starStr, { 
+          fontSize: '11px', 
+          fill: starColors[stars] || '#333340', 
+          fontFamily: 'Courier New',
+          fontStyle: 'bold'
+        }).setOrigin(0, 0.5).setDepth(3);
       }
       
-      this.add.text(MAP_WIDTH * TILE_SIZE / 2 - 100, y - 10, level.name, { fontSize: '14px', fill: isUnlocked ? '#ffffff' : '#444444', fontFamily: 'Courier New' }).setOrigin(0, 0.5);
-      this.add.text(MAP_WIDTH * TILE_SIZE / 2 - 100, y + 10, 'Best: ' + (bestTime ? this.formatTime(bestTime) : '--:--'), { fontSize: '11px', fill: isUnlocked ? '#888888' : '#444444', fontFamily: 'Courier New' });
+      // Difficulty indicator
+      const diffLabel = level.difficulty === 1 ? 'EASY' : (level.difficulty === 2 ? 'MED' : 'HARD');
+      const diffColor = level.difficulty === 1 ? '#44ff88' : (level.difficulty === 2 ? '#ffaa00' : '#ff4444');
+      this.add.text(centerX + cardWidth/2 - 130, y - 12, diffLabel, { 
+        fontSize: '10px', 
+        fill: isUnlocked ? diffColor : '#333338', 
+        fontFamily: 'Courier New',
+        fontStyle: 'bold'
+      }).setOrigin(0.5, 0.5).setDepth(3);
       
-      // Add mastery stars display on level cards
-      if (isUnlocked) {
-        const mastery = saveManager.getMastery(index);
-        const stars = mastery?.stars || 0;
-        const starsText = '★'.repeat(stars) + '☆'.repeat(5 - stars);
-        this.add.text(MAP_WIDTH * TILE_SIZE / 2 + 80, y + 10, starsText, { 
-          fontSize: '10px', 
-          fill: stars > 0 ? '#ffdd00' : '#333344', 
-          fontFamily: 'Courier New' 
-        }).setOrigin(0.5);
-      }
+      // CTA Button - Play/Locked
+      const ctaX = centerX + cardWidth/2 - 45;
+      const ctaBg = this.add.rectangle(ctaX, y, 80, 28, isUnlocked ? 0x1a4a2a : 0x151518);
+      ctaBg.setStrokeStyle(isUnlocked ? 2 : 1, isUnlocked ? 0x44ff88 : 0x333340);
+      ctaBg.setDepth(2);
       
-      this.add.text(MAP_WIDTH * TILE_SIZE / 2 + 140, y, isUnlocked ? '▶ PLAY' : '🔒 LOCKED', { fontSize: '12px', fill: isUnlocked ? '#44ff88' : '#444444', fontFamily: 'Courier New' }).setOrigin(0.5);
+      const ctaText = this.add.text(ctaX, y, isUnlocked ? '▶ PLAY' : '🔒 LOCK', { 
+        fontSize: '12px', 
+        fill: isUnlocked ? '#44ff88' : '#444448', 
+        fontFamily: 'Courier New',
+        fontStyle: 'bold'
+      }).setOrigin(0.5).setDepth(3);
       
-      // PROGRESION POLISH: Add hint for locked levels - show what unlocks it
+      // Lock hint for locked levels
       if (!isUnlocked && index > 0) {
         const prevLevelName = LEVEL_LAYOUTS[index - 1]?.name || `Level ${index}`;
-        const hintText = this.add.text(MAP_WIDTH * TILE_SIZE / 2 + 140, y + 18, 'Beat ' + prevLevelName, { 
+        this.add.text(ctaX, y + 22, 'Beat ' + prevLevelName.substring(0, 8) + (prevLevelName.length > 8 ? '..' : ''), { 
           fontSize: '9px', 
-          fill: '#556677', 
+          fill: '#3a3a44', 
           fontFamily: 'Courier New',
           fontStyle: 'italic'
-        }).setOrigin(0.5);
+        }).setOrigin(0.5).setDepth(3);
       }
       
+      // ===== INTERACTION =====
       if (isUnlocked) {
+        // Card hover - entire card
         cardBg.on('pointerover', () => { 
-          cardBg.setFillStyle(0x2a3a4a); 
+          cardBg.setFillStyle(0x1e2838);
           cardBg.setStrokeStyle(2, 0x66aaff);
+          badgeBg.setStrokeStyle(2, 0x88ccff);
+          ctaBg.setFillStyle(0x2a5a3a);
+          ctaBg.setStrokeStyle(2, 0x66ffaa);
           sfx.menuHover(); 
         });
-        cardBg.on('pointerout', () => cardBg.setFillStyle(0x1a2a3a).setStrokeStyle(2, 0x4488ff));
+        
+        cardBg.on('pointerout', () => { 
+          cardBg.setFillStyle(0x141a24).setStrokeStyle(2, 0x3a5a8a);
+          badgeBg.setStrokeStyle(2, 0x4488ff);
+          ctaBg.setFillStyle(0x1a4a2a).setStrokeStyle(2, 0x44ff88);
+        });
+        
         cardBg.on('pointerdown', () => {
-          // Click animation
           this.tweens.add({
-            targets: cardBg,
-            scaleX: 0.98,
-            scaleY: 0.98,
+            targets: [cardBg, badgeBg, ctaBg],
+            scaleX: 0.97,
+            scaleY: 0.97,
+            duration: 60,
+            yoyo: true,
+            onComplete: () => {
+              cardBg.setScale(1);
+              sfx.select();
+              this.transitionTo('GameScene', { levelIndex: index });
+            }
+          });
+        });
+        
+        // CTA button specific interactions
+        ctaBg.setInteractive({ useHandCursor: true });
+        ctaBg.on('pointerover', () => {
+          ctaBg.setFillStyle(0x2a5a3a);
+          ctaBg.setStrokeStyle(2, 0x66ffaa);
+          sfx.menuHover();
+        });
+        ctaBg.on('pointerout', () => {
+          ctaBg.setFillStyle(0x1a4a2a);
+          ctaBg.setStrokeStyle(2, 0x44ff88);
+        });
+        ctaBg.on('pointerdown', () => {
+          this.tweens.add({
+            targets: ctaBg,
+            scaleX: 0.9,
+            scaleY: 0.9,
             duration: 50,
             yoyo: true,
             onComplete: () => {
+              ctaBg.setScale(1);
               sfx.select();
               this.transitionTo('GameScene', { levelIndex: index });
             }
@@ -2474,20 +2564,8 @@ class SettingsScene extends Phaser.Scene {
     };
     fullscreenManager.on('resize', this._resizeListener);
     
-    // Background
-    this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
-    
-    // OPTIMIZATION: Static grid with slower animation (100ms instead of 50ms)
-    this.gridGraphics = this.add.graphics();
-    this.gridOffset = 0;
-    this._gridTimer = this.time.addEvent({
-      delay: 100,  // Reduced from 50ms - half the draw calls
-      callback: () => {
-        this.gridOffset = (this.gridOffset + 0.3) % 32;
-        this.drawGrid();
-      },
-      loop: true
-    });
+    // Premium background using BackgroundComposer (settings variant for calm, premium feel)
+    this.backgroundComposer = new BackgroundComposer(this, { variant: 'settings' });
     
     // Title
     this.add.text(MAP_WIDTH * TILE_SIZE / 2, 30, 'SETTINGS', { fontSize: '28px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
@@ -2740,10 +2818,10 @@ class SettingsScene extends Phaser.Scene {
   
   // Cleanup listeners when scene is destroyed
   shutdown() {
-    // Clean up grid animation timer
-    if (this._gridTimer) {
-      this._gridTimer.remove();
-      this._gridTimer = null;
+    // Clean up BackgroundComposer
+    if (this.backgroundComposer) {
+      this.backgroundComposer.destroy();
+      this.backgroundComposer = null;
     }
     if (this._fullscreenListener) {
       fullscreenManager.off(this._fullscreenListener);
@@ -2752,17 +2830,6 @@ class SettingsScene extends Phaser.Scene {
       fullscreenManager.off(this._resizeListener);
     }
     super.shutdown();
-  }
-  
-  drawGrid() {
-    this.gridGraphics.clear();
-    this.gridGraphics.lineStyle(1, 0x1a1a2a, 0.3);
-    for (let x = 0; x <= MAP_WIDTH; x++) {
-      this.gridGraphics.lineBetween(x * 32, 0, x * 32, MAP_HEIGHT * TILE_SIZE);
-    }
-    for (let y = 0; y <= MAP_HEIGHT; y++) {
-      this.gridGraphics.lineBetween(0, y * 32, MAP_WIDTH * TILE_SIZE, y * 32);
-    }
   }
   
   // Phase 9: Handle window resize for fullscreen
@@ -2794,20 +2861,8 @@ class ControlsScene extends Phaser.Scene {
     this._resizeListener = () => this._handleResize();
     fullscreenManager.on('resize', this._resizeListener);
     
-    // Background
-    this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
-    
-    // OPTIMIZATION: Static grid with slower animation (100ms instead of 50ms)
-    this.gridGraphics = this.add.graphics();
-    this.gridOffset = 0;
-    this._gridTimer = this.time.addEvent({
-      delay: 100,  // Reduced from 50ms - half the draw calls
-      callback: () => {
-        this.gridOffset = (this.gridOffset + 0.3) % 32;
-        this.drawGrid();
-      },
-      loop: true
-    });
+    // Premium background using BackgroundComposer (controls variant for technical feel)
+    this.backgroundComposer = new BackgroundComposer(this, { variant: 'controls' });
     
     // Title
     this.add.text(MAP_WIDTH * TILE_SIZE / 2, 30, '🎮 CONTROLS', { fontSize: '28px', fill: '#66ccff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
@@ -2959,11 +3014,6 @@ class ControlsScene extends Phaser.Scene {
       this.backgroundComposer.destroy();
       this.backgroundComposer = null;
     }
-    // Legacy cleanup (if any)
-    if (this._gridTimer) {
-      this._gridTimer.remove();
-      this._gridTimer = null;
-    }
     if (this._resizeListener) {
       fullscreenManager.off(this._resizeListener);
     }
@@ -2978,17 +3028,6 @@ class ControlsScene extends Phaser.Scene {
     // First transition back to main menu, then show How to Play
     // We need to pass a flag to show How to Play after transition
     this.transitionTo('MainMenuScene', { showHowToPlay: true });
-  }
-  
-  drawGrid() {
-    this.gridGraphics.clear();
-    this.gridGraphics.lineStyle(1, 0x1a1a2a, 0.3);
-    for (let x = 0; x <= MAP_WIDTH; x++) {
-      this.gridGraphics.lineBetween(x * 32, 0, x * 32, MAP_HEIGHT * TILE_SIZE);
-    }
-    for (let y = 0; y <= MAP_HEIGHT; y++) {
-      this.gridGraphics.lineBetween(0, y * 32, MAP_WIDTH * TILE_SIZE, y * 32);
-    }
   }
   
   transitionTo(sceneKey, data = null) {

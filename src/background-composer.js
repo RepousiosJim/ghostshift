@@ -13,7 +13,9 @@ const LAYER_DEPTHS = {
   GRID: -6,
   FOG: -5,
   LIGHT_ACCENTS: -4,
-  VIGNETTE: -3
+  VIGNETTE: -3,
+  PARTICLES: -2,
+  DECORATIVE: -1
 };
 
 // Quality presets
@@ -24,7 +26,8 @@ const QUALITY_PRESETS = {
     fogEnabled: false,
     lightAccentCount: 1,
     architecturalDetail: 'minimal',
-    shadowBlur: 0
+    shadowBlur: 0,
+    decorativeElements: false
   },
   medium: {
     gridAnimationDelay: 100,
@@ -32,7 +35,8 @@ const QUALITY_PRESETS = {
     fogEnabled: true,
     lightAccentCount: 2,
     architecturalDetail: 'standard',
-    shadowBlur: 4
+    shadowBlur: 4,
+    decorativeElements: true
   },
   high: {
     gridAnimationDelay: 50,
@@ -40,7 +44,8 @@ const QUALITY_PRESETS = {
     fogEnabled: true,
     lightAccentCount: 3,
     architecturalDetail: 'detailed',
-    shadowBlur: 8
+    shadowBlur: 8,
+    decorativeElements: true
   }
 };
 
@@ -88,6 +93,15 @@ export class BackgroundComposer {
         break;
       case 'quiet':
         this._createQuietVariant();
+        break;
+      case 'levelselect':
+        this._createLevelSelectVariant();
+        break;
+      case 'settings':
+        this._createSettingsVariant();
+        break;
+      case 'controls':
+        this._createControlsVariant();
         break;
       default:
         this._createStandardVariant();
@@ -408,6 +422,297 @@ export class BackgroundComposer {
     }
   }
   
+  // ========== NEW PREMIUM VARIANTS ==========
+  
+  _createLevelSelectVariant() {
+    // Level Select variant - Premium tactical with data visualization feel
+    // Deep dark base with subtle blue-green undertones
+    this._createBaseLayers();
+    
+    // Enhanced grid with tactical feel - tighter, more precise
+    this._createTacticalGrid();
+    
+    // Subtle horizontal data lines (like a HUD)
+    this._createDataLines();
+    
+    // Corner brackets for tech feel
+    this._createCornerBrackets();
+    
+    // Minimal particles - floating data points
+    this._createDataParticles();
+    
+    // Subtle light accents
+    this._createLightAccents();
+  }
+  
+  _createSettingsVariant() {
+    // Settings variant - Calm, premium, minimal distractions
+    this._createBaseLayers();
+    
+    // Soft grid - slower animation, more subtle
+    this._createSoftGrid();
+    
+    // Minimal decorative elements - subtle horizontal lines
+    this._createSettingDecorations();
+    
+    // Gentle ambient particles
+    this._createAmbientParticles();
+    
+    // Very subtle light accents
+    this._createSubtleAccents();
+  }
+  
+  _createControlsVariant() {
+    // Controls variant - Technical but approachable
+    this._createBaseLayers();
+    
+    // Grid with technical feel
+    this._createTacticalGrid();
+    
+    // Key indicator decorations
+    this._createControlDecorations();
+    
+    // Friendly particles
+    this._createAmbientParticles();
+    
+    // Subtle accents
+    this._createSubtleAccents();
+  }
+  
+  // ========== ENHANCED GRID SYSTEMS ==========
+  
+  _createTacticalGrid() {
+    this.gridGraphics = this.scene.add.graphics();
+    this.gridOffset = 0;
+    this.gridGraphics.setDepth(LAYER_DEPTHS.GRID);
+    this.cachedLayers.set('grid', this.gridGraphics);
+    
+    this._drawTacticalGrid();
+  }
+  
+  _drawTacticalGrid() {
+    if (!this.gridGraphics) return;
+    
+    this.gridGraphics.clear();
+    
+    const tileSize = 24; // Tighter grid
+    const primaryColor = 0x1a3a4a;
+    const secondaryColor = 0x2a5a6a;
+    const accentColor = 0x3a7a8a;
+    
+    // Primary grid lines - subtle
+    this.gridGraphics.lineStyle(1, primaryColor, 0.25);
+    
+    for (let x = 0; x <= this.width / tileSize + 1; x++) {
+      const drawX = x * tileSize - (this.gridOffset % tileSize);
+      this.gridGraphics.lineBetween(drawX, 0, drawX, this.height);
+    }
+    
+    const yOffset = this.gridOffset * 0.4;
+    for (let y = 0; y <= this.height / tileSize + 1; y++) {
+      const drawY = y * tileSize - (yOffset % tileSize);
+      this.gridGraphics.lineBetween(0, drawY, this.width, drawY);
+    }
+    
+    // Accent lines every 4th - more visible
+    if (this.quality !== 'low') {
+      this.gridGraphics.lineStyle(1, accentColor, 0.15);
+      for (let x = 0; x <= this.width / tileSize; x += 4) {
+        const drawX = x * tileSize - (this.gridOffset % tileSize);
+        this.gridGraphics.lineBetween(drawX, 0, drawX, this.height);
+      }
+    }
+  }
+  
+  _createSoftGrid() {
+    this.gridGraphics = this.scene.add.graphics();
+    this.gridOffset = 0;
+    this.gridGraphics.setDepth(LAYER_DEPTHS.GRID);
+    this.cachedLayers.set('grid', this.gridGraphics);
+    
+    this._drawSoftGrid();
+  }
+  
+  _drawSoftGrid() {
+    if (!this.gridGraphics) return;
+    
+    this.gridGraphics.clear();
+    
+    const tileSize = 48; // Larger, softer grid
+    const color = 0x1a2a3a;
+    
+    // Very subtle grid lines
+    this.gridGraphics.lineStyle(1, color, 0.15);
+    
+    for (let x = 0; x <= this.width / tileSize + 1; x++) {
+      const drawX = x * tileSize - (this.gridOffset % tileSize);
+      this.gridGraphics.lineBetween(drawX, 0, drawX, this.height);
+    }
+    
+    const yOffset = this.gridOffset * 0.3;
+    for (let y = 0; y <= this.height / tileSize + 1; y++) {
+      const drawY = y * tileSize - (yOffset % tileSize);
+      this.gridGraphics.lineBetween(0, drawY, this.width, drawY);
+    }
+  }
+  
+  // ========== DECORATIVE ELEMENTS ==========
+  
+  _createDataLines() {
+    if (!this.qualitySettings.decorativeElements) return;
+    
+    const decor = this.scene.add.graphics();
+    decor.setDepth(LAYER_DEPTHS.DECORATIVE);
+    
+    // Horizontal data lines at key positions
+    const lineYPositions = [0.25, 0.5, 0.75];
+    const lineColor = 0x2a4a5a;
+    
+    lineYPositions.forEach((pos, i) => {
+      const y = this.height * pos;
+      decor.lineStyle(1, lineColor, 0.1 + (i * 0.05));
+      decor.lineBetween(0, y, this.width, y);
+    });
+    
+    this.cachedLayers.set('datalines', decor);
+  }
+  
+  _createCornerBrackets() {
+    if (!this.qualitySettings.decorativeElements) return;
+    
+    const bracket = this.scene.add.graphics();
+    bracket.setDepth(LAYER_DEPTHS.DECORATIVE);
+    
+    const bracketSize = 40;
+    const color = 0x3a5a6a;
+    
+    // Top-left
+    bracket.lineStyle(2, color, 0.3);
+    bracket.lineBetween(20, 20, 20 + bracketSize, 20);
+    bracket.lineBetween(20, 20, 20, 20 + bracketSize);
+    
+    // Top-right
+    bracket.lineBetween(this.width - 20, 20, this.width - 20 - bracketSize, 20);
+    bracket.lineBetween(this.width - 20, 20, this.width - 20, 20 + bracketSize);
+    
+    // Bottom-left
+    bracket.lineBetween(20, this.height - 20, 20 + bracketSize, this.height - 20);
+    bracket.lineBetween(20, this.height - 20, 20, this.height - 20 - bracketSize);
+    
+    // Bottom-right
+    bracket.lineBetween(this.width - 20, this.height - 20, this.width - 20 - bracketSize, this.height - 20);
+    bracket.lineBetween(this.width - 20, this.height - 20, this.width - 20, this.height - 20 - bracketSize);
+    
+    this.cachedLayers.set('brackets', bracket);
+  }
+  
+  _createSettingDecorations() {
+    if (!this.qualitySettings.decorativeElements) return;
+    
+    const decor = this.scene.add.graphics();
+    decor.setDepth(LAYER_DEPTHS.DECORATIVE);
+    
+    // Subtle horizontal dividers
+    const color = 0x2a3a4a;
+    decor.lineStyle(1, color, 0.1);
+    
+    // Three subtle lines
+    decor.lineBetween(0, this.height * 0.3, this.width * 0.3, this.height * 0.3);
+    decor.lineBetween(this.width * 0.7, this.height * 0.5, this.width, this.height * 0.5);
+    decor.lineBetween(0, this.height * 0.7, this.width * 0.2, this.height * 0.7);
+    
+    this.cachedLayers.set('settingdecor', decor);
+  }
+  
+  _createControlDecorations() {
+    if (!this.qualitySettings.decorativeElements) return;
+    
+    const decor = this.scene.add.graphics();
+    decor.setDepth(LAYER_DEPTHS.DECORATIVE);
+    
+    // Key icon hints - subtle circles
+    const color = 0x3a4a5a;
+    decor.lineStyle(1, color, 0.15);
+    
+    // Decorative dots in corners
+    const dotRadius = 4;
+    decor.fillStyle(color, 0.2);
+    decor.fillCircle(60, 60, dotRadius);
+    decor.fillCircle(this.width - 60, 60, dotRadius);
+    decor.fillCircle(60, this.height - 60, dotRadius);
+    decor.fillCircle(this.width - 60, this.height - 60, dotRadius);
+    
+    this.cachedLayers.set('controldecor', decor);
+  }
+  
+  // ========== ENHANCED PARTICLES ==========
+  
+  _createDataParticles() {
+    // Data particles - small, techy, cyan-tinted
+    const count = Math.min(15, this.qualitySettings.particleCount + 5);
+    
+    for (let i = 0; i < count; i++) {
+      const particle = this.scene.add.circle(
+        Math.random() * this.width,
+        Math.random() * this.height,
+        1 + Math.random() * 2,
+        0x44aacc,
+        0.1 + Math.random() * 0.15
+      );
+      particle.setDepth(LAYER_DEPTHS.PARTICLES);
+      particle.speedX = (Math.random() - 0.5) * 0.3;
+      particle.speedY = (Math.random() - 0.5) * 0.3;
+      this.particles.push(particle);
+    }
+  }
+  
+  _createAmbientParticles() {
+    // Softer, ambient particles
+    const count = Math.max(8, this.qualitySettings.particleCount - 5);
+    const colors = [0x4466aa, 0x5588bb, 0x6699cc];
+    
+    for (let i = 0; i < count; i++) {
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      const particle = this.scene.add.circle(
+        Math.random() * this.width,
+        Math.random() * this.height,
+        2 + Math.random() * 3,
+        color,
+        0.08 + Math.random() * 0.1
+      );
+      particle.setDepth(LAYER_DEPTHS.PARTICLES);
+      particle.speedX = (Math.random() - 0.5) * 0.2;
+      particle.speedY = (Math.random() - 0.5) * 0.2;
+      this.particles.push(particle);
+    }
+  }
+  
+  _createSubtleAccents() {
+    // Very subtle, single accent light
+    const accent = this.scene.add.graphics();
+    const startX = this.width * 0.5;
+    const startY = this.height * 0.9;
+    
+    accent.fillStyle(0x2a4a6a, 0.02);
+    accent.fillTriangle(
+      startX, startY,
+      startX + Math.cos(-0.2) * 400,
+      startY + Math.sin(-0.2) * 400,
+      startX + Math.cos(0.2) * 400,
+      startY + Math.sin(0.2) * 400
+    );
+    
+    accent.setDepth(LAYER_DEPTHS.LIGHT_ACCENTS);
+    
+    this.lightAccents.push({
+      graphics: accent,
+      baseX: startX,
+      baseY: startY,
+      angle: -0.2,
+      phase: Math.random() * Math.PI * 2
+    });
+  }
+  
   _createStandardVariant() {
     // Default: balanced between hero and quiet
     this._createBaseLayers();
@@ -423,13 +728,22 @@ export class BackgroundComposer {
   _startAnimations() {
     const gridDelay = this.qualitySettings.gridAnimationDelay;
     
-    // Grid animation timer
+    // Grid animation timer - call the appropriate draw method based on variant
     if (this.gridGraphics) {
+      let drawMethod = '_drawGrid';
+      
+      // Determine which draw method to use based on variant
+      if (this.variant === 'tactical' || this.variant === 'levelselect' || this.variant === 'controls') {
+        drawMethod = '_drawTacticalGrid';
+      } else if (this.variant === 'quiet' || this.variant === 'settings') {
+        drawMethod = '_drawSoftGrid';
+      }
+      
       const gridTimer = this.scene.time.addEvent({
         delay: gridDelay,
         callback: () => {
           this.gridOffset = (this.gridOffset + 0.3) % 32;
-          this._drawGrid();
+          this[drawMethod]();
         },
         loop: true
       });
