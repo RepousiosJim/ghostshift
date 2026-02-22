@@ -3066,10 +3066,10 @@ class ResultsScene extends Phaser.Scene {
     this._resizeListener = () => this._handleResize();
     fullscreenManager.on('resize', this._resizeListener);
     
-    // Background
-    this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
+    // Premium background using BackgroundComposer (results variant)
+    this.backgroundComposer = new BackgroundComposer(this, { variant: 'results' });
     
-    // Particles for win/lose
+    // Particles for win/lose (additional to background particles)
     this.createResultParticles();
     
     const titleText = this.success ? 'MISSION COMPLETE!' : 'MISSION FAILED';
@@ -3355,6 +3355,11 @@ class ResultsScene extends Phaser.Scene {
   
   // Cleanup listeners when scene is destroyed
   shutdown() {
+    // Clean up BackgroundComposer
+    if (this.backgroundComposer) {
+      this.backgroundComposer.destroy();
+      this.backgroundComposer = null;
+    }
     // Clean up particle animation timer
     if (this._particleTimer) {
       this._particleTimer.remove();
