@@ -13,7 +13,7 @@ function attachErrorCollectors(page) {
 test('Warehouse flow: start, collect objectives, retry, win, next level transition', async ({ page }) => {
   const { pageErrors, consoleErrors } = attachErrorCollectors(page);
 
-  await page.goto('/ghostshift/', { waitUntil: 'domcontentloaded' });
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
   await expect(page.locator('canvas')).toHaveCount(1);
 
   // Start Warehouse level directly

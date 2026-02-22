@@ -119,7 +119,7 @@ test('Fail flow triggers and restart recovers safely', async ({ page }) => {
   assertNoRuntimeCrashes(pageErrors, consoleErrors)
 })
 
-test('Win flow + upgrade selection applies perk without crashing', async ({ page }) => {
+test('Win flow transitions to results scene without crashing', async ({ page }) => {
   const { pageErrors, consoleErrors } = attachErrorCollectors(page)
 
   await page.goto('/', { waitUntil: 'domcontentloaded' })
@@ -135,17 +135,22 @@ test('Win flow + upgrade selection applies perk without crashing', async ({ page
   })
   expect(won).toBe(true)
 
-  await page.keyboard.press('1')
-  await page.waitForTimeout(800)
+  // Wait for scene transition to complete
+  await page.waitForTimeout(1000)
 
-  const upgradeApplied = await page.evaluate(() => {
+  // Verify we're now in ResultsScene (or VictoryScene for final level)
+  const inResults = await page.evaluate(() => {
     const game = window.__ghostGame
-    const scene = game?.scene?.getScene('GameScene')
-    return { speed: scene?.applySpeedBoost, running: scene?.isRunning }
+    return {
+      inResults: game?.scene?.isActive('ResultsScene'),
+      inVictory: game?.scene?.isActive('VictoryScene'),
+      inGame: game?.scene?.isActive('GameScene')
+    }
   })
 
-  expect(upgradeApplied.speed).toBe(true)
-  expect(upgradeApplied.running).toBe(true)
+  expect(inResults.inResults || inResults.inVictory).toBe(true)
+  expect(inResults.inGame).toBe(false)
+
   assertNoRuntimeCrashes(pageErrors, consoleErrors)
 })
 
@@ -204,6 +209,95 @@ test('Level transition cycle restart -> next -> menu -> reload without errors', 
   await page.waitForTimeout(800)
   await page.reload({ waitUntil: 'domcontentloaded' })
   await page.waitForTimeout(800)
+
+  assertNoRuntimeCrashes(pageErrors, consoleErrors)
+})
+
+test('Main menu controls -> back -> settings navigation works', async ({ page }) => {
+  const { pageErrors, consoleErrors } = attachErrorCollectors(page)
+
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('canvas')).toHaveCount(1)
+  await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('MainMenuScene'))
+
+  const centerX = GAME_WIDTH / 2
+  const startY = 190
+  const spacing = 65
+
+  // MainMenu -> Controls
+  await clickGamePoint(page, centerX, startY + spacing * 3)
+  await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('ControlsScene'))
+
+  // Controls -> Back (to MainMenu)
+  await clickGamePoint(page, 40, 20)
+  await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('MainMenuScene'))
+
+  // MainMenu -> Settings
+  await clickGamePoint(page, centerX, startY + spacing * 4)
+  await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('SettingsScene'))
+
+  assertNoRuntimeCrashes(pageErrors, consoleErrors)
+})
+
+test('Main menu -> level select -> back -> main menu navigation works', async ({ page }) => {
+  const { pageErrors, consoleErrors } = attachErrorCollectors(page)
+
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('canvas')).toHaveCount(1)
+  await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('MainMenuScene'))
+
+  const centerX = GAME_WIDTH / 2
+  const startY = 190
+  const spacing = 65
+
+  // MainMenu -> LevelSelect (via PLAY button)
+  await clickGamePoint(page, centerX, startY)
+  await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('LevelSelectScene'))
+
+  // LevelSelect -> Back (to MainMenu)
+  await clickGamePoint(page, 40, 20)
+  await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('MainMenuScene'))
+
+  assertNoRuntimeCrashes(pageErrors, consoleErrors)
+})
+
+test('Level select -> play level -> restart cycle works', async ({ page }) => {
+  const { pageErrors, consoleErrors } = attachErrorCollectors(page)
+
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('canvas')).toHaveCount(1)
+  await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('MainMenuScene'))
+
+  const centerX = GAME_WIDTH / 2
+  const startY = 190
+
+  // MainMenu -> LevelSelect
+  await clickGamePoint(page, centerX, startY)
+  await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('LevelSelectScene'))
+
+  // Click on first level card (y position: startY=80, spacingY=70)
+  await clickGamePoint(page, centerX, 80)
+  await page.waitForTimeout(1000)
+
+  // Verify we're in GameScene
+  const inGame = await page.evaluate(() => {
+    const game = window.__ghostGame
+    return { inGame: game?.scene?.isActive('GameScene') }
+  })
+  expect(inGame.inGame).toBe(true)
+
+  // Press R to restart
+  await page.keyboard.press('r')
+  await page.waitForTimeout(800)
+
+  // Verify game is still running after restart
+  const stillRunning = await page.evaluate(() => {
+    const game = window.__ghostGame
+    const scene = game?.scene?.getScene('GameScene')
+    return { isRunning: scene?.isRunning, isDetected: scene?.isDetected }
+  })
+  expect(stillRunning.isRunning).toBe(true)
+  expect(stillRunning.isDetected).toBe(false)
 
   assertNoRuntimeCrashes(pageErrors, consoleErrors)
 })
