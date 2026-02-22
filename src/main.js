@@ -1,4 +1,5 @@
 import { LEVEL_LAYOUTS, validateLevelLayouts } from './levels.js';
+import { BackgroundComposer } from './background-composer.js';
 
 // Dynamic import of Phaser for better loading performance
 // This allows the smaller game.js to load first, then Phaser lazy-loads
@@ -608,9 +609,19 @@ class PerformanceManager {
 
 const perfManager = new PerformanceManager();
 
+// ==================== MASTERY DEFINITIONS ====================
+const MASTERY_TIERS = {
+  // Time thresholds (in ms) for speed star: under 60s = 3 stars, under 90s = 2 stars, under 120s = 1 star
+  SPEED_THRESHOLDS: { gold: 60000, silver: 90000, bronze: 120000 },
+  // Detection thresholds: 0 detections = 3 stars, 1 detection = 2 stars, 2+ detections = 1 star
+  DETECT_THRESHOLDS: { gold: 0, silver: 1, bronze: 2 },
+  // Completion bonus: 1 star just for completing
+  COMPLETION_STAR: 1
+};
+
 // ==================== SAVE MANAGER ====================
 const SAVE_KEY = 'ghostshift_save';
-const SAVE_VERSION = 5;
+const SAVE_VERSION = 6;
 
 // Schema definition for validation
 const SAVE_SCHEMA = {
@@ -647,6 +658,8 @@ const SAVE_SCHEMA = {
   },
   lastPlayed: { type: ['number', 'null'], min: 0, default: null },
   totalCreditsEarned: { type: 'number', min: 0, default: 0 },
+  // Mastery data: per-level stars/medals
+  mastery: { type: 'object', default: {} },
   saveVersion: { type: 'number', min: 1, default: SAVE_VERSION }
 };
 
@@ -666,6 +679,7 @@ const defaultSaveData = {
   },
   lastPlayed: null,
   totalCreditsEarned: 0,
+  mastery: {},
   saveVersion: SAVE_VERSION
 };
 
@@ -697,6 +711,12 @@ const SAVE_MIGRATIONS = {
   },
   // Migration from v4 to v5: Added saveVersion tracking
   5: (data) => {
+    data.saveVersion = SAVE_VERSION;
+    return data;
+  },
+  // Migration from v5 to v6: Added mastery/progression system
+  6: (data) => {
+    data.mastery = data.mastery || {};
     data.saveVersion = SAVE_VERSION;
     return data;
   }
@@ -990,6 +1010,100 @@ class SaveManager {
     this.addCredits(creditsEarned); 
     this.setBestTime(levelIndex, time); 
     if (levelIndex < LEVEL_LAYOUTS.length - 1) this.unlockLevel(levelIndex + 1); 
+  }
+  
+  // ==================== MASTERY SYSTEM ====================
+  getMastery(levelIndex) {
+    if (!this.data.mastery) this.data.mastery = {};
+    return this.data.mastery[levelIndex] || { 
+      stars: 0, 
+      stealthStar: false, 
+      speedStar: false, 
+      completions: 0,
+      bestTime: null,
+      detectionCount: null
+    };
+  }
+  
+  setMastery(levelIndex, masteryData) {
+    if (!this.data.mastery) this.data.mastery = {};
+    const current = this.getMastery(levelIndex);
+    
+    // Merge: keep best values
+    const updated = {
+      stars: Math.max(current.stars || 0, masteryData.stars || 0),
+      stealthStar: (current.stealthStar || masteryData.stealthStar) || false,
+      speedStar: (current.speedStar || masteryData.speedStar) || false,
+      completions: (current.completions || 0) + (masteryData.completions || 0),
+      bestTime: current.bestTime === null ? masteryData.bestTime : 
+                (masteryData.bestTime === null ? current.bestTime : 
+                Math.min(current.bestTime, masteryData.bestTime)),
+      detectionCount: current.detectionCount === null ? masteryData.detectionCount :
+                      (masteryData.detectionCount === null ? current.detectionCount :
+                      Math.min(current.detectionCount, masteryData.detectionCount))
+    };
+    
+    this.data.mastery[levelIndex] = updated;
+    this.save();
+    return updated;
+  }
+  
+  // Calculate medal/stars based on run performance
+  calculateMedal(levelIndex, runData) {
+    const { time, detections, success } = runData;
+    if (!success) {
+      return { stars: 0, stealthStar: false, speedStar: false };
+    }
+    
+    // Star 1: Completion (always awarded on success)
+    let stars = MASTERY_TIERS.COMPLETION_STAR;
+    
+    // Star 2: Speed star (complete under time threshold)
+    const speedThresholds = MASTERY_TIERS.SPEED_THRESHOLDS;
+    let speedStar = false;
+    if (time <= speedThresholds.gold) {
+      stars += 2;
+      speedStar = true;
+    } else if (time <= speedThresholds.silver) {
+      stars += 1;
+      speedStar = true;
+    } else if (time <= speedThresholds.bronze) {
+      stars += 1;
+    }
+    
+    // Star 3: Stealth/no-detection star
+    const detectThresholds = MASTERY_TIERS.DETECT_THRESHOLDS;
+    let stealthStar = false;
+    if (detections <= detectThresholds.gold) {
+      stars += 2;  // Total 5 stars for perfect stealth
+      stealthStar = true;
+    } else if (detections <= detectThresholds.silver) {
+      stars += 1;  // Total 4 stars
+      stealthStar = true;
+    } else if (detections <= detectThresholds.bronze) {
+      stars += 1;  // Total 3 stars
+    }
+    
+    return { 
+      stars: Math.min(stars, 5),  // Cap at 5 stars
+      stealthStar, 
+      speedStar 
+    };
+  }
+  
+  // Get total stars across all levels
+  getTotalStars() {
+    if (!this.data.mastery) return 0;
+    let total = 0;
+    for (const key in this.data.mastery) {
+      total += this.data.mastery[key].stars || 0;
+    }
+    return total;
+  }
+  
+  // Get max possible stars (5 per level)
+  getMaxStars() {
+    return LEVEL_LAYOUTS.length * 5;
   }
   
   resetSave() { 
@@ -1421,8 +1535,8 @@ class MainMenuScene extends Phaser.Scene {
       });
     }
     
-    // Animated background grid
-    this.createAnimatedBackground();
+    // Premium background using BackgroundComposer (hero variant)
+    this.backgroundComposer = new BackgroundComposer(this, { variant: 'hero' });
     
     // Title
     this.titleText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, 50, 'GHOSTSHIFT', { fontSize: '40px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
@@ -1442,6 +1556,12 @@ class MainMenuScene extends Phaser.Scene {
     if (saveManager.hasSave()) {
       this.add.text(40, 110, 'Runs: ' + saveManager.data.totalRuns + ' | Best: ' + this.formatTime(saveManager.data.bestTime), { fontSize: '12px', fill: '#888888', fontFamily: 'Courier New' });
     }
+    
+    // Total mastery stars display
+    const totalStars = saveManager.getTotalStars();
+    const maxStars = saveManager.getMaxStars();
+    const starsText = '⭐ ' + totalStars + '/' + maxStars + ' Stars';
+    this.add.text(40, 125, starsText, { fontSize: '12px', fill: '#ffdd00', fontFamily: 'Courier New' });
     
     // Credits
     this.creditsText = this.add.text(MAP_WIDTH * TILE_SIZE - 40, 20, 'Credits: ' + saveManager.data.credits, { fontSize: '16px', fill: '#ffaa00', fontFamily: 'Courier New' }).setOrigin(1, 0);
@@ -1997,12 +2117,16 @@ class MainMenuScene extends Phaser.Scene {
   
   // Cleanup listeners when scene is destroyed
   shutdown() {
-    // Clean up grid animation timer
+    // Clean up BackgroundComposer
+    if (this.backgroundComposer) {
+      this.backgroundComposer.destroy();
+      this.backgroundComposer = null;
+    }
+    // Legacy cleanup for old animation timers (if any)
     if (this._gridTimer) {
       this._gridTimer.remove();
       this._gridTimer = null;
     }
-    // Clean up particle animation timer
     if (this._particleTimer) {
       this._particleTimer.remove();
       this._particleTimer = null;
@@ -2027,8 +2151,8 @@ class LevelSelectScene extends Phaser.Scene {
     this._resizeListener = () => this._handleResize();
     fullscreenManager.on('resize', this._resizeListener);
     
-    // ========== MODERN CYBER-HEIST THEME BACKGROUND ==========
-    this.createCyberBackground();
+    // ========== Premium cyber-heist background ==========
+    this.backgroundComposer = new BackgroundComposer(this, { variant: 'tactical' });
     
     // Title
     this.add.text(MAP_WIDTH * TILE_SIZE / 2, 30, 'SELECT LEVEL', { fontSize: '28px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
@@ -2113,6 +2237,19 @@ class LevelSelectScene extends Phaser.Scene {
       
       this.add.text(MAP_WIDTH * TILE_SIZE / 2 - 100, y - 10, level.name, { fontSize: '14px', fill: isUnlocked ? '#ffffff' : '#444444', fontFamily: 'Courier New' }).setOrigin(0, 0.5);
       this.add.text(MAP_WIDTH * TILE_SIZE / 2 - 100, y + 10, 'Best: ' + (bestTime ? this.formatTime(bestTime) : '--:--'), { fontSize: '11px', fill: isUnlocked ? '#888888' : '#444444', fontFamily: 'Courier New' });
+      
+      // Add mastery stars display on level cards
+      if (isUnlocked) {
+        const mastery = saveManager.getMastery(index);
+        const stars = mastery?.stars || 0;
+        const starsText = '★'.repeat(stars) + '☆'.repeat(5 - stars);
+        this.add.text(MAP_WIDTH * TILE_SIZE / 2 + 80, y + 10, starsText, { 
+          fontSize: '10px', 
+          fill: stars > 0 ? '#ffdd00' : '#333344', 
+          fontFamily: 'Courier New' 
+        }).setOrigin(0.5);
+      }
+      
       this.add.text(MAP_WIDTH * TILE_SIZE / 2 + 140, y, isUnlocked ? '▶ PLAY' : '🔒 LOCKED', { fontSize: '12px', fill: isUnlocked ? '#44ff88' : '#444444', fontFamily: 'Courier New' }).setOrigin(0.5);
       
       // PROGRESION POLISH: Add hint for locked levels - show what unlocks it
@@ -2303,12 +2440,16 @@ class LevelSelectScene extends Phaser.Scene {
   
   // Cleanup timers and listeners when scene is destroyed
   shutdown() {
-    // Clean up grid animation timer
+    // Clean up BackgroundComposer
+    if (this.backgroundComposer) {
+      this.backgroundComposer.destroy();
+      this.backgroundComposer = null;
+    }
+    // Legacy cleanup (if any)
     if (this._gridTimer) {
       this._gridTimer.remove();
       this._gridTimer = null;
     }
-    // Clean up light accent timer
     if (this._lightTimer) {
       this._lightTimer.remove();
       this._lightTimer = null;
@@ -2864,6 +3005,13 @@ class ResultsScene extends Phaser.Scene {
     this.success = this.resultData.success || false;
     this.runTime = this.resultData.time || 0;
     this.credits = this.resultData.credits || 0;
+    this.detections = this.resultData.detections || 0;
+    // Calculate medal based on performance
+    this.medal = saveManager.calculateMedal(this.levelIndex, {
+      time: this.runTime,
+      detections: this.detections,
+      success: this.success
+    });
     setRuntimePhase('results:init', { sceneKey: this.scene.key, levelIndex: this.levelIndex });
   }
 
@@ -2898,6 +3046,100 @@ class ResultsScene extends Phaser.Scene {
     // Phase 6: Add level name indicator
     const levelName = LEVEL_LAYOUTS[this.levelIndex]?.name || `Level ${this.levelIndex + 1}`;
     const levelLabel = this.add.text(MAP_WIDTH * TILE_SIZE / 2, 95, levelName.toUpperCase(), { fontSize: '12px', fill: '#556677', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    
+    // ===== MASTERY MEDALS DISPLAY =====
+    const medalY = 115;
+    if (this.success) {
+      // Get current mastery for this level
+      const mastery = saveManager.getMastery(this.levelIndex);
+      const currentStars = mastery.stars || 0;
+      const earnedStars = this.medal.stars || 0;
+      const isNewBest = earnedStars > currentStars;
+      
+      // Medal/stars panel background
+      const medalBg = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, medalY, 350, 45, 0x1a2a3a);
+      medalBg.setStrokeStyle(2, isNewBest ? 0xffdd00 : 0x4488ff);
+      
+      // Animated border glow for new record
+      if (isNewBest) {
+        this.tweens.add({
+          targets: medalBg,
+          alpha: 0.7,
+          duration: 600,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut'
+        });
+      }
+      
+      // Stars display - 5 stars total
+      const starSpacing = 28;
+      const starStartX = MAP_WIDTH * TILE_SIZE / 2 - (2 * starSpacing);
+      
+      for (let i = 0; i < 5; i++) {
+        const starX = starStartX + (i * starSpacing);
+        const hasStar = i < earnedStars;
+        const starColor = hasStar ? (i < 2 ? '#ffdd00' : (i < 4 ? '#c0c0c0' : '#cd7f32')) : '#333344';
+        
+        const star = this.add.text(starX, medalY, '★', { 
+          fontSize: '24px', 
+          fill: starColor,
+          fontFamily: 'Courier New',
+          fontStyle: 'bold'
+        }).setOrigin(0.5);
+        
+        // Animate stars with delay
+        star.setAlpha(0);
+        star.setScale(0.5);
+        this.tweens.add({
+          targets: star,
+          alpha: 1,
+          scale: 1,
+          duration: 200,
+          delay: 300 + (i * 100),
+          ease: 'Back.easeOut'
+        });
+      }
+      
+      // Medal label
+      const medalLabelText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, medalY + 25, 
+        isNewBest ? `NEW RECORD: ${earnedStars}/5 STARS!` : `MASTERY: ${earnedStars}/5 STARS`, 
+        { fontSize: '11px', fill: isNewBest ? '#ffdd00' : '#88aacc', fontFamily: 'Courier New', fontStyle: 'bold' }
+      ).setOrigin(0.5);
+      
+      // Animate medal label
+      medalLabelText.setAlpha(0);
+      this.tweens.add({
+        targets: medalLabelText,
+        alpha: 1,
+        duration: 300,
+        delay: 800
+      });
+      
+      // Show achievement badges below
+      const badgeY = medalY + 42;
+      let badgeX = MAP_WIDTH * TILE_SIZE / 2 - 80;
+      
+      if (this.medal.stealthStar) {
+        const badge = this.add.text(badgeX, badgeY, '🥷 STEALTH', { fontSize: '10px', fill: '#44ff88', fontFamily: 'Courier New' }).setOrigin(0, 0.5);
+        badge.setAlpha(0);
+        this.tweens.add({ targets: badge, alpha: 1, duration: 200, delay: 900 });
+        badgeX += 80;
+      }
+      
+      if (this.medal.speedStar) {
+        const badge = this.add.text(badgeX, badgeY, '⚡ SPEED', { fontSize: '10px', fill: '#66aaff', fontFamily: 'Courier New' }).setOrigin(0, 0.5);
+        badge.setAlpha(0);
+        this.tweens.add({ targets: badge, alpha: 1, duration: 200, delay: 1000 });
+      }
+    } else {
+      // Failed run - show "try again" message with mastery hint
+      const failText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, medalY, 'Complete the level to earn stars!', { 
+        fontSize: '12px', fill: '#666677', fontFamily: 'Courier New' 
+      }).setOrigin(0.5);
+      failText.setAlpha(0);
+      this.tweens.add({ targets: failText, alpha: 1, duration: 300, delay: 300 });
+    }
     
     // Stats panel
     const statsY = 140;
@@ -3483,7 +3725,8 @@ class GameScene extends Phaser.Scene {
     this.timerText = null; this.runText = null; this.objectiveText = null;
     this.statusText = null; this.creditsText = null; this.perksText = null;
     this.elapsedTime = 0; this.isRunning = false; this.isPaused = false;
-    this.isDetected = false; this.hasDataCore = false; this.hasKeyCard = false; this.isHacking = false; this.hackProgress = 0;
+    this.isDetected = false; this.detectionCount = 0; // Track detections for mastery
+    this.hasDataCore = false; this.hasKeyCard = false; this.isHacking = false; this.hackProgress = 0;
     this.hackStage = 0; // 0=not started, 1=primary hacked, 2=relay hacked (if relay exists)
     this.currentRun = []; this.previousRun = null; this.ghostFrame = 0;
     this.guardPatrolPoints = []; this.currentPatrolIndex = 0; this.guardAngle = 0;
@@ -3491,6 +3734,12 @@ class GameScene extends Phaser.Scene {
     this.warningIndicator = null; // Phase 12: Proximity warning
     this._proximityWarningActive = false;
     this._proximityIntensity = 0;
+    // Phase 13: Guard awareness system - pre-alert states for fairness
+    this.guardAwareness = 0; // 0=calm, 1=suspicious, 2=alerted, 3=detected
+    this.guardAwarenessIndicator = null; // Visual indicator above guard
+    this.preAlertTimer = 0; // Countdown before detection
+    this.preAlertDuration = 800; // ms - time player has to react in pre-alert
+    this.isPreAlerting = false; // Currently in pre-alert phase
     this.scannerAngle = 0; this.applySpeedBoost = false; this.applyStealth = false;
     this.hasWon = false;
     this._restarted = false;
@@ -3530,6 +3779,10 @@ class GameScene extends Phaser.Scene {
     this.currentVisionDistance = getVisionConeDistanceForLevel(this.levelDifficulty);
     this.currentVisionAngle = getVisionConeAngleForLevel(this.levelDifficulty);
     this.currentMotionCooldown = getMotionSensorCooldownForLevel(this.levelDifficulty);
+    // Phase 12: Initialize alarm timer if level has one
+    this.alarmTimer = this.currentLayout.alarmTimer || null;
+    this.alarmTriggered = false;
+    this.alarmRemaining = this.alarmTimer;
     this.createMap();
     this.createEntities();
     this.createUI();
@@ -3613,6 +3866,10 @@ class GameScene extends Phaser.Scene {
     this.physics.add.existing(this.guard);
     this.guard.body.setCollideWorldBounds(true);
     this.guardPatrolPoints = this.currentLayout.guardPatrol.map(p => ({ x: p.x * TILE_SIZE, y: p.y * TILE_SIZE }));
+
+    // Phase 13: Guard awareness indicator - shows guard's current awareness state
+    this.guardAwarenessIndicator = this.add.graphics();
+    this.guardAwarenessIndicator.setDepth(50); // Above guard
 
     this.createScannerDrone();
     this.createCameras();
@@ -3857,6 +4114,12 @@ class GameScene extends Phaser.Scene {
     const diffColor = this.levelDifficulty === 1 ? '#44ff88' : (this.levelDifficulty === 2 ? '#ffaa00' : '#ff4444');
     const diffLabel = this.levelDifficulty === 1 ? 'EASY' : (this.levelDifficulty === 2 ? 'MEDIUM' : 'HARD');
     this.difficultyText = this.add.text(MAP_WIDTH * TILE_SIZE - 10, 10, diffLabel, { fontSize: '12px', fill: diffColor, fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(1, 0);
+    // Phase 12: Add alarm timer display if level has one
+    if (this.alarmTimer !== null) {
+      this.alarmText = this.add.text(MAP_WIDTH * TILE_SIZE - 10, 30, `⏰ ALARM: ${this.alarmTimer}s`, { fontSize: '12px', fill: '#ffaa00', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(1, 0);
+    } else {
+      this.alarmText = null;
+    }
     this.add.text(10, MAP_HEIGHT * TILE_SIZE - 25, 'ARROWS/WASD: Move | R: Restart | ESC: Pause', { fontSize: '10px', fill: '#444455', fontFamily: 'Courier New' });
   }
 
@@ -3898,9 +4161,13 @@ class GameScene extends Phaser.Scene {
     }
     
     // Show difficulty hint
-    const diffHint = this.levelDifficulty === 1 ? '🤖 Easy - Guards move slowly' : 
-                     this.levelDifficulty === 2 ? '⚠️ Medium - Stay out of sight!' : 
-                     '🔥 Hard - Use stealth perks!';
+    let diffHint = this.levelDifficulty === 1 ? '🤖 Easy - Guards move slowly' : 
+                   this.levelDifficulty === 2 ? '⚠️ Medium - Stay out of sight!' : 
+                   '🔥 Hard - Use stealth perks!';
+    // Phase 12: Add alarm hint if level has one
+    if (this.alarmTimer !== null) {
+      diffHint += ` | ⏰ Alarm in ${this.alarmTimer}s!`;
+    }
     
     // Create briefing overlay
     const panelWidth = 500;
@@ -4255,6 +4522,10 @@ class GameScene extends Phaser.Scene {
     this.checkScannerDetection();
     this.checkCameraDetection();
     this.checkProximityWarning();
+    
+    // Phase 13: Update guard awareness system
+    this.updateGuardAwareness();
+    
     perfManager.endMarker('checkDetection');
     
     // Record frame time
@@ -4272,11 +4543,61 @@ class GameScene extends Phaser.Scene {
     const minutes = Math.floor(time / 60000);
     const seconds = Math.floor((time % 60000) / 1000);
     const ms = Math.floor((time % 1000) / 10);
+    
+    // Phase 12: Update alarm timer display and check for alarm trigger
+    if (this.alarmTimer !== null && !this.alarmTriggered) {
+      const alarmElapsed = time / 1000; // Convert to seconds
+      this.alarmRemaining = Math.max(0, this.alarmTimer - alarmElapsed);
+      
+      // Update alarm display
+      if (this.alarmText) {
+        if (this.alarmRemaining > 0) {
+          this.alarmText.setText(`⏰ ALARM: ${Math.ceil(this.alarmRemaining)}s`);
+          // Flash red when less than 10 seconds
+          if (this.alarmRemaining <= 10) {
+            this.alarmText.setFill(this.alarmRemaining % 2 < 1 ? '#ff0000' : '#ffaa00');
+          } else {
+            this.alarmText.setFill('#ffaa00');
+          }
+        } else {
+          this.alarmText.setText('🚨 ALARM TRIGGERED!');
+          this.alarmText.setFill('#ff0000');
+          // Trigger alarm state
+          this.triggerAlarm();
+        }
+      }
+    }
+    
     this.timerText.setText(
       (minutes < 10 ? '0' : '') + minutes + ':' +
       (seconds < 10 ? '0' : '') + seconds + '.' +
       (ms < 10 ? '0' : '') + ms
     );
+  }
+  
+  // Phase 12: Handle alarm trigger - boost guard speed and show visual feedback
+  triggerAlarm() {
+    if (this.alarmTriggered) return;
+    this.alarmTriggered = true;
+    
+    // Boost guard speed by 50% when alarm triggers
+    this.currentGuardSpeed = this.currentGuardSpeed * 1.5;
+    
+    // Update guard speed if already initialized
+    if (this.guard && this.guard.body) {
+      const currentDir = this.guard.body.velocity.clone();
+      this.guard.body.setVelocity(currentDir.length() * 1.5);
+    }
+    
+    // Play alarm sound effect (if available)
+    if (this.alarmSound) {
+      this.alarmSound.play();
+    }
+    
+    // Visual feedback - flash screen red
+    if (this.cameras && this.cameras.main) {
+      this.cameras.main.flash(500, 255, 0, 0);
+    }
   }
 
   updatePlayer() {
@@ -4577,6 +4898,12 @@ class GameScene extends Phaser.Scene {
     this.visionGraphics.closePath();
     this.visionGraphics.fillPath();
     
+    // Phase 13: Add edge markers for clearer danger zone
+    const edgeAlpha = this._proximityWarningActive ? 0.8 : 0.4;
+    this.visionGraphics.lineStyle(2, 0xff6644, edgeAlpha);
+    this.visionGraphics.lineBetween(tipX, tipY, leftX, leftY);
+    this.visionGraphics.lineBetween(tipX, tipY, rightX, rightY);
+    
     // Inner cone (brighter danger zone) - also intensifies with proximity
     const innerAlpha = this._proximityWarningActive ? pulseAlpha * 1.5 : pulseAlpha * 1.0;
     this.visionGraphics.fillStyle(0xff4422, Math.min(1.0, innerAlpha));
@@ -4613,7 +4940,7 @@ class GameScene extends Phaser.Scene {
     
     // Direct collision (20px radius squared = 400)
     if (sqDist < this._DETECTION_SQUARED) { 
-      this.detected(); 
+      this.startPreAlert(); // Phase 13: Use pre-alert for fairness
       return; 
     }
     
@@ -4628,8 +4955,8 @@ class GameScene extends Phaser.Scene {
       while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
       while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
       if (Math.abs(angleDiff) < this.currentVisionAngle / 2) {
-        if (!this.isLineBlocked(this.guard.x, this.guard.y, this.player.x, this.player.y)) {
-          this.detected();
+        if (!this.isLineBlocked(this.guard.x, this.guard.y, this.player.x, this.player.x)) {
+          this.startPreAlert(); // Phase 13: Use pre-alert for fairness
         }
       }
     }
@@ -4642,7 +4969,7 @@ class GameScene extends Phaser.Scene {
     
     // Direct collision (30px radius squared = 900)
     if (sqDist < this._SCANNER_DETECT_SQUARED) { 
-      this.detected(); 
+      this.startPreAlert(); // Phase 13: Use pre-alert for fairness
       return; 
     }
     
@@ -4653,7 +4980,7 @@ class GameScene extends Phaser.Scene {
       while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
       while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
       if (Math.abs(angleDiff) < 0.3) {
-        this.detected();
+        this.startPreAlert(); // Phase 13: Use pre-alert for fairness
       }
     }
   }
@@ -4667,7 +4994,7 @@ class GameScene extends Phaser.Scene {
       
       // Direct collision (25px radius squared = 625)
       if (sqDist < camDetectSq) { 
-        this.detected(); 
+        this.startPreAlert(); // Phase 13: Use pre-alert for fairness
         return; 
       }
       
@@ -4678,7 +5005,7 @@ class GameScene extends Phaser.Scene {
         while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
         if (Math.abs(angleDiff) < 0.25) {
           if (!this.isLineBlocked(cam.x, cam.y, this.player.x, this.player.y)) {
-            this.detected();
+            this.startPreAlert(); // Phase 13: Use pre-alert for fairness
           }
         }
       }
@@ -4717,6 +5044,12 @@ class GameScene extends Phaser.Scene {
         this._showProximityWarning(sqDist, warningDistSq);
         return;
       }
+    }
+    
+    // Player is safe - clear pre-alert if active
+    if (this.isPreAlerting) {
+      this.isPreAlerting = false;
+      this.preAlertTimer = 0;
     }
     
     this._clearProximityWarning();
@@ -4773,6 +5106,94 @@ class GameScene extends Phaser.Scene {
     this._proximityIntensity = 0;
   }
 
+  // Phase 13: Pre-alert system - gives player warning before detection
+  startPreAlert() {
+    if (this.isPreAlerting || this.isDetected) return;
+    
+    this.isPreAlerting = true;
+    this.preAlertTimer = this.preAlertDuration;
+    this.guardAwareness = 2; // Alerted state
+    
+    // Play pre-alert sound cue (quieter than full detection)
+    if (sfx && sfx.alert) {
+      sfx.alert();
+    }
+  }
+
+  // Update guard awareness state and handle pre-alert countdown
+  updateGuardAwareness() {
+    if (!this.guard || !this.player || this.isDetected) {
+      this._clearGuardAwareness();
+      return;
+    }
+    
+    // Update pre-alert countdown
+    if (this.isPreAlerting) {
+      this.preAlertTimer -= 16; // Approximate frame time
+      if (this.preAlertTimer <= 0) {
+        // Pre-alert expired - trigger detection
+        this.detected();
+        return;
+      }
+    }
+    
+    // Update guard awareness indicator
+    this._updateGuardAwarenessIndicator();
+  }
+
+  _updateGuardAwarenessIndicator() {
+    if (!this.guardAwarenessIndicator || !this.guard) return;
+    
+    this.guardAwarenessIndicator.clear();
+    
+    // Determine awareness color and state
+    let color, size, alpha;
+    
+    if (this.isPreAlerting) {
+      // Pre-alert: flashing orange/red
+      const flash = Math.sin(this.time.now / 50) * 0.5 + 0.5;
+      color = flash > 0.5 ? 0xff4400 : 0xffaa00;
+      size = 8 + flash * 4;
+      alpha = 0.9;
+      this.guardAwareness = 2; // Alerted
+    } else if (this._proximityWarningActive) {
+      // Suspicious: yellow/orange
+      color = 0xffaa00;
+      size = 6;
+      alpha = 0.7;
+      this.guardAwareness = 1; // Suspicious
+    } else {
+      // Calm: subtle green
+      color = 0x44ff44;
+      size = 4;
+      alpha = 0.5;
+      this.guardAwareness = 0; // Calm
+    }
+    
+    // Draw indicator above guard
+    const gx = this.guard.x;
+    const gy = this.guard.y - TILE_SIZE / 2 - 10;
+    
+    this.guardAwarenessIndicator.fillStyle(color, alpha);
+    this.guardAwarenessIndicator.fillCircle(gx, gy, size);
+    
+    // Draw direction line showing where guard is looking
+    const lineLength = 15;
+    const endX = gx + Math.cos(this.guardAngle) * lineLength;
+    const endY = gy + Math.sin(this.guardAngle) * lineLength;
+    this.guardAwarenessIndicator.lineStyle(2, color, alpha * 0.8);
+    this.guardAwarenessIndicator.lineBetween(gx, gy, endX, endY);
+  }
+
+  _clearGuardAwareness() {
+    if (this.guardAwarenessIndicator) {
+      this.guardAwarenessIndicator.clear();
+    }
+    this.isPreAlerting = false;
+    this.preAlertTimer = 0;
+    this.guardAwareness = 0;
+  }
+
   isLineBlocked(x1, y1, x2, y2) {
     const steps = 10;
     for (let i = 1; i < steps; i++) {
@@ -4791,6 +5212,9 @@ class GameScene extends Phaser.Scene {
   detected() {
     if (this.isDetected) return;
     this.isDetected = true;
+    this.isPreAlerting = false; // Phase 13: Clear pre-alert state
+    this.preAlertTimer = 0;
+    this.detectionCount++; // Track detection for mastery
     // Don't pause physics completely - just stop player movement
     // This allows keyboard handlers to still work
     if (this.player?.body) this.player.body.setVelocity(0);
@@ -4861,7 +5285,8 @@ class GameScene extends Phaser.Scene {
           levelIndex: levelIdx,
           success: false,
           time: sceneRef.elapsedTime,
-          credits: 0
+          credits: 0,
+          detections: sceneRef.detectionCount
         }, { via: 'detected' });
       }
     }, callbackScope: this });
@@ -4873,6 +5298,17 @@ class GameScene extends Phaser.Scene {
     sfx.win();
     const timeBonus = Math.max(0, 30000 - Math.floor(this.elapsedTime));
     const creditsEarned = 20 + Math.floor(timeBonus / 1000) + getLuckBonus();
+    
+    // Calculate and save mastery for this run
+    const masteryData = {
+      stars: 0, // Will be calculated in ResultsScene
+      stealthStar: false,
+      speedStar: false,
+      completions: 1,
+      bestTime: this.elapsedTime,
+      detectionCount: this.detectionCount
+    };
+    saveManager.setMastery(this.currentLevelIndex, masteryData);
     
     // Use SaveManager to properly record the run and unlock levels
     saveManager.recordRun(this.currentLevelIndex, this.elapsedTime, creditsEarned);
@@ -4898,7 +5334,8 @@ class GameScene extends Phaser.Scene {
         levelIndex: this.currentLevelIndex,
         success: true, 
         time: this.elapsedTime, 
-        credits: creditsEarned 
+        credits: creditsEarned,
+        detections: this.detectionCount
       }, { via: 'winGame' });
     }
   }
