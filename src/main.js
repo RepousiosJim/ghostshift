@@ -660,7 +660,15 @@ class MainMenuScene extends Phaser.Scene {
     super({ key: 'MainMenuScene' });
   }
 
-  create() {
+  create(data) {
+    // Check if we should show How to Play from ControlsScene transition
+    if (data?.showHowToPlay) {
+      // Delay slightly to ensure scene is fully created
+      this.time.delayedCall(100, () => {
+        this.showHowToPlayOverlay();
+      });
+    }
+    
     // Animated background grid
     this.createAnimatedBackground();
     
@@ -704,7 +712,7 @@ class MainMenuScene extends Phaser.Scene {
     this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 2, buttonWidth, buttonHeight, '📖  HOW TO PLAY', 0x1a3a5a, 0x66ccff, () => this.showHowToPlayOverlay());
     
     // Controls and other menu items
-    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 3, buttonWidth, buttonHeight, '🎮  CONTROLS', 0x2a3a4a, 0xaaaacc, () => this.showControlsOverlay());
+    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 3, buttonWidth, buttonHeight, '🎮  CONTROLS', 0x2a3a4a, 0xaaaacc, () => this.transitionTo('ControlsScene'));
     this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 4, buttonWidth, buttonHeight, '⚙  SETTINGS', 0x2a3a4a, 0xaaaacc, () => this.transitionTo('SettingsScene'));
     this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 5, buttonWidth, buttonHeight, '★  CREDITS', 0x2a3a4a, 0xaaaacc, () => this.showCreditsOverlay());
     
@@ -855,24 +863,6 @@ class MainMenuScene extends Phaser.Scene {
     });
     
     return { bg, label };
-  }
-  
-  showControlsOverlay() {
-    const overlay = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x000000, 0.9);
-    overlay.setDepth(100);
-    const panel = this.add.container(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2);
-    panel.setDepth(101);
-    const bg = this.add.rectangle(0, 0, 400, 300, 0x1a1a2a);
-    bg.setStrokeStyle(2, 0x4488ff);
-    panel.add(bg);
-    panel.add(this.add.text(0, -120, 'CONTROLS', { fontSize: '24px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5));
-    const controls = [{ key: 'WASD / Arrows', action: 'Move player' }, { key: 'R', action: 'Restart level' }, { key: 'ESC', action: 'Pause game' }, { key: 'SPACE', action: 'Start game' }];
-    let yOffset = -80;
-    controls.forEach(c => { panel.add(this.add.text(-150, yOffset, c.key, { fontSize: '14px', fill: '#ffaa00', fontFamily: 'Courier New' }).setOrigin(0, 0.5)); panel.add(this.add.text(50, yOffset, c.action, { fontSize: '14px', fill: '#cccccc', fontFamily: 'Courier New' }).setOrigin(0, 0.5)); yOffset += 30; });
-    panel.add(this.add.text(0, 110, '[ Press any key or click to close ]', { fontSize: '12px', fill: '#666688', fontFamily: 'Courier New' }).setOrigin(0.5));
-    const closeHandler = () => { this.input.keyboard.off('keydown', closeHandler); this.input.off('pointerdown', closeHandler); overlay.destroy(); panel.destroy(); };
-    this.input.keyboard.on('keydown', closeHandler);
-    this.input.on('pointerdown', closeHandler);
   }
   
   // Phase 7: Kid-friendly How to Play guide
@@ -1372,6 +1362,210 @@ class SettingsScene extends Phaser.Scene {
   }
 }
 
+// ==================== CONTROLS SCENE ====================
+class ControlsScene extends Phaser.Scene {
+  constructor() {
+    super({ key: 'ControlsScene' });
+  }
+
+  create() {
+    // Background
+    this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
+    
+    // Animated grid
+    this.gridGraphics = this.add.graphics();
+    this.gridOffset = 0;
+    this.time.addEvent({
+      delay: 50,
+      callback: () => {
+        this.gridOffset = (this.gridOffset + 0.3) % 32;
+        this.drawGrid();
+      },
+      loop: true
+    });
+    
+    // Title
+    this.add.text(MAP_WIDTH * TILE_SIZE / 2, 30, '🎮 CONTROLS', { fontSize: '28px', fill: '#66ccff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    
+    // Back button
+    const backBtn = this.add.text(20, 15, '< BACK', { fontSize: '14px', fill: '#888888', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
+    backBtn.on('pointerover', () => backBtn.setFill('#ffffff'));
+    backBtn.on('pointerout', () => backBtn.setFill('#888888'));
+    backBtn.on('pointerdown', () => {
+      sfx.click();
+      this.transitionTo('MainMenuScene');
+    });
+    
+    // Keyboard shortcut for back
+    this.input.keyboard.on('keydown-ESC', () => {
+      sfx.click();
+      this.transitionTo('MainMenuScene');
+    });
+    
+    // Scrollable content container
+    const panelWidth = 520;
+    const panelHeight = 440;
+    const startY = 85;
+    
+    // Movement controls section
+    this.add.text(40, startY, '🚶 MOVEMENT', { fontSize: '16px', fill: '#ffdd00', fontFamily: 'Courier New', fontStyle: 'bold' });
+    
+    const movementControls = [
+      { keys: 'W / ↑', action: 'Move Up', example: 'Walk forward' },
+      { keys: 'S / ↓', action: 'Move Down', example: 'Walk backward' },
+      { keys: 'A / ←', action: 'Move Left', example: 'Go left' },
+      { keys: 'D / →', action: 'Move Right', example: 'Go right' }
+    ];
+    
+    let yPos = startY + 30;
+    movementControls.forEach(ctrl => {
+      this.createKeybindRow(40, yPos, ctrl.keys, ctrl.action, ctrl.example, '#00d4ff');
+      yPos += 32;
+    });
+    
+    // Game controls section
+    yPos += 15;
+    this.add.text(40, yPos, '🎯 GAME ACTIONS', { fontSize: '16px', fill: '#ffdd00', fontFamily: 'Courier New', fontStyle: 'bold' });
+    yPos += 30;
+    
+    const gameControls = [
+      { keys: 'R', action: 'Restart Level', example: 'Try again if caught' },
+      { keys: 'ESC', action: 'Pause Game', example: 'Take a break' },
+      { keys: 'SPACE', action: 'Start/Confirm', example: 'Begin your mission' },
+      { keys: 'M', action: 'Main Menu', example: 'Return to title' }
+    ];
+    
+    gameControls.forEach(ctrl => {
+      this.createKeybindRow(40, yPos, ctrl.keys, ctrl.action, ctrl.example, '#66ff88');
+      yPos += 32;
+    });
+    
+    // Mouse/Touch section
+    yPos += 15;
+    this.add.text(40, yPos, '🖱️ MOUSE', { fontSize: '16px', fill: '#ffdd00', fontFamily: 'Courier New', fontStyle: 'bold' });
+    yPos += 30;
+    
+    const mouseControls = [
+      { keys: 'Click', action: 'Select/Interact', example: 'Press buttons' },
+      { keys: 'Hover', action: 'Highlight', example: 'See button glow' }
+    ];
+    
+    mouseControls.forEach(ctrl => {
+      this.createKeybindRow(40, yPos, ctrl.keys, ctrl.action, ctrl.example, '#ff88ff');
+      yPos += 32;
+    });
+    
+    // Tips section
+    yPos += 20;
+    const tipsBox = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, yPos + 40, panelWidth, 90, 0x1a2a3a);
+    tipsBox.setStrokeStyle(2, 0x4488ff);
+    this.add.text(MAP_WIDTH * TILE_SIZE / 2, yPos + 10, '💡 PRO TIPS', { fontSize: '14px', fill: '#66ccff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    
+    const tips = [
+      '• Move diagonally by pressing two arrow keys at once',
+      '• Stay in shadows to avoid detection!',
+      '• Press R quickly to restart if you get caught'
+    ];
+    
+    tips.forEach((tip, i) => {
+      this.add.text(40, yPos + 30 + (i * 18), tip, { fontSize: '12px', fill: '#aaaaaa', fontFamily: 'Courier New' });
+    });
+    
+    // How to Play link
+    yPos += 110;
+    const howToPlayBtn = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, yPos, 280, 45, 0x1a3a5a);
+    howToPlayBtn.setStrokeStyle(2, 0x66ccff);
+    howToPlayBtn.setInteractive({ useHandCursor: true });
+    this.add.text(MAP_WIDTH * TILE_SIZE / 2, yPos, '📖 View How to Play Guide', { fontSize: '14px', fill: '#66ccff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    
+    howToPlayBtn.on('pointerover', () => {
+      howToPlayBtn.setFillStyle(0x2a4a6a);
+      howToPlayBtn.setStrokeStyle(2, 0xffffff);
+    });
+    howToPlayBtn.on('pointerout', () => {
+      howToPlayBtn.setFillStyle(0x1a3a5a);
+      howToPlayBtn.setStrokeStyle(2, 0x66ccff);
+    });
+    howToPlayBtn.on('pointerdown', () => {
+      sfx.click();
+      // Show How to Play overlay from Controls page
+      this.showHowToPlayOverlay();
+    });
+    
+    // Version info
+    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE - 20, 'GhostShift v0.6.0 - Controls', { fontSize: '11px', fill: '#444455', fontFamily: 'Courier New' }).setOrigin(0.5);
+    
+    this.input.keyboard.once('keydown', () => sfx.init());
+    this.input.on('pointerdown', () => sfx.init(), this);
+  }
+  
+  createKeybindRow(x, y, keys, action, example, keyColor) {
+    // Key badge
+    const keyWidth = keys.length * 10 + 20;
+    const keyBg = this.add.rectangle(x + keyWidth/2, y, keyWidth, 24, 0x2a2a3a);
+    keyBg.setStrokeStyle(2, keyColor);
+    const keyText = this.add.text(x + keyWidth/2, y, keys, { fontSize: '12px', fill: keyColor, fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    
+    // Action name
+    const actionX = x + keyWidth + 20;
+    this.add.text(actionX, y, action, { fontSize: '13px', fill: '#ffffff', fontFamily: 'Courier New' }).setOrigin(0, 0.5);
+    
+    // Example (kid-friendly)
+    const exampleX = x + keyWidth + 160;
+    this.add.text(exampleX, y, example, { fontSize: '12px', fill: '#888888', fontFamily: 'Courier New', fontStyle: 'italic' }).setOrigin(0, 0.5);
+  }
+  
+  showHowToPlayOverlay() {
+    // First transition back to main menu, then show How to Play
+    // We need to pass a flag to show How to Play after transition
+    this.transitionTo('MainMenuScene', { showHowToPlay: true });
+  }
+  
+  drawGrid() {
+    this.gridGraphics.clear();
+    this.gridGraphics.lineStyle(1, 0x1a1a2a, 0.3);
+    for (let x = 0; x <= MAP_WIDTH; x++) {
+      this.gridGraphics.lineBetween(x * 32, 0, x * 32, MAP_HEIGHT * TILE_SIZE);
+    }
+    for (let y = 0; y <= MAP_HEIGHT; y++) {
+      this.gridGraphics.lineBetween(0, y * 32, MAP_WIDTH * TILE_SIZE, y * 32);
+    }
+  }
+  
+  transitionTo(sceneKey, data = null) {
+    const { width, height } = this.scale;
+    const cx = width / 2;
+    const cy = height / 2;
+    
+    const overlay = this.add.rectangle(cx, cy, width, height, 0x000000);
+    overlay.setDepth(100);
+    overlay.setAlpha(0);
+    
+    this.tweens.add({
+      targets: overlay,
+      alpha: 1,
+      duration: 200,
+      ease: 'Quad.easeIn',
+      onComplete: () => {
+        if (data) {
+          this.scene.start(sceneKey, data);
+        } else {
+          this.scene.start(sceneKey);
+        }
+        this.time.delayedCall(50, () => {
+          this.tweens.add({
+            targets: overlay,
+            alpha: 0,
+            duration: 200,
+            ease: 'Quad.easeOut',
+            onComplete: () => overlay.destroy()
+          });
+        });
+      }
+    });
+  }
+}
+
 // ==================== RESULTS SCENE ====================
 class ResultsScene extends Phaser.Scene {
   constructor() { super({ key: 'ResultsScene' }); }
@@ -1809,7 +2003,7 @@ class GameScene extends Phaser.Scene {
     
     // Patrol drone collision
     this.patrolDrones.forEach(drone => {
-      this.physics.add.overlap(this.player, drone.body, () => this.detected(), null, this);
+      this.physics.add.overlap(this.player, drone.sprite, () => this.detected(), null, this);
     });
 
     this.cursors = this.input.keyboard.createCursorKeys();
@@ -1845,7 +2039,7 @@ class GameScene extends Phaser.Scene {
       
       const patrolPoints = config.patrol.map(p => ({ x: p.x * TILE_SIZE, y: p.y * TILE_SIZE }));
       this.patrolDrones.push({
-        body: drone,
+        sprite: drone,
         patrolPoints: patrolPoints,
         patrolIndex: 0,
         speed: 60
@@ -2256,19 +2450,19 @@ class GameScene extends Phaser.Scene {
   updatePatrolDrones() {
     this.patrolDrones.forEach(drone => {
       const target = drone.patrolPoints[drone.patrolIndex];
-      const dx = target.x - drone.body.x;
-      const dy = target.y - drone.body.y;
+      const dx = target.x - drone.sprite.x;
+      const dy = target.y - drone.sprite.y;
       const dist = Math.sqrt(dx * dx + dy * dy);
       
       if (dist < 5) {
         drone.patrolIndex = (drone.patrolIndex + 1) % drone.patrolPoints.length;
       } else {
         const speed = drone.speed;
-        drone.body.setVelocity((dx / dist) * speed, (dy / dist) * speed);
+        drone.sprite.body.setVelocity((dx / dist) * speed, (dy / dist) * speed);
       }
       
       // Rotate towards movement direction
-      drone.body.rotation = Math.atan2(dy, dx);
+      drone.sprite.rotation = Math.atan2(dy, dx);
     });
   }
 
@@ -2505,7 +2699,7 @@ const config = {
     default: 'arcade',
     arcade: { debug: false }
   },
-  scene: [BootScene, MainMenuScene, LevelSelectScene, SettingsScene, ResultsScene, GameScene]
+  scene: [BootScene, MainMenuScene, LevelSelectScene, SettingsScene, ResultsScene, ControlsScene, GameScene]
 };
 
 const game = new Phaser.Game(config);
