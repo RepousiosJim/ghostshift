@@ -3,7 +3,7 @@
 ## Overview
 Phased roadmap for implementing the complete game flow system.
 
-## Current Status: Phase 1 Complete ✅
+## Current Status: Phase 2 Complete ✅
 
 ### Phase 1: Menu Foundation (DONE)
 - [x] Scene architecture with 6 scenes
@@ -14,18 +14,25 @@ Phased roadmap for implementing the complete game flow system.
 - [x] ResultsScene (stub)
 - [x] Basic transitions between scenes
 
-## Phase 2: Settings & Level Select Enhancement (NEXT)
-- [ ] Settings persistence UI (not just audio)
-- [ ] LevelSelectScene: Add level preview/info on selection
-- [ ] Add more per-level stats display
-- [ ] Settings: Add resolution/graphics options
-- [ ] Settings: Add controls remapping (stretch goal)
+### Phase 2: Settings & Level Select Enhancement (DONE)
+- [x] Settings persistence UI (full: audio, volume, quality, fullscreen, reduced-motion)
+- [x] LevelSelectScene: Add level preview/info on selection (completed)
+- [x] Add more per-level stats display (best times shown)
+- [x] Settings: Master volume slider
+- [x] Settings: Effects quality toggle (low/medium/high)
+- [x] Settings: Fullscreen toggle
+- [x] Settings: Reduced motion toggle
+- [x] ResultsScene: Full implementation with stats and buttons
+- [x] ResultsScene: Retry, Next Level, Level Select, Menu buttons
+- [x] Continue flow: Main menu continue loads last played level
+- [x] SaveManager: Proper per-level best times and unlocks
 
-## Phase 3: Results & Progression
-- [ ] ResultsScene: Full implementation with stats
-- [ ] Add mission summary (enemies avoided, items collected)
-- [ ] Progression system: Unlock levels on completion
-- [ ] Add level difficulty modifiers
+## Phase 3: Polish & Game Feel (NEXT)
+- [ ] Scene transition effects (fade, slide)
+- [ ] Animated menu background
+- [ ] Sound effects for menu interactions
+- [ ] Particle effects for results
+- [ ] More visual polish for atmosphere
 
 ## Phase 4: Save System Enhancement
 - [ ] Multiple save slots

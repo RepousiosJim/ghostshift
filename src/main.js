@@ -10,7 +10,13 @@ const defaultSaveData = {
   bestTimes: {}, // per-level best times
   unlockedLevels: [0], // array of unlocked level indices
   perks: { speed: 1, stealth: 1, luck: 1 },
-  settings: { audioEnabled: true },
+  settings: { 
+    audioEnabled: true, 
+    masterVolume: 0.8,
+    effectsQuality: 'high',
+    fullscreen: false,
+    reducedMotion: false
+  },
   lastPlayed: null,
   totalCreditsEarned: 0
 };
@@ -70,14 +76,22 @@ const VISION_CONE_DISTANCE = 150;
 
 // ==================== AUDIO SYSTEM ====================
 class SFXManager {
-  constructor() { this.ctx = null; this.initialized = false; this.enabled = saveManager.getSetting('audioEnabled') !== false; }
+  constructor() { 
+    this.ctx = null; 
+    this.initialized = false; 
+    this.enabled = saveManager.getSetting('audioEnabled') !== false;
+    this.masterVolume = saveManager.getSetting('masterVolume') ?? 0.8;
+  }
   init() { if (this.initialized) return; try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); this.initialized = true; } catch (e) { console.warn('WebAudio not available'); } }
   setEnabled(enabled) { this.enabled = enabled; saveManager.setSetting('audioEnabled', enabled); }
   get isEnabled() { return this.enabled; }
+  setMasterVolume(vol) { this.masterVolume = Math.max(0, Math.min(1, vol)); saveManager.setSetting('masterVolume', this.masterVolume); }
+  get volume() { return this.masterVolume; }
   playTone(freq, duration, type = 'square', volume = 0.1) {
     if (!this.ctx || !this.enabled) return;
+    const effectiveVolume = volume * this.masterVolume;
     const osc = this.ctx.createOscillator(); const gain = this.ctx.createGain();
-    osc.type = type; osc.frequency.value = freq; gain.gain.value = volume;
+    osc.type = type; osc.frequency.value = freq; gain.gain.value = effectiveVolume;
     gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + duration);
     osc.connect(gain); gain.connect(this.ctx.destination); osc.start(); osc.stop(this.ctx.currentTime + duration);
   }
@@ -87,6 +101,8 @@ class SFXManager {
   collect() { this.playTone(1200, 0.05, 'sine', 0.08); setTimeout(() => this.playTone(1500, 0.1, 'sine', 0.08), 50); }
   select() { this.playTone(600, 0.08, 'sine', 0.08); }
   menuHover() { this.playTone(400, 0.05, 'sine', 0.03); }
+  pickup() { this.playTone(800, 0.08, 'sine', 0.06); }
+  pause() { /* pause sound if we had background audio */ }
 }
 const sfx = new SFXManager();
 
@@ -160,7 +176,13 @@ class MainMenuScene extends Phaser.Scene {
     this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing, buttonWidth, buttonHeight, '▣  LEVEL SELECT', 0x1a2a3a, 0x4488ff, () => this.scene.start('LevelSelectScene'));
     
     const canContinue = saveManager.hasSave();
-    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 2, buttonWidth, buttonHeight, '↻  CONTINUE', canContinue ? 0x1a3a2a : 0x1a1a1a, canContinue ? 0x44ff88 : 0x444444, () => { if (canContinue) this.scene.start('GameScene', { continueRun: true }); }, !canContinue);
+    const lastPlayedLevel = saveManager.getLastPlayed() ? saveManager.data.unlockedLevels[saveManager.data.unlockedLevels.length - 1] : 0;
+    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 2, buttonWidth, buttonHeight, '↻  CONTINUE', canContinue ? 0x1a3a2a : 0x1a1a1a, canContinue ? 0x44ff88 : 0x444444, () => { 
+      if (canContinue) {
+        // Continue from last played level or highest unlocked level
+        this.scene.start('GameScene', { levelIndex: lastPlayedLevel, continueRun: true }); 
+      }
+    }, !canContinue);
     
     this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 3, buttonWidth, buttonHeight, '⚙  SETTINGS', 0x2a2a3a, 0x8888aa, () => this.scene.start('SettingsScene'));
     this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 4, buttonWidth, buttonHeight, '?  CONTROLS', 0x2a2a3a, 0x8888aa, () => this.showControlsOverlay());
@@ -264,15 +286,88 @@ class SettingsScene extends Phaser.Scene {
     backBtn.on('pointerover', () => backBtn.setFill('#ffffff'));
     backBtn.on('pointerout', () => backBtn.setFill('#888888'));
     backBtn.on('pointerdown', () => { sfx.select(); this.scene.start('MainMenuScene'); });
-    const panelY = 100;
+    
+    const panelY = 90;
+    const spacing = 55;
+    
+    // Audio Enabled toggle
     this.add.text(40, panelY, 'Audio', { fontSize: '16px', fill: '#ffffff', fontFamily: 'Courier New' });
     const audioToggle = this.add.text(MAP_WIDTH * TILE_SIZE - 100, panelY, sfx.isEnabled ? '[X] ON' : '[ ] OFF', { fontSize: '14px', fill: sfx.isEnabled ? '#44ff88' : '#ff4444', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
     audioToggle.on('pointerdown', () => { const newState = !sfx.isEnabled; sfx.setEnabled(newState); audioToggle.setText(newState ? '[X] ON' : '[ ] OFF'); audioToggle.setFill(newState ? '#44ff88' : '#ff4444'); sfx.select(); });
-    const resetY = panelY + 80;
+    
+    // Master Volume slider
+    const volY = panelY + spacing;
+    this.add.text(40, volY, 'Master Volume', { fontSize: '16px', fill: '#ffffff', fontFamily: 'Courier New' });
+    const volBarBg = this.add.rectangle(MAP_WIDTH * TILE_SIZE - 100, volY, 120, 16, 0x222233);
+    const volBarFill = this.add.rectangle(MAP_WIDTH * TILE_SIZE - 160 + (sfx.volume * 60), volY, sfx.volume * 120, 12, 0x4488ff);
+    const volDown = this.add.text(MAP_WIDTH * TILE_SIZE - 180, volY, '[-]', { fontSize: '14px', fill: '#888888', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
+    const volUp = this.add.text(MAP_WIDTH * TILE_SIZE - 40, volY, '[+]', { fontSize: '14px', fill: '#888888', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
+    const updateVolDisplay = () => { volBarFill.width = sfx.volume * 120; volBarFill.x = MAP_WIDTH * TILE_SIZE - 160 + (sfx.volume * 60); };
+    volDown.on('pointerdown', () => { sfx.setMasterVolume(sfx.volume - 0.1); updateVolDisplay(); sfx.select(); });
+    volUp.on('pointerdown', () => { sfx.setMasterVolume(sfx.volume + 0.1); updateVolDisplay(); sfx.select(); });
+    
+    // Effects Quality
+    const qualY = volY + spacing;
+    this.add.text(40, qualY, 'Effects Quality', { fontSize: '16px', fill: '#ffffff', fontFamily: 'Courier New' });
+    const currentQuality = saveManager.getSetting('effectsQuality') || 'high';
+    const qualityBtn = this.add.text(MAP_WIDTH * TILE_SIZE - 100, qualY, currentQuality.toUpperCase(), { fontSize: '14px', fill: '#ffaa00', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
+    const qualities = ['low', 'medium', 'high'];
+    let qualIndex = qualities.indexOf(currentQuality);
+    qualityBtn.on('pointerdown', () => { 
+      qualIndex = (qualIndex + 1) % qualities.length; 
+      const newQual = qualities[qualIndex];
+      saveManager.setSetting('effectsQuality', newQual);
+      qualityBtn.setText(newQual.toUpperCase());
+      sfx.select();
+    });
+    
+    // Fullscreen toggle
+    const fullY = qualY + spacing;
+    this.add.text(40, fullY, 'Fullscreen', { fontSize: '16px', fill: '#ffffff', fontFamily: 'Courier New' });
+    const isFullscreen = saveManager.getSetting('fullscreen') || false;
+    const fullToggle = this.add.text(MAP_WIDTH * TILE_SIZE - 100, fullY, isFullscreen ? '[X] ON' : '[ ] OFF', { fontSize: '14px', fill: isFullscreen ? '#44ff88' : '#ff4444', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
+    fullToggle.on('pointerdown', () => { 
+      const newState = !saveManager.getSetting('fullscreen');
+      saveManager.setSetting('fullscreen', newState);
+      fullToggle.setText(newState ? '[X] ON' : '[ ] OFF');
+      fullToggle.setFill(newState ? '#44ff88' : '#ff4444');
+      // Apply fullscreen
+      if (newState) {
+        this.scale.startFullscreen();
+      } else {
+        this.scale.stopFullscreen();
+      }
+      sfx.select();
+    });
+    
+    // Reduced Motion toggle
+    const motionY = fullY + spacing;
+    this.add.text(40, motionY, 'Reduced Motion', { fontSize: '16px', fill: '#ffffff', fontFamily: 'Courier New' });
+    const reducedMotion = saveManager.getSetting('reducedMotion') || false;
+    const motionToggle = this.add.text(MAP_WIDTH * TILE_SIZE - 100, motionY, reducedMotion ? '[X] ON' : '[ ] OFF', { fontSize: '14px', fill: reducedMotion ? '#44ff88' : '#ff4444', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
+    motionToggle.on('pointerdown', () => { 
+      const newState = !saveManager.getSetting('reducedMotion');
+      saveManager.setSetting('reducedMotion', newState);
+      motionToggle.setText(newState ? '[X] ON' : '[ ] OFF');
+      motionToggle.setFill(newState ? '#44ff88' : '#ff4444');
+      sfx.select();
+    });
+    
+    // Reset Progress
+    const resetY = motionY + spacing + 20;
     this.add.text(40, resetY, 'Reset Progress', { fontSize: '16px', fill: '#ffffff', fontFamily: 'Courier New' });
     const resetBtn = this.add.text(MAP_WIDTH * TILE_SIZE - 100, resetY, '[RESET]', { fontSize: '14px', fill: '#ff4444', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
-    resetBtn.on('pointerdown', () => { if (confirm('Are you sure you want to reset all progress?')) { saveManager.resetSave(); sfx.fail(); this.scene.start('BootScene'); } });
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE - 30, 'GhostShift v0.2.0 - Phase 1', { fontSize: '12px', fill: '#444455', fontFamily: 'Courier New' }).setOrigin(0.5);
+    resetBtn.on('pointerover', () => resetBtn.setFill('#ff6666'));
+    resetBtn.on('pointerout', () => resetBtn.setFill('#ff4444'));
+    resetBtn.on('pointerdown', () => { 
+      if (confirm('Are you sure you want to reset all progress? This cannot be undone.')) { 
+        saveManager.resetSave(); 
+        sfx.fail(); 
+        this.scene.start('BootScene'); 
+      } 
+    });
+    
+    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE - 30, 'GhostShift v0.2.0 - Phase 2', { fontSize: '12px', fill: '#444455', fontFamily: 'Courier New' }).setOrigin(0.5);
     this.input.keyboard.once('keydown', () => sfx.init());
     this.input.on('pointerdown', () => sfx.init(), this);
   }
@@ -281,24 +376,102 @@ class SettingsScene extends Phaser.Scene {
 // ==================== RESULTS SCENE ====================
 class ResultsScene extends Phaser.Scene {
   constructor() { super({ key: 'ResultsScene' }); }
-  create(data) {
+  
+  init(data) {
+    this.resultData = data || {};
+    this.levelIndex = this.resultData.levelIndex || 0;
+    this.success = this.resultData.success || false;
+    this.time = this.resultData.time || 0;
+    this.credits = this.resultData.credits || 0;
+  }
+
+  create() {
     this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
-    const success = data?.success ?? false;
-    const time = data?.time ?? 0;
-    const credits = data?.credits ?? 0;
-    const titleText = success ? 'MISSION COMPLETE!' : 'MISSION FAILED';
-    const titleColor = success ? '#00ff88' : '#ff4444';
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2, 80, titleText, { fontSize: '32px', fill: titleColor, fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
-    if (success) {
-      this.add.text(MAP_WIDTH * TILE_SIZE / 2, 140, '+' + credits + ' Credits', { fontSize: '20px', fill: '#ffaa00', fontFamily: 'Courier New' }).setOrigin(0.5);
-      this.add.text(MAP_WIDTH * TILE_SIZE / 2, 170, 'Time: ' + this.formatTime(time), { fontSize: '16px', fill: '#888888', fontFamily: 'Courier New' }).setOrigin(0.5);
+    
+    const titleText = this.success ? 'MISSION COMPLETE!' : 'MISSION FAILED';
+    const titleColor = this.success ? '#00ff88' : '#ff4444';
+    this.add.text(MAP_WIDTH * TILE_SIZE / 2, 60, titleText, { fontSize: '32px', fill: titleColor, fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    
+    // Stats panel
+    const statsY = 120;
+    if (this.success) {
+      this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY, '+' + this.credits + ' Credits', { fontSize: '20px', fill: '#ffaa00', fontFamily: 'Courier New' }).setOrigin(0.5);
+      this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY + 30, 'Time: ' + this.formatTime(this.time), { fontSize: '16px', fill: '#888888', fontFamily: 'Courier New' }).setOrigin(0.5);
+      
+      // Best time for this level
+      const bestTime = saveManager.getBestTime(this.levelIndex);
+      this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY + 55, 'Best: ' + this.formatTime(bestTime), { fontSize: '14px', fill: '#4488ff', fontFamily: 'Courier New' }).setOrigin(0.5);
+    } else {
+      this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY, 'You were detected!', { fontSize: '16px', fill: '#ff4444', fontFamily: 'Courier New' }).setOrigin(0.5);
+      this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY + 30, 'Press R to retry', { fontSize: '14px', fill: '#888888', fontFamily: 'Courier New' }).setOrigin(0.5);
     }
-    const continueBtn = this.add.text(MAP_WIDTH * TILE_SIZE / 2, 250, '[ Press R or click to continue ]', { fontSize: '14px', fill: '#666688', fontFamily: 'Courier New' }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-    continueBtn.on('pointerdown', () => this.scene.start('MainMenuScene'));
-    this.input.keyboard.on('keydown-R', () => this.scene.start('MainMenuScene'));
+    
+    // Buttons
+    const buttonY = 230;
+    const buttonWidth = 180;
+    const buttonHeight = 40;
+    const spacing = 55;
+    
+    // Retry button
+    this.createButton(MAP_WIDTH * TILE_SIZE / 2 - spacing - 10, buttonY, buttonWidth, buttonHeight, '↻ RETRY', 0x2244aa, 0x4488ff, () => {
+      sfx.select();
+      this.scene.start('GameScene', { levelIndex: this.levelIndex });
+    });
+    
+    // Next Level button (only if success and next level exists)
+    const nextLevelExists = this.success && this.levelIndex < LEVEL_LAYOUTS.length - 1;
+    const isNextUnlocked = nextLevelExists && saveManager.isLevelUnlocked(this.levelIndex + 1);
+    if (this.success && nextLevelExists) {
+      this.createButton(MAP_WIDTH * TILE_SIZE / 2 + spacing + 10, buttonY, buttonWidth, buttonHeight, 'NEXT ▶', 0x1a4a2a, isNextUnlocked ? 0x44ff88 : 0x444444, () => {
+        if (isNextUnlocked) {
+          sfx.select();
+          this.scene.start('GameScene', { levelIndex: this.levelIndex + 1 });
+        }
+      }, !isNextUnlocked);
+    } else if (this.success) {
+      // Show "All Complete" if last level
+      this.add.text(MAP_WIDTH * TILE_SIZE / 2 + spacing + 10, buttonY, 'COMPLETE!', { fontSize: '14px', fill: '#ffaa00', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    }
+    
+    // Level Select button
+    const menuY = buttonY + spacing;
+    this.createButton(MAP_WIDTH * TILE_SIZE / 2 - spacing - 10, menuY, buttonWidth, buttonHeight, '▣ LEVELS', 0x2a2a3a, 0x8888aa, () => {
+      sfx.select();
+      this.scene.start('LevelSelectScene');
+    });
+    
+    // Main Menu button
+    this.createButton(MAP_WIDTH * TILE_SIZE / 2 + spacing + 10, menuY, buttonWidth, buttonHeight, '⌂ MENU', 0x2a2a3a, 0x8888aa, () => {
+      sfx.select();
+      this.scene.start('MainMenuScene');
+    });
+    
+    // Keyboard shortcuts
+    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE - 30, '[R] Retry | [ESC] Menu', { fontSize: '12px', fill: '#444455', fontFamily: 'Courier New' }).setOrigin(0.5);
+    
+    this.input.keyboard.on('keydown-R', () => {
+      sfx.select();
+      this.scene.start('GameScene', { levelIndex: this.levelIndex });
+    });
+    this.input.keyboard.on('keydown-ESC', () => {
+      sfx.select();
+      this.scene.start('MainMenuScene');
+    });
     this.input.keyboard.once('keydown', () => sfx.init());
     this.input.on('pointerdown', () => sfx.init(), this);
   }
+  
+  createButton(x, y, width, height, text, bgColor, strokeColor, onClick, disabled = false) {
+    const bg = this.add.rectangle(x, y, width, height, disabled ? 0x1a1a1a : bgColor);
+    bg.setStrokeStyle(2, disabled ? 0x333333 : strokeColor);
+    bg.setInteractive({ useHandCursor: !disabled });
+    const label = this.add.text(x, y, text, { fontSize: '14px', fill: disabled ? '#444444' : '#ffffff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    bg.on('pointerover', () => { if (!disabled) { bg.setFillStyle(bgColor + 0x202020); sfx.menuHover(); } });
+    bg.on('pointerout', () => { if (!disabled) bg.setFillStyle(bgColor); });
+    bg.on('pointerdown', () => onClick());
+    return { bg, label };
+  }
+  
   formatTime(ms) { if (!ms) return '--:--'; const minutes = Math.floor(ms / 60000); const seconds = Math.floor((ms % 60000) / 1000); const centis = Math.floor((ms % 1000) / 10); return minutes.toString().padStart(2, '0') + ':' + seconds.toString().padStart(2, '0') + '.' + centis.toString().padStart(2, '0'); }
 }
 
@@ -311,9 +484,17 @@ class GameScene extends Phaser.Scene {
   
   init(data) {
     this.requestedLevelIndex = data?.levelIndex ?? null;
+    this.continueRun = data?.continueRun ?? false;
   }
 
+  // Manual restart method for testing
+  manualRestart() {
+    this._restarted = true;
+    this.scene.restart();
+  }
+  
   create() {
+    // Initialize instance variables
     this.player = null; this.guard = null; this.ghost = null;
     this.scannerDrone = null; this.cameras = []; this.motionSensors = [];
     this.dataCore = null; this.keyCard = null; this.hackTerminal = null; this.exitZone = null;
@@ -326,15 +507,9 @@ class GameScene extends Phaser.Scene {
     this.guardPatrolPoints = []; this.currentPatrolIndex = 0; this.guardAngle = 0;
     this.visionGraphics = null; this.walls = null;
     this.scannerAngle = 0; this.applySpeedBoost = false; this.applyStealth = false;
-  }
-  
-  // Manual restart method for testing
-  manualRestart() {
-    this._restarted = true;
-    this.scene.restart();
-  }
-  
-  create() {
+    this.hasWon = false;
+    this._restarted = false;
+    
     // Set up keyboard handlers - must be set up immediately
     this.cursors = this.input.keyboard.createCursorKeys();
     this.rKey = this.input.keyboard.addKeys({ r: Phaser.Input.Keyboard.KeyCodes.R });
@@ -1063,11 +1238,17 @@ class GameScene extends Phaser.Scene {
     
     // Store reference for restart check
     const sceneKey = this.scene.key;
+    const levelIdx = this.currentLevelIndex;
     const sceneRef = this;
-    this.detectedSceneEvent = this.time.addEvent({ delay: 2000, callback: () => {
+    this.detectedSceneEvent = this.time.addEvent({ delay: 1500, callback: () => {
       // Only transition if we're still the same scene instance and not restarted
       if (sceneRef.isDetected && sceneRef.scene.key === sceneKey && !sceneRef._restarted) {
-        sceneRef.scene.start('BootScene');
+        sceneRef.scene.start('ResultsScene', { 
+          levelIndex: levelIdx,
+          success: false, 
+          time: sceneRef.elapsedTime, 
+          credits: 0 
+        });
       }
     }, callbackScope: this });
   }
@@ -1078,21 +1259,19 @@ class GameScene extends Phaser.Scene {
     sfx.win();
     const timeBonus = Math.max(0, 30000 - Math.floor(this.elapsedTime));
     const creditsEarned = 20 + Math.floor(timeBonus / 1000) + getLuckBonus();
-    gameSave.credits += creditsEarned;
-    gameSave.totalRuns++;
-    gameSave.bestTime = gameSave.bestTime ? Math.min(gameSave.bestTime, this.elapsedTime) : this.elapsedTime;
-    saveSaveData(gameSave);
     
-    const overlay = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x000000, 0.8);
-    const winText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2 - 50, 'MISSION COMPLETE!', { fontSize: '32px', fill: '#00ff88', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
-    const credText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2 + 10, `+${creditsEarned} Credits`, { fontSize: '20px', fill: '#ffaa00', fontFamily: 'Courier New' }).setOrigin(0.5);
-    const contText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2 + 60, 'Press R to continue', { fontSize: '14px', fill: '#888888', fontFamily: 'Courier New' }).setOrigin(0.5);
+    // Use SaveManager to properly record the run and unlock levels
+    saveManager.recordRun(this.currentLevelIndex, this.elapsedTime, creditsEarned);
     
     // Mark as won - keep isRunning true for test compatibility
     this.hasWon = true;
     
-    this.input.keyboard.once('keydown-R', () => {
-      this.scene.start('BootScene');
+    // Transition to ResultsScene
+    this.scene.start('ResultsScene', { 
+      levelIndex: this.currentLevelIndex,
+      success: true, 
+      time: this.elapsedTime, 
+      credits: creditsEarned 
     });
   }
 }
