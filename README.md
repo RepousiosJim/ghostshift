@@ -2,9 +2,9 @@
 
 A stealth evasion game built with Phaser 3 and Tauri.
 
-## Game Flow (Phase 2 Complete)
+## Game Flow (Phase 3 Complete)
 
-The game now features a complete menu system and scene architecture:
+The game now features a complete menu system and scene architecture with polish:
 
 ### Scene Flow
 ```
@@ -15,11 +15,11 @@ BootScene → MainMenuScene → LevelSelectScene → GameScene
 
 ### Scenes
 - **BootScene**: Loading screen, transitions to MainMenuScene
-- **MainMenuScene**: Full menu with Play, Level Select, Continue, Settings, Controls, Credits
+- **MainMenuScene**: Full menu with Play, Level Select, Continue, Settings, Controls, Credits - with animated background
 - **LevelSelectScene**: Level selection with lock/unlock status and best times
 - **GameScene**: Core gameplay (existing mechanics preserved)
 - **SettingsScene**: Audio toggle, volume slider, effects quality, fullscreen, reduced motion, reset progress
-- **ResultsScene**: Mission complete/failed display with Retry, Next Level, Level Select, and Menu buttons
+- **ResultsScene**: Mission complete/failed display with animations, particles, and Retry, Next Level, Level Select, and Menu buttons
 
 ### Main Menu Features
 - **Play**: Goes to Level Select
@@ -29,7 +29,15 @@ BootScene → MainMenuScene → LevelSelectScene → GameScene
 - **Controls**: Overlay panel with key bindings
 - **Credits**: Overlay panel with game info
 
-## Visual Polish (Phase 1-2 Complete)
+### Phase 3 Polish Features
+- **Scene transitions**: Smooth fade transitions between all scenes
+- **Animated menu background**: Floating particles and animated grid
+- **Button enhancements**: Press animations, enhanced hover states with glow
+- **Sound effects**: Detection pulse, restart sounds, click feedback
+- **Result screen animations**: Title pop-in, stats slide-in, particles for win/lose
+- **Detection feedback**: Red pulse overlay, screen shake, player glow effect
+
+## Visual Polish (Phase 1-3 Complete)
 
 The game features enhanced visuals including:
 - **Atmospheric depth** - Multi-layer backgrounds with subtle grid patterns and scanline textures
@@ -82,10 +90,12 @@ npm run tauri:build
 
 | Key | Action |
 |-----|--------|
-| Arrow Keys / player |
+| Arrow Keys / WASD | Move player |
 | R | Restart run |
+| ESC | Pause game |
+| SPACE | Start game |
 
-## Gameplay WASD | Move
+## Gameplay
 
 - **Objective**: Escape to the right side of the map
 - **Avoid**: The patrolling red guard

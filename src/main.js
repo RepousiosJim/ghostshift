@@ -103,8 +103,69 @@ class SFXManager {
   menuHover() { this.playTone(400, 0.05, 'sine', 0.03); }
   pickup() { this.playTone(800, 0.08, 'sine', 0.06); }
   pause() { /* pause sound if we had background audio */ }
+  detection() { this.playTone(150, 0.4, 'sawtooth', 0.15); setTimeout(() => this.playTone(100, 0.5, 'sawtooth', 0.15), 200); }
+  restart() { this.playTone(300, 0.1, 'square', 0.05); setTimeout(() => this.playTone(400, 0.1, 'square', 0.05), 50); }
+  click() { this.playTone(500, 0.06, 'sine', 0.05); }
 }
 const sfx = new SFXManager();
+
+// ==================== SCENE TRANSITION MANAGER ====================
+class SceneTransitionManager {
+  constructor(scene) {
+    this.scene = scene;
+    this.isTransitioning = false;
+  }
+
+  async transition(targetSceneKey, data = null, duration = 400) {
+    if (this.isTransitioning) return;
+    this.isTransitioning = true;
+    
+    const { width, height } = this.scene.scale;
+    const cx = width / 2;
+    const cy = height / 2;
+    
+    // Create fade overlay
+    const overlay = this.scene.add.rectangle(cx, cy, width, height, 0x000000);
+    overlay.setDepth(999);
+    overlay.setAlpha(0);
+    
+    // Fade in
+    await new Promise(resolve => {
+      this.scene.tweens.add({
+        targets: overlay,
+        alpha: 1,
+        duration: duration / 2,
+        ease: 'Quad.easeIn',
+        onComplete: resolve
+      });
+    });
+    
+    // Start new scene
+    if (data) {
+      this.scene.scene.start(targetSceneKey, data);
+    } else {
+      this.scene.scene.start(targetSceneKey);
+    }
+    
+    // Small delay to let scene initialize
+    await new Promise(resolve => this.scene.time.delayedCall(50, resolve));
+    
+    // Fade out
+    await new Promise(resolve => {
+      this.scene.tweens.add({
+        targets: overlay,
+        alpha: 0,
+        duration: duration / 2,
+        ease: 'Quad.easeOut',
+        onComplete: () => {
+          overlay.destroy();
+          this.isTransitioning = false;
+          resolve();
+        }
+      });
+    });
+  }
+}
 
 // ==================== LEVEL LAYOUTS ====================
 const LEVEL_LAYOUTS = [
@@ -140,8 +201,8 @@ class BootScene extends Phaser.Scene {
     this.input.keyboard.once('keydown', () => sfx.init());
     this.input.on('pointerdown', () => sfx.init(), this);
     
-    // Auto-transition to main menu
-    this.time.delayedCall(500, () => {
+    // Auto-transition to main menu with fade
+    this.time.delayedCall(800, () => {
       this.scene.start('MainMenuScene');
     });
   }
@@ -154,12 +215,22 @@ class MainMenuScene extends Phaser.Scene {
   }
 
   create() {
-    // Background
-    this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
+    // Animated background grid
+    this.createAnimatedBackground();
     
     // Title
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2, 50, 'GHOSTSHIFT', { fontSize: '40px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2, 85, 'Infiltrate. Hack. Escape.', { fontSize: '14px', fill: '#666688', fontFamily: 'Courier New' }).setOrigin(0.5);
+    this.titleText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, 50, 'GHOSTSHIFT', { fontSize: '40px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    this.subtitleText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, 85, 'Infiltrate. Hack. Escape.', { fontSize: '14px', fill: '#666688', fontFamily: 'Courier New' }).setOrigin(0.5);
+    
+    // Title glow animation
+    this.tweens.add({
+      targets: this.titleText,
+      alpha: 0.8,
+      duration: 1500,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
     
     // Stats
     if (saveManager.hasSave()) {
@@ -172,19 +243,18 @@ class MainMenuScene extends Phaser.Scene {
     // Buttons
     const buttonWidth = 250, buttonHeight = 45, startY = 180, spacing = 60;
     
-    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY, buttonWidth, buttonHeight, '▶  PLAY', 0x2244aa, 0x4488ff, () => this.scene.start('LevelSelectScene'));
-    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing, buttonWidth, buttonHeight, '▣  LEVEL SELECT', 0x1a2a3a, 0x4488ff, () => this.scene.start('LevelSelectScene'));
+    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY, buttonWidth, buttonHeight, '▶  PLAY', 0x2244aa, 0x4488ff, () => this.transitionTo('LevelSelectScene'));
+    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing, buttonWidth, buttonHeight, '▣  LEVEL SELECT', 0x1a2a3a, 0x4488ff, () => this.transitionTo('LevelSelectScene'));
     
     const canContinue = saveManager.hasSave();
     const lastPlayedLevel = saveManager.getLastPlayed() ? saveManager.data.unlockedLevels[saveManager.data.unlockedLevels.length - 1] : 0;
     this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 2, buttonWidth, buttonHeight, '↻  CONTINUE', canContinue ? 0x1a3a2a : 0x1a1a1a, canContinue ? 0x44ff88 : 0x444444, () => { 
       if (canContinue) {
-        // Continue from last played level or highest unlocked level
-        this.scene.start('GameScene', { levelIndex: lastPlayedLevel, continueRun: true }); 
+        this.transitionTo('GameScene', { levelIndex: lastPlayedLevel, continueRun: true }); 
       }
     }, !canContinue);
     
-    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 3, buttonWidth, buttonHeight, '⚙  SETTINGS', 0x2a2a3a, 0x8888aa, () => this.scene.start('SettingsScene'));
+    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 3, buttonWidth, buttonHeight, '⚙  SETTINGS', 0x2a2a3a, 0x8888aa, () => this.transitionTo('SettingsScene'));
     this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 4, buttonWidth, buttonHeight, '?  CONTROLS', 0x2a2a3a, 0x8888aa, () => this.showControlsOverlay());
     this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 5, buttonWidth, buttonHeight, '★  CREDITS', 0x2a2a3a, 0x8888aa, () => this.showCreditsOverlay());
     
@@ -192,14 +262,148 @@ class MainMenuScene extends Phaser.Scene {
     this.input.on('pointerdown', () => sfx.init(), this);
   }
   
+  createAnimatedBackground() {
+    // Subtle animated grid background
+    this.bgGraphics = this.add.graphics();
+    this.bgGraphics.setDepth(-1);
+    
+    // Grid animation offset
+    this.gridOffset = 0;
+    this.gridGraphics = this.add.graphics();
+    this.gridGraphics.setDepth(-2);
+    
+    // Animate grid lines
+    this.time.addEvent({
+      delay: 50,
+      callback: () => {
+        this.gridOffset = (this.gridOffset + 0.5) % 32;
+        this.drawAnimatedGrid();
+      },
+      loop: true
+    });
+    
+    // Floating particles
+    this.particles = [];
+    for (let i = 0; i < 15; i++) {
+      const particle = this.add.circle(
+        Math.random() * MAP_WIDTH * TILE_SIZE,
+        Math.random() * MAP_HEIGHT * TILE_SIZE,
+        2 + Math.random() * 3,
+        0x4488ff,
+        0.1 + Math.random() * 0.15
+      );
+      particle.setDepth(-1);
+      particle.speedX = (Math.random() - 0.5) * 0.5;
+      particle.speedY = (Math.random() - 0.5) * 0.5;
+      this.particles.push(particle);
+    }
+    
+    // Animate particles
+    this.time.addEvent({
+      delay: 16,
+      callback: () => {
+        this.particles.forEach(p => {
+          p.x += p.speedX;
+          p.y += p.speedY;
+          if (p.x < 0) p.x = MAP_WIDTH * TILE_SIZE;
+          if (p.x > MAP_WIDTH * TILE_SIZE) p.x = 0;
+          if (p.y < 0) p.y = MAP_HEIGHT * TILE_SIZE;
+          if (p.y > MAP_HEIGHT * TILE_SIZE) p.y = 0;
+        });
+      },
+      loop: true
+    });
+  }
+  
+  drawAnimatedGrid() {
+    this.gridGraphics.clear();
+    this.gridGraphics.lineStyle(1, 0x1a1a2a, 0.4);
+    
+    // Vertical lines with offset
+    for (let x = 0; x <= MAP_WIDTH; x++) {
+      const offsetX = (x * 32 + this.gridOffset) % 32;
+      this.gridGraphics.lineBetween(x * 32 - offsetX, 0, x * 32 - offsetX, MAP_HEIGHT * TILE_SIZE);
+    }
+    
+    // Horizontal lines with offset
+    for (let y = 0; y <= MAP_HEIGHT; y++) {
+      const offsetY = (y * 32 + this.gridOffset) % 32;
+      this.gridGraphics.lineBetween(0, y * 32 - offsetY, MAP_WIDTH * TILE_SIZE, y * 32 - offsetY);
+    }
+  }
+  
+  transitionTo(sceneKey, data = null) {
+    sfx.click();
+    const { width, height } = this.scale;
+    const cx = width / 2;
+    const cy = height / 2;
+    
+    const overlay = this.add.rectangle(cx, cy, width, height, 0x000000);
+    overlay.setDepth(100);
+    overlay.setAlpha(0);
+    
+    this.tweens.add({
+      targets: overlay,
+      alpha: 1,
+      duration: 200,
+      ease: 'Quad.easeIn',
+      onComplete: () => {
+        if (data) {
+          this.scene.start(sceneKey, data);
+        } else {
+          this.scene.start(sceneKey);
+        }
+        this.time.delayedCall(50, () => {
+          this.tweens.add({
+            targets: overlay,
+            alpha: 0,
+            duration: 200,
+            ease: 'Quad.easeOut',
+            onComplete: () => overlay.destroy()
+          });
+        });
+      }
+    });
+  }
+  
   createMenuButton(x, y, width, height, text, bgColor, strokeColor, onClick, disabled = false) {
     const bg = this.add.rectangle(x, y, width, height, bgColor);
     bg.setStrokeStyle(2, strokeColor);
     bg.setInteractive({ useHandCursor: !disabled });
+    
     const label = this.add.text(x, y, text, { fontSize: '16px', fill: disabled ? '#444444' : '#ffffff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
-    bg.on('pointerover', () => { if (!disabled) { bg.setFillStyle(bgColor + 0x202020); sfx.menuHover(); } });
-    bg.on('pointerout', () => { if (!disabled) bg.setFillStyle(bgColor); });
-    bg.on('pointerdown', () => { sfx.select(); onClick(); });
+    
+    // Hover effects
+    bg.on('pointerover', () => { 
+      if (!disabled) { 
+        bg.setFillStyle(bgColor + 0x202020); 
+        bg.setStrokeStyle(2, 0xffffff);
+        sfx.menuHover(); 
+      } 
+    });
+    
+    bg.on('pointerout', () => { 
+      if (!disabled) {
+        bg.setFillStyle(bgColor); 
+        bg.setStrokeStyle(2, strokeColor);
+      }
+    });
+    
+    bg.on('pointerdown', () => { 
+      // Button press animation
+      this.tweens.add({
+        targets: bg,
+        scaleX: 0.95,
+        scaleY: 0.95,
+        duration: 50,
+        yoyo: true,
+        onComplete: () => {
+          bg.setScale(1);
+        }
+      });
+      onClick(); 
+    });
+    
     return { bg, label };
   }
   
@@ -246,12 +450,28 @@ class MainMenuScene extends Phaser.Scene {
 class LevelSelectScene extends Phaser.Scene {
   constructor() { super({ key: 'LevelSelectScene' }); }
   create() {
+    // Background
     this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
+    
+    // Animated grid
+    this.gridGraphics = this.add.graphics();
+    this.gridOffset = 0;
+    this.time.addEvent({
+      delay: 50,
+      callback: () => {
+        this.gridOffset = (this.gridOffset + 0.3) % 32;
+        this.drawGrid();
+      },
+      loop: true
+    });
+    
     this.add.text(MAP_WIDTH * TILE_SIZE / 2, 30, 'SELECT LEVEL', { fontSize: '28px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    
     const backBtn = this.add.text(20, 15, '< BACK', { fontSize: '14px', fill: '#888888', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
     backBtn.on('pointerover', () => backBtn.setFill('#ffffff'));
     backBtn.on('pointerout', () => backBtn.setFill('#888888'));
-    backBtn.on('pointerdown', () => { sfx.select(); this.scene.start('MainMenuScene'); });
+    backBtn.on('pointerdown', () => this.transitionTo('MainMenuScene'));
+    
     const startY = 80, spacingY = 70;
     LEVEL_LAYOUTS.forEach((level, index) => {
       const isUnlocked = saveManager.isLevelUnlocked(index);
@@ -260,19 +480,94 @@ class LevelSelectScene extends Phaser.Scene {
       const cardBg = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, y, 400, 55, isUnlocked ? 0x1a2a3a : 0x1a1a1a);
       cardBg.setStrokeStyle(2, isUnlocked ? 0x4488ff : 0x333333);
       cardBg.setInteractive({ useHandCursor: isUnlocked });
-      this.add.text(MAP_WIDTH * TILE_SIZE / 2 - 160, y, String(index + 1), { fontSize: '20px', fill: isUnlocked ? '#4488ff' : '#444444', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+      
+      // Level number with glow
+      const levelNum = this.add.text(MAP_WIDTH * TILE_SIZE / 2 - 160, y, String(index + 1), { fontSize: '20px', fill: isUnlocked ? '#4488ff' : '#444444', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+      if (isUnlocked) {
+        this.tweens.add({
+          targets: levelNum,
+          alpha: 0.7,
+          duration: 1000,
+          yoyo: true,
+          repeat: -1
+        });
+      }
+      
       this.add.text(MAP_WIDTH * TILE_SIZE / 2 - 100, y - 10, level.name, { fontSize: '14px', fill: isUnlocked ? '#ffffff' : '#444444', fontFamily: 'Courier New' }).setOrigin(0, 0.5);
       this.add.text(MAP_WIDTH * TILE_SIZE / 2 - 100, y + 10, 'Best: ' + (bestTime ? this.formatTime(bestTime) : '--:--'), { fontSize: '11px', fill: isUnlocked ? '#888888' : '#444444', fontFamily: 'Courier New' });
       this.add.text(MAP_WIDTH * TILE_SIZE / 2 + 140, y, isUnlocked ? '▶ PLAY' : '🔒 LOCKED', { fontSize: '12px', fill: isUnlocked ? '#44ff88' : '#444444', fontFamily: 'Courier New' }).setOrigin(0.5);
+      
       if (isUnlocked) {
-        cardBg.on('pointerover', () => { cardBg.setFillStyle(0x2a3a4a); sfx.menuHover(); });
-        cardBg.on('pointerout', () => cardBg.setFillStyle(0x1a2a3a));
-        cardBg.on('pointerdown', () => { sfx.select(); this.scene.start('GameScene', { levelIndex: index }); });
+        cardBg.on('pointerover', () => { 
+          cardBg.setFillStyle(0x2a3a4a); 
+          cardBg.setStrokeStyle(2, 0x66aaff);
+          sfx.menuHover(); 
+        });
+        cardBg.on('pointerout', () => cardBg.setFillStyle(0x1a2a3a).setStrokeStyle(2, 0x4488ff));
+        cardBg.on('pointerdown', () => {
+          // Click animation
+          this.tweens.add({
+            targets: cardBg,
+            scaleX: 0.98,
+            scaleY: 0.98,
+            duration: 50,
+            yoyo: true,
+            onComplete: () => {
+              sfx.select();
+              this.transitionTo('GameScene', { levelIndex: index });
+            }
+          });
+        });
       }
     });
     this.input.keyboard.once('keydown', () => sfx.init());
     this.input.on('pointerdown', () => sfx.init(), this);
   }
+  
+  drawGrid() {
+    this.gridGraphics.clear();
+    this.gridGraphics.lineStyle(1, 0x1a1a2a, 0.3);
+    for (let x = 0; x <= MAP_WIDTH; x++) {
+      this.gridGraphics.lineBetween(x * 32, 0, x * 32, MAP_HEIGHT * TILE_SIZE);
+    }
+    for (let y = 0; y <= MAP_HEIGHT; y++) {
+      this.gridGraphics.lineBetween(0, y * 32, MAP_WIDTH * TILE_SIZE, y * 32);
+    }
+  }
+  
+  transitionTo(sceneKey, data = null) {
+    const { width, height } = this.scale;
+    const cx = width / 2;
+    const cy = height / 2;
+    
+    const overlay = this.add.rectangle(cx, cy, width, height, 0x000000);
+    overlay.setDepth(100);
+    overlay.setAlpha(0);
+    
+    this.tweens.add({
+      targets: overlay,
+      alpha: 1,
+      duration: 200,
+      ease: 'Quad.easeIn',
+      onComplete: () => {
+        if (data) {
+          this.scene.start(sceneKey, data);
+        } else {
+          this.scene.start(sceneKey);
+        }
+        this.time.delayedCall(50, () => {
+          this.tweens.add({
+            targets: overlay,
+            alpha: 0,
+            duration: 200,
+            ease: 'Quad.easeOut',
+            onComplete: () => overlay.destroy()
+          });
+        });
+      }
+    });
+  }
+  
   formatTime(ms) { if (!ms) return '--:--'; const minutes = Math.floor(ms / 60000); const seconds = Math.floor((ms % 60000) / 1000); const centis = Math.floor((ms % 1000) / 10); return minutes.toString().padStart(2, '0') + ':' + seconds.toString().padStart(2, '0') + '.' + centis.toString().padStart(2, '0'); }
 }
 
@@ -280,12 +575,26 @@ class LevelSelectScene extends Phaser.Scene {
 class SettingsScene extends Phaser.Scene {
   constructor() { super({ key: 'SettingsScene' }); }
   create() {
+    // Background
     this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
+    
+    // Animated grid
+    this.gridGraphics = this.add.graphics();
+    this.gridOffset = 0;
+    this.time.addEvent({
+      delay: 50,
+      callback: () => {
+        this.gridOffset = (this.gridOffset + 0.3) % 32;
+        this.drawGrid();
+      },
+      loop: true
+    });
+    
     this.add.text(MAP_WIDTH * TILE_SIZE / 2, 30, 'SETTINGS', { fontSize: '28px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
     const backBtn = this.add.text(20, 15, '< BACK', { fontSize: '14px', fill: '#888888', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
     backBtn.on('pointerover', () => backBtn.setFill('#ffffff'));
     backBtn.on('pointerout', () => backBtn.setFill('#888888'));
-    backBtn.on('pointerdown', () => { sfx.select(); this.scene.start('MainMenuScene'); });
+    backBtn.on('pointerdown', () => this.transitionTo('MainMenuScene'));
     
     const panelY = 90;
     const spacing = 55;
@@ -293,7 +602,13 @@ class SettingsScene extends Phaser.Scene {
     // Audio Enabled toggle
     this.add.text(40, panelY, 'Audio', { fontSize: '16px', fill: '#ffffff', fontFamily: 'Courier New' });
     const audioToggle = this.add.text(MAP_WIDTH * TILE_SIZE - 100, panelY, sfx.isEnabled ? '[X] ON' : '[ ] OFF', { fontSize: '14px', fill: sfx.isEnabled ? '#44ff88' : '#ff4444', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
-    audioToggle.on('pointerdown', () => { const newState = !sfx.isEnabled; sfx.setEnabled(newState); audioToggle.setText(newState ? '[X] ON' : '[ ] OFF'); audioToggle.setFill(newState ? '#44ff88' : '#ff4444'); sfx.select(); });
+    audioToggle.on('pointerdown', () => { 
+      const newState = !sfx.isEnabled; 
+      sfx.setEnabled(newState); 
+      audioToggle.setText(newState ? '[X] ON' : '[ ] OFF'); 
+      audioToggle.setFill(newState ? '#44ff88' : '#ff4444'); 
+      sfx.select(); 
+    });
     
     // Master Volume slider
     const volY = panelY + spacing;
@@ -363,13 +678,53 @@ class SettingsScene extends Phaser.Scene {
       if (confirm('Are you sure you want to reset all progress? This cannot be undone.')) { 
         saveManager.resetSave(); 
         sfx.fail(); 
-        this.scene.start('BootScene'); 
+        this.transitionTo('BootScene'); 
       } 
     });
     
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE - 30, 'GhostShift v0.2.0 - Phase 2', { fontSize: '12px', fill: '#444455', fontFamily: 'Courier New' }).setOrigin(0.5);
+    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE - 30, 'GhostShift v0.3.0 - Phase 3', { fontSize: '12px', fill: '#444455', fontFamily: 'Courier New' }).setOrigin(0.5);
     this.input.keyboard.once('keydown', () => sfx.init());
     this.input.on('pointerdown', () => sfx.init(), this);
+  }
+  
+  drawGrid() {
+    this.gridGraphics.clear();
+    this.gridGraphics.lineStyle(1, 0x1a1a2a, 0.3);
+    for (let x = 0; x <= MAP_WIDTH; x++) {
+      this.gridGraphics.lineBetween(x * 32, 0, x * 32, MAP_HEIGHT * TILE_SIZE);
+    }
+    for (let y = 0; y <= MAP_HEIGHT; y++) {
+      this.gridGraphics.lineBetween(0, y * 32, MAP_WIDTH * TILE_SIZE, y * 32);
+    }
+  }
+  
+  transitionTo(sceneKey) {
+    const { width, height } = this.scale;
+    const cx = width / 2;
+    const cy = height / 2;
+    
+    const overlay = this.add.rectangle(cx, cy, width, height, 0x000000);
+    overlay.setDepth(100);
+    overlay.setAlpha(0);
+    
+    this.tweens.add({
+      targets: overlay,
+      alpha: 1,
+      duration: 200,
+      ease: 'Quad.easeIn',
+      onComplete: () => {
+        this.scene.start(sceneKey);
+        this.time.delayedCall(50, () => {
+          this.tweens.add({
+            targets: overlay,
+            alpha: 0,
+            duration: 200,
+            ease: 'Quad.easeOut',
+            onComplete: () => overlay.destroy()
+          });
+        });
+      }
+    });
   }
 }
 
@@ -386,24 +741,64 @@ class ResultsScene extends Phaser.Scene {
   }
 
   create() {
+    // Background
     this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
+    
+    // Particles for win/lose
+    this.createResultParticles();
     
     const titleText = this.success ? 'MISSION COMPLETE!' : 'MISSION FAILED';
     const titleColor = this.success ? '#00ff88' : '#ff4444';
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2, 60, titleText, { fontSize: '32px', fill: titleColor, fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    const title = this.add.text(MAP_WIDTH * TILE_SIZE / 2, 60, titleText, { fontSize: '32px', fill: titleColor, fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    
+    // Title animation
+    title.setAlpha(0);
+    title.setScale(0.5);
+    this.tweens.add({
+      targets: title,
+      alpha: 1,
+      scale: 1,
+      duration: 400,
+      ease: 'Back.easeOut'
+    });
     
     // Stats panel
     const statsY = 120;
     if (this.success) {
-      this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY, '+' + this.credits + ' Credits', { fontSize: '20px', fill: '#ffaa00', fontFamily: 'Courier New' }).setOrigin(0.5);
-      this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY + 30, 'Time: ' + this.formatTime(this.time), { fontSize: '16px', fill: '#888888', fontFamily: 'Courier New' }).setOrigin(0.5);
+      const creditsText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY, '+' + this.credits + ' Credits', { fontSize: '20px', fill: '#ffaa00', fontFamily: 'Courier New' }).setOrigin(0.5);
+      const timeText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY + 30, 'Time: ' + this.formatTime(this.time), { fontSize: '16px', fill: '#888888', fontFamily: 'Courier New' }).setOrigin(0.5);
       
       // Best time for this level
       const bestTime = saveManager.getBestTime(this.levelIndex);
-      this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY + 55, 'Best: ' + this.formatTime(bestTime), { fontSize: '14px', fill: '#4488ff', fontFamily: 'Courier New' }).setOrigin(0.5);
+      const bestText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY + 55, 'Best: ' + this.formatTime(bestTime), { fontSize: '14px', fill: '#4488ff', fontFamily: 'Courier New' }).setOrigin(0.5);
+      
+      // Animate stats
+      [creditsText, timeText, bestText].forEach((t, i) => {
+        t.setAlpha(0);
+        t.setY(t.y + 20);
+        this.tweens.add({
+          targets: t,
+          alpha: 1,
+          y: t.y - 20,
+          duration: 300,
+          delay: 200 + i * 100,
+          ease: 'Quad.easeOut'
+        });
+      });
     } else {
-      this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY, 'You were detected!', { fontSize: '16px', fill: '#ff4444', fontFamily: 'Courier New' }).setOrigin(0.5);
-      this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY + 30, 'Press R to retry', { fontSize: '14px', fill: '#888888', fontFamily: 'Courier New' }).setOrigin(0.5);
+      const detectText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY, 'You were detected!', { fontSize: '16px', fill: '#ff4444', fontFamily: 'Courier New' }).setOrigin(0.5);
+      const retryText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY + 30, 'Press R to retry', { fontSize: '14px', fill: '#888888', fontFamily: 'Courier New' }).setOrigin(0.5);
+      
+      // Animate failure text
+      [detectText, retryText].forEach((t, i) => {
+        t.setAlpha(0);
+        this.tweens.add({
+          targets: t,
+          alpha: 1,
+          duration: 300,
+          delay: 200 + i * 100
+        });
+      });
     }
     
     // Buttons
@@ -415,7 +810,7 @@ class ResultsScene extends Phaser.Scene {
     // Retry button
     this.createButton(MAP_WIDTH * TILE_SIZE / 2 - spacing - 10, buttonY, buttonWidth, buttonHeight, '↻ RETRY', 0x2244aa, 0x4488ff, () => {
       sfx.select();
-      this.scene.start('GameScene', { levelIndex: this.levelIndex });
+      this.transitionTo('GameScene', { levelIndex: this.levelIndex });
     });
     
     // Next Level button (only if success and next level exists)
@@ -425,7 +820,7 @@ class ResultsScene extends Phaser.Scene {
       this.createButton(MAP_WIDTH * TILE_SIZE / 2 + spacing + 10, buttonY, buttonWidth, buttonHeight, 'NEXT ▶', 0x1a4a2a, isNextUnlocked ? 0x44ff88 : 0x444444, () => {
         if (isNextUnlocked) {
           sfx.select();
-          this.scene.start('GameScene', { levelIndex: this.levelIndex + 1 });
+          this.transitionTo('GameScene', { levelIndex: this.levelIndex + 1 });
         }
       }, !isNextUnlocked);
     } else if (this.success) {
@@ -437,13 +832,13 @@ class ResultsScene extends Phaser.Scene {
     const menuY = buttonY + spacing;
     this.createButton(MAP_WIDTH * TILE_SIZE / 2 - spacing - 10, menuY, buttonWidth, buttonHeight, '▣ LEVELS', 0x2a2a3a, 0x8888aa, () => {
       sfx.select();
-      this.scene.start('LevelSelectScene');
+      this.transitionTo('LevelSelectScene');
     });
     
     // Main Menu button
     this.createButton(MAP_WIDTH * TILE_SIZE / 2 + spacing + 10, menuY, buttonWidth, buttonHeight, '⌂ MENU', 0x2a2a3a, 0x8888aa, () => {
       sfx.select();
-      this.scene.start('MainMenuScene');
+      this.transitionTo('MainMenuScene');
     });
     
     // Keyboard shortcuts
@@ -451,14 +846,86 @@ class ResultsScene extends Phaser.Scene {
     
     this.input.keyboard.on('keydown-R', () => {
       sfx.select();
-      this.scene.start('GameScene', { levelIndex: this.levelIndex });
+      this.transitionTo('GameScene', { levelIndex: this.levelIndex });
     });
     this.input.keyboard.on('keydown-ESC', () => {
       sfx.select();
-      this.scene.start('MainMenuScene');
+      this.transitionTo('MainMenuScene');
     });
     this.input.keyboard.once('keydown', () => sfx.init());
     this.input.on('pointerdown', () => sfx.init(), this);
+  }
+  
+  createResultParticles() {
+    // Create particles for win/lose effect
+    this.resultParticles = [];
+    const particleCount = this.success ? 30 : 20;
+    const colors = this.success ? [0x00ff88, 0x44ffaa, 0x88ffcc, 0xffaa00] : [0xff4444, 0xff6644, 0xff2222];
+    
+    for (let i = 0; i < particleCount; i++) {
+      const x = Math.random() * MAP_WIDTH * TILE_SIZE;
+      const y = Math.random() * MAP_HEIGHT * TILE_SIZE;
+      const color = colors[Math.floor(Math.random() * colors.length)];
+      const particle = this.add.circle(x, y, 2 + Math.random() * 4, color, 0.3 + Math.random() * 0.4);
+      particle.speedX = (Math.random() - 0.5) * 2;
+      particle.speedY = -1 - Math.random() * 2;
+      particle.life = 1;
+      particle.decay = 0.005 + Math.random() * 0.01;
+      this.resultParticles.push(particle);
+    }
+    
+    // Animate particles
+    this.time.addEvent({
+      delay: 16,
+      callback: () => {
+        this.resultParticles.forEach(p => {
+          p.x += p.speedX;
+          p.y += p.speedY;
+          p.life -= p.decay;
+          p.setAlpha(p.life * 0.5);
+          
+          if (p.life <= 0 || p.y < 0) {
+            p.x = Math.random() * MAP_WIDTH * TILE_SIZE;
+            p.y = MAP_HEIGHT * TILE_SIZE + 10;
+            p.life = 1;
+          }
+        });
+      },
+      loop: true
+    });
+  }
+  
+  transitionTo(sceneKey, data = null) {
+    const { width, height } = this.scale;
+    const cx = width / 2;
+    const cy = height / 2;
+    
+    const overlay = this.add.rectangle(cx, cy, width, height, 0x000000);
+    overlay.setDepth(100);
+    overlay.setAlpha(0);
+    
+    this.tweens.add({
+      targets: overlay,
+      alpha: 1,
+      duration: 200,
+      ease: 'Quad.easeIn',
+      onComplete: () => {
+        if (data) {
+          this.scene.start(sceneKey, data);
+        } else {
+          this.scene.start(sceneKey);
+        }
+        this.time.delayedCall(50, () => {
+          this.tweens.add({
+            targets: overlay,
+            alpha: 0,
+            duration: 200,
+            ease: 'Quad.easeOut',
+            onComplete: () => overlay.destroy()
+          });
+        });
+      }
+    });
   }
   
   createButton(x, y, width, height, text, bgColor, strokeColor, onClick, disabled = false) {
@@ -466,9 +933,35 @@ class ResultsScene extends Phaser.Scene {
     bg.setStrokeStyle(2, disabled ? 0x333333 : strokeColor);
     bg.setInteractive({ useHandCursor: !disabled });
     const label = this.add.text(x, y, text, { fontSize: '14px', fill: disabled ? '#444444' : '#ffffff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
-    bg.on('pointerover', () => { if (!disabled) { bg.setFillStyle(bgColor + 0x202020); sfx.menuHover(); } });
-    bg.on('pointerout', () => { if (!disabled) bg.setFillStyle(bgColor); });
-    bg.on('pointerdown', () => onClick());
+    
+    // Enhanced hover effects
+    bg.on('pointerover', () => { 
+      if (!disabled) { 
+        bg.setFillStyle(bgColor + 0x202020); 
+        bg.setStrokeStyle(2, 0xffffff);
+        sfx.menuHover(); 
+      } 
+    });
+    bg.on('pointerout', () => { 
+      if (!disabled) {
+        bg.setFillStyle(bgColor); 
+        bg.setStrokeStyle(2, strokeColor);
+      }
+    });
+    bg.on('pointerdown', () => {
+      // Button press animation
+      this.tweens.add({
+        targets: bg,
+        scaleX: 0.95,
+        scaleY: 0.95,
+        duration: 50,
+        yoyo: true,
+        onComplete: () => {
+          bg.setScale(1);
+        }
+      });
+      onClick();
+    });
     return { bg, label };
   }
   
@@ -1229,6 +1722,38 @@ class GameScene extends Phaser.Scene {
     // This allows keyboard handlers to still work
     if (this.player?.body) this.player.body.setVelocity(0);
     sfx.alert();
+    sfx.detection(); // Additional detection sound
+    
+    // Detection pulse effect - red flash overlay
+    const { width, height } = this.scale;
+    const pulseOverlay = this.add.rectangle(width/2, height/2, width, height, 0xff0000);
+    pulseOverlay.setDepth(200);
+    pulseOverlay.setAlpha(0);
+    
+    // Pulse animation
+    this.tweens.add({
+      targets: pulseOverlay,
+      alpha: 0.4,
+      duration: 100,
+      yoyo: true,
+      repeat: 3,
+      onComplete: () => {
+        pulseOverlay.destroy();
+      }
+    });
+    
+    // Player shake/glow red
+    if (this.playerGlow) {
+      this.playerGlow.setFillStyle(0xff0000, 0.5);
+      this.tweens.add({
+        targets: this.playerGlow,
+        alpha: 0.8,
+        duration: 100,
+        yoyo: true,
+        repeat: 3
+      });
+    }
+    
     if (this.statusText) {
       this.statusText.setText('DETECTED! Press R to restart');
       this.statusText.setFill('#ff0000');

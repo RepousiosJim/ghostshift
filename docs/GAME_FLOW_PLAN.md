@@ -3,7 +3,7 @@
 ## Overview
 Phased roadmap for implementing the complete game flow system.
 
-## Current Status: Phase 2 Complete ✅
+## Current Status: Phase 3 Complete ✅
 
 ### Phase 1: Menu Foundation (DONE)
 - [x] Scene architecture with 6 scenes
@@ -27,24 +27,29 @@ Phased roadmap for implementing the complete game flow system.
 - [x] Continue flow: Main menu continue loads last played level
 - [x] SaveManager: Proper per-level best times and unlocks
 
-## Phase 3: Polish & Game Feel (NEXT)
-- [ ] Scene transition effects (fade, slide)
-- [ ] Animated menu background
-- [ ] Sound effects for menu interactions
-- [ ] Particle effects for results
-- [ ] More visual polish for atmosphere
+### Phase 3: Polish & Game Feel (DONE)
+- [x] Scene transition effects (fade, slide)
+- [x] Animated menu background (floating particles, animated grid)
+- [x] Sound effects for menu interactions (click, hover, select)
+- [x] Detection feedback (red pulse overlay, screen shake, player glow)
+- [x] Particle effects for results (win: green/gold particles, lose: red particles)
+- [x] Result screen micro-animations (title pop-in, stats slide-in)
+- [x] Enhanced button hover/active states with glow and press animations
+- [x] Restart sound effect
+- [x] Additional SFX hooks (detection, restart, click)
 
-## Phase 4: Save System Enhancement
+## Phase 4: Content & Maps (NEXT)
+- [ ] Additional levels (4-6)
+- [ ] Level-specific objectives and challenges
+- [ ] Enemy variety (different guard patterns)
+- [ ] Difficulty scaling
+- [ ] Level editor (stretch goal)
+
+## Phase 5: Save System Enhancement
 - [ ] Multiple save slots
 - [ ] Cloud save (stretch)
 - [ ] Achievement system
 - [ ] Statistics tracking
-
-## Phase 5: Polish & Transitions
-- [ ] Scene transition effects (fade, slide)
-- [ ] Animated menu background
-- [ ] Sound effects for menu interactions
-- [ ] Particle effects for results
 
 ## Scene Architecture Details
 
@@ -62,32 +67,42 @@ MainMenuScene
 │   ├── Settings → SettingsScene
 │   ├── Controls → Overlay panel
 │   └── Credits → Overlay panel
+├── Animated background with particles
 └── Initialize audio on first interaction
 
 LevelSelectScene
 ├── Display: Level cards with name, best time, lock status
-├── Level 0: Warehouse (unlocked by default)
-├── Level 1: Labs (unlocked on completing Level 0)
-├── Level 2: Server Farm (unlocked on completing Level 1)
-└── Back → MainMenuScene
+├── Animated grid background
+├── Level number glow effect
+├── Back → MainMenuScene
+└── Fade transition to game
 
 SettingsScene
-├── Audio toggle
+├── Audio toggle with visual feedback
+├── Master volume slider
+├── Effects quality toggle
+├── Fullscreen toggle
+├── Reduced motion toggle
 ├── Reset progress (with confirmation)
-├── Version info
+├── Version info (v0.3.0 - Phase 3)
 └── Back → MainMenuScene
 
 GameScene
 ├── Preserved existing gameplay
 ├── Added level selection support
+├── Detection feedback (red pulse, shake)
 ├── Win: Transition to ResultsScene
 └── Detected: Transition to ResultsScene (failure)
 
-ResultsScene (Stub)
+ResultsScene
 ├── Display success/failure
 ├── Show credits earned
-├── Show time
-└── Continue → MainMenuScene
+├── Show time and best time
+├── Particle effects (win/lose)
+├── Title pop-in animation
+├── Stats slide-in animation
+├── Fade transition to other scenes
+└── Buttons: Retry, Next Level, Level Select, Menu
 ```
 
 ## Save Data Structure
@@ -100,8 +115,30 @@ ResultsScene (Stub)
   bestTimes: {},             // Per-level best times
   unlockedLevels: [0],      // Array of unlocked level indices
   perks: { speed: 1, stealth: 1, luck: 1 },
-  settings: { audioEnabled: true },
+  settings: { 
+    audioEnabled: true,
+    masterVolume: 0.8,
+    effectsQuality: 'high',
+    fullscreen: false,
+    reducedMotion: false
+  },
   lastPlayed: null,
   totalCreditsEarned: 0
 }
 ```
+
+## Audio System (Phase 3)
+
+The SFXManager provides procedural audio using Web Audio API:
+- **alert()**: Detection warning
+- **win()**: Mission success melody
+- **fail()**: Mission failure sound
+- **collect()**: Item pickup
+- **select()**: Menu selection
+- **menuHover()**: Menu hover feedback
+- **pickup()**: General pickup
+- **detection()**: Detection pulse (new)
+- **restart()**: Level restart sound (new)
+- **click()**: Button click feedback (new)
+
+All sounds respect the master volume and audio enabled settings.
