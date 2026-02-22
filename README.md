@@ -2,7 +2,9 @@
 
 A stealth evasion game built with Phaser 3 and Tauri.
 
-## Game Flow (Phase 4 Complete)
+## Game Flow (Phase 5 Complete)
+
+The game now features 5 playable levels with progressive difficulty and hardened save system:
 
 The game now features 5 playable levels with progressive difficulty:
 
@@ -28,7 +30,13 @@ BootScene → MainMenuScene → LevelSelectScene → GameScene
 - **SettingsScene**: Audio toggle, volume slider, effects quality, fullscreen, reduced motion, reset progress
 - **ResultsScene**: Mission complete/failed display with animations, particles, and Retry, Next Level, Level Select, and Menu buttons
 
-### Phase 4 New Features
+### Phase 5 New Features (Save System Hardening)
+- **Schema versioning**: Save data now includes version (v5) for future migrations
+- **Automatic migration**: Old save formats are automatically migrated to latest version
+- **Corruption recovery**: Invalid save data is detected and recovered to defaults
+- **Data validation**: All saved values are validated (types, ranges, enums)
+- **Integrity checks**: Level unlocks are validated, best times are sanitized
+- **Save test script**: Run `tests/save-validation.js` in browser console to verify save system
 - **5 playable levels**: Added "The Vault" and "Training Facility" with unique layouts
 - **Difficulty scaling**: Guards, vision cones, and sensors scale with level difficulty
 - **New objectives**: Security Code and Power Cell pickups

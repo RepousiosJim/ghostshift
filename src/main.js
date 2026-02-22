@@ -2,13 +2,52 @@ import Phaser from 'phaser';
 
 // ==================== SAVE MANAGER ====================
 const SAVE_KEY = 'ghostshift_save';
+const SAVE_VERSION = 5;
+
+// Schema definition for validation
+const SAVE_SCHEMA = {
+  credits: { type: 'number', min: 0, default: 0 },
+  totalRuns: { type: 'number', min: 0, default: 0 },
+  bestTime: { type: ['number', 'null'], min: 0, default: null },
+  bestTimes: { type: 'object', default: {} },
+  unlockedLevels: { type: 'array', items: { type: 'number', min: 0 }, default: [0] },
+  perks: { 
+    type: 'object', 
+    properties: {
+      speed: { type: 'number', min: 1, max: 4, default: 1 },
+      stealth: { type: 'number', min: 1, max: 4, default: 1 },
+      luck: { type: 'number', min: 1, max: 4, default: 1 }
+    },
+    default: { speed: 1, stealth: 1, luck: 1 }
+  },
+  settings: { 
+    type: 'object',
+    properties: {
+      audioEnabled: { type: 'boolean', default: true },
+      masterVolume: { type: 'number', min: 0, max: 1, default: 0.8 },
+      effectsQuality: { type: 'string', enum: ['low', 'medium', 'high'], default: 'high' },
+      fullscreen: { type: 'boolean', default: false },
+      reducedMotion: { type: 'boolean', default: false }
+    },
+    default: { 
+      audioEnabled: true, 
+      masterVolume: 0.8,
+      effectsQuality: 'high',
+      fullscreen: false,
+      reducedMotion: false
+    }
+  },
+  lastPlayed: { type: ['number', 'null'], min: 0, default: null },
+  totalCreditsEarned: { type: 'number', min: 0, default: 0 },
+  saveVersion: { type: 'number', min: 1, default: SAVE_VERSION }
+};
 
 const defaultSaveData = {
   credits: 0,
   totalRuns: 0,
   bestTime: null,
-  bestTimes: {}, // per-level best times
-  unlockedLevels: [0], // array of unlocked level indices
+  bestTimes: {},
+  unlockedLevels: [0],
   perks: { speed: 1, stealth: 1, luck: 1 },
   settings: { 
     audioEnabled: true, 
@@ -18,43 +57,352 @@ const defaultSaveData = {
     reducedMotion: false
   },
   lastPlayed: null,
-  totalCreditsEarned: 0
+  totalCreditsEarned: 0,
+  saveVersion: SAVE_VERSION
 };
 
+// Migration functions for schema updates
+const SAVE_MIGRATIONS = {
+  // Migration from v1 to v2: Added perks system
+  2: (data) => {
+    data.perks = { speed: 1, stealth: 1, luck: 1 };
+    return data;
+  },
+  // Migration from v2 to v3: Added settings
+  3: (data) => {
+    data.settings = { 
+      audioEnabled: data.audioEnabled !== false,
+      masterVolume: data.masterVolume || 0.8,
+      effectsQuality: 'high',
+      fullscreen: false,
+      reducedMotion: false
+    };
+    return data;
+  },
+  // Migration from v3 to v4: Added new settings
+  4: (data) => {
+    if (data.settings) {
+      data.settings.fullscreen = data.settings.fullscreen || false;
+      data.settings.reducedMotion = data.settings.reducedMotion || false;
+    }
+    return data;
+  },
+  // Migration from v4 to v5: Added saveVersion tracking
+  5: (data) => {
+    data.saveVersion = SAVE_VERSION;
+    return data;
+  }
+};
+
+// Validate a value against schema
+function validateValue(value, schema) {
+  if (schema.type === 'array') {
+    if (!Array.isArray(value)) return schema.default;
+    return value.map((item, i) => validateValue(item, schema.items || { type: 'any' })).filter(v => v !== undefined);
+  }
+  if (schema.type === 'object') {
+    if (typeof value !== 'object' || value === null) return schema.default;
+    const result = {};
+    for (const key in schema.properties) {
+      result[key] = validateValue(value[key], schema.properties[key]);
+    }
+    return result;
+  }
+  if (schema.type === 'number') {
+    if (typeof value !== 'number') return schema.default;
+    if (schema.min !== undefined && value < schema.min) return schema.default;
+    if (schema.max !== undefined && value > schema.max) return schema.default;
+    return value;
+  }
+  if (schema.type === 'boolean') {
+    return typeof value === 'boolean' ? value : schema.default;
+  }
+  if (schema.type === 'string') {
+    if (typeof value !== 'string') return schema.default;
+    if (schema.enum && !schema.enum.includes(value)) return schema.default;
+    return value;
+  }
+  if (schema.type === 'null') {
+    return value === null ? null : schema.default;
+  }
+  if (Array.isArray(schema.type)) {
+    // Union types
+    for (const t of schema.type) {
+      try {
+        return validateValue(value, { type: t, default: schema.default });
+      } catch (e) {
+        continue;
+      }
+    }
+    return schema.default;
+  }
+  return value !== undefined ? value : schema.default;
+}
+
+// Validate and sanitize entire save data
+function validateSaveData(data) {
+  if (!data || typeof data !== 'object') {
+    console.warn('Save data corrupted, using defaults');
+    return { ...defaultSaveData };
+  }
+  
+  const result = {};
+  for (const key in SAVE_SCHEMA) {
+    result[key] = validateValue(data[key], SAVE_SCHEMA[key]);
+  }
+  
+  // Additional integrity checks
+  // Ensure unlockedLevels is sorted and unique
+  if (result.unlockedLevels) {
+    result.unlockedLevels = [...new Set(result.unlockedLevels)].sort((a, b) => a - b);
+    if (result.unlockedLevels.length === 0) result.unlockedLevels = [0];
+    if (!result.unlockedLevels.includes(0)) result.unlockedLevels.unshift(0);
+  }
+  
+  // Ensure bestTimes only contains valid level indices
+  if (result.bestTimes && typeof result.bestTimes === 'object') {
+    const cleaned = {};
+    for (const key in result.bestTimes) {
+      const levelIdx = parseInt(key, 10);
+      const time = result.bestTimes[key];
+      if (!isNaN(levelIdx) && typeof time === 'number' && time > 0 && time < 3600000) {
+        cleaned[key] = time;
+      }
+    }
+    result.bestTimes = cleaned;
+  }
+  
+  return result;
+}
+
+// Migrate save data from older versions
+function migrateSaveData(data) {
+  if (!data || typeof data !== 'object') {
+    return { ...defaultSaveData };
+  }
+  
+  const currentVersion = data.saveVersion || 1;
+  
+  if (currentVersion === SAVE_VERSION) {
+    return data; // Already up to date
+  }
+  
+  console.log(`Migrating save data from v${currentVersion} to v${SAVE_VERSION}`);
+  
+  let migrated = { ...data };
+  for (let v = currentVersion + 1; v <= SAVE_VERSION; v++) {
+    if (SAVE_MIGRATIONS[v]) {
+      migrated = SAVE_MIGRATIONS[v](migrated);
+      console.log(`Applied migration to v${v}`);
+    }
+  }
+  
+  migrated.saveVersion = SAVE_VERSION;
+  return migrated;
+}
+
 class SaveManager {
-  constructor() { this.data = this.load(); }
+  constructor() { 
+    this.data = this.load(); 
+    this._saveInProgress = false;
+  }
+  
   load() {
     try {
       const saved = localStorage.getItem(SAVE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return { ...defaultSaveData, ...parsed, perks: { ...defaultSaveData.perks, ...(parsed.perks || {}) }, settings: { ...defaultSaveData.settings, ...(parsed.settings || {}) }, bestTimes: parsed.bestTimes || {}, unlockedLevels: parsed.unlockedLevels || [0] };
+      if (!saved) {
+        console.log('No save data found, using defaults');
+        return { ...defaultSaveData };
       }
-    } catch (e) { console.warn('Failed to load save, using defaults:', e); }
-    return { ...defaultSaveData };
+      
+      const parsed = JSON.parse(saved);
+      
+      // First, try to migrate if needed
+      const migrated = migrateSaveData(parsed);
+      
+      // Then validate the migrated data
+      const validated = validateSaveData(migrated);
+      
+      console.log('Save data loaded and validated, version:', validated.saveVersion);
+      return validated;
+      
+    } catch (e) {
+      console.warn('Failed to load save, attempting recovery:', e);
+      // Attempt recovery from corrupted data
+      try {
+        const recovered = this._attemptRecovery();
+        if (recovered) {
+          console.log('Save data recovered successfully');
+          return recovered;
+        }
+      } catch (recoveryError) {
+        console.error('Save recovery failed:', recoveryError);
+      }
+      console.warn('Using default save data');
+      return { ...defaultSaveData };
+    }
   }
-  save() { try { localStorage.setItem(SAVE_KEY, JSON.stringify(this.data)); } catch (e) { console.warn('Failed to save:', e); } }
+  
+  _attemptRecovery() {
+    try {
+      // Try to read partial data from localStorage
+      const raw = localStorage.getItem(SAVE_KEY);
+      if (!raw) return null;
+      
+      // Attempt to parse and extract valid parts
+      const partial = JSON.parse(raw);
+      if (partial && typeof partial === 'object') {
+        return validateSaveData(partial);
+      }
+    } catch (e) {
+      // If even partial recovery fails, clear corrupted data
+      console.log('Clearing corrupted save data');
+      localStorage.removeItem(SAVE_KEY);
+    }
+    return null;
+  }
+  
+  save() {
+    // Prevent rapid successive saves
+    if (this._saveInProgress) return;
+    this._saveInProgress = true;
+    
+    try {
+      localStorage.setItem(SAVE_KEY, JSON.stringify(this.data));
+    } catch (e) {
+      console.error('Failed to save game:', e);
+      // Handle quota exceeded
+      if (e.name === 'QuotaExceededError') {
+        console.warn('Storage quota exceeded, attempting cleanup');
+        this._cleanupOldData();
+        try {
+          localStorage.setItem(SAVE_KEY, JSON.stringify(this.data));
+        } catch (retryError) {
+          console.error('Save still failed after cleanup:', retryError);
+        }
+      }
+    } finally {
+      // Small delay to prevent rapid saves
+      setTimeout(() => { this._saveInProgress = false; }, 100);
+    }
+  }
+  
+  _cleanupOldData() {
+    // Remove any other app data if we're running low on space
+    const keysToCheck = ['ghostshift_ghost', 'ghostshift_temp'];
+    keysToCheck.forEach(key => {
+      try {
+        localStorage.removeItem(key);
+      } catch (e) { /* ignore */ }
+    });
+  }
+  
   hasSave() { return this.data.totalRuns > 0 || this.data.credits > 0; }
   getLastPlayed() { return this.data.lastPlayed; }
-  addCredits(amount) { this.data.credits += amount; this.data.totalCreditsEarned += amount; this.save(); }
-  spendCredits(amount) { if (this.data.credits >= amount) { this.data.credits -= amount; this.save(); return true; } return false; }
-  getPerkLevel(perk) { return this.data.perks[perk] || 1; }
+  
+  addCredits(amount) { 
+    if (typeof amount !== 'number' || amount < 0) return;
+    this.data.credits += amount; 
+    this.data.totalCreditsEarned += amount; 
+    this.save(); 
+  }
+  
+  spendCredits(amount) { 
+    if (typeof amount !== 'number' || amount < 0) return false;
+    if (this.data.credits >= amount) { 
+      this.data.credits -= amount; 
+      this.save(); 
+      return true; 
+    } 
+    return false; 
+  }
+  
+  getPerkLevel(perk) { 
+    if (!this.data.perks || typeof this.data.perks[perk] !== 'number') return 1;
+    return Math.max(1, Math.min(4, this.data.perks[perk]));
+  }
+  
   upgradePerk(perk) {
     const PERK_INFO = { speed: { costs: [0, 50, 100, 200], bonus: [0, 0.15, 0.35, 0.6] }, stealth: { costs: [0, 50, 100, 200], bonus: [0, 0.2, 0.4, 0.65] }, luck: { costs: [0, 50, 100, 200], bonus: [0, 10, 25, 50] } };
-    const currentLevel = this.data.perks[perk] || 1;
+    const currentLevel = this.getPerkLevel(perk);
     if (currentLevel >= 4) return false;
     const cost = PERK_INFO[perk].costs[currentLevel];
-    if (this.spendCredits(cost)) { this.data.perks[perk] = currentLevel + 1; this.save(); return true; }
+    if (this.spendCredits(cost)) { 
+      this.data.perks[perk] = currentLevel + 1; 
+      this.save(); 
+      return true; 
+    }
     return false;
   }
-  isLevelUnlocked(levelIndex) { return this.data.unlockedLevels.includes(levelIndex); }
-  unlockLevel(levelIndex) { if (!this.isLevelUnlocked(levelIndex)) { this.data.unlockedLevels.push(levelIndex); this.save(); } }
-  getBestTime(levelIndex) { return this.data.bestTimes[levelIndex] || null; }
-  setBestTime(levelIndex, time) { const current = this.data.bestTimes[levelIndex]; if (!current || time < current) { this.data.bestTimes[levelIndex] = time; this.save(); } }
-  getSetting(key) { return this.data.settings[key]; }
-  setSetting(key, value) { this.data.settings[key] = value; this.save(); }
-  recordRun(levelIndex, time, creditsEarned) { this.data.totalRuns++; this.data.lastPlayed = Date.now(); this.addCredits(creditsEarned); this.setBestTime(levelIndex, time); if (levelIndex < LEVEL_LAYOUTS.length - 1) this.unlockLevel(levelIndex + 1); }
-  resetSave() { this.data = { ...defaultSaveData }; this.save(); }
+  
+  isLevelUnlocked(levelIndex) { 
+    if (!this.data.unlockedLevels || !Array.isArray(this.data.unlockedLevels)) return levelIndex === 0;
+    return this.data.unlockedLevels.includes(levelIndex);
+  }
+  
+  unlockLevel(levelIndex) { 
+    if (!this.isLevelUnlocked(levelIndex)) { 
+      this.data.unlockedLevels.push(levelIndex);
+      this.data.unlockedLevels = [...new Set(this.data.unlockedLevels)].sort((a, b) => a - b);
+      this.save(); 
+    } 
+  }
+  
+  getBestTime(levelIndex) { 
+    if (!this.data.bestTimes || typeof this.data.bestTimes[levelIndex] !== 'number') return null;
+    return this.data.bestTimes[levelIndex];
+  }
+  
+  setBestTime(levelIndex, time) { 
+    if (typeof time !== 'number' || time < 0 || time > 3600000) return;
+    const current = this.getBestTime(levelIndex);
+    if (!current || time < current) { 
+      this.data.bestTimes[levelIndex] = time; 
+      this.save(); 
+    }
+  }
+  
+  getSetting(key) { 
+    if (!this.data.settings || typeof this.data.settings[key] === 'undefined') {
+      return defaultSaveData.settings[key];
+    }
+    return this.data.settings[key];
+  }
+  
+  setSetting(key, value) { 
+    if (!this.data.settings) this.data.settings = { ...defaultSaveData.settings };
+    this.data.settings[key] = value; 
+    this.save(); 
+  }
+  
+  recordRun(levelIndex, time, creditsEarned) { 
+    if (typeof levelIndex !== 'number' || typeof time !== 'number') return;
+    this.data.totalRuns++; 
+    this.data.lastPlayed = Date.now(); 
+    this.addCredits(creditsEarned); 
+    this.setBestTime(levelIndex, time); 
+    if (levelIndex < LEVEL_LAYOUTS.length - 1) this.unlockLevel(levelIndex + 1); 
+  }
+  
+  resetSave() { 
+    this.data = { ...defaultSaveData }; 
+    this.save(); 
+  }
+  
+  // Debug: Get raw save data for testing
+  _getRawData() {
+    try {
+      return JSON.parse(localStorage.getItem(SAVE_KEY));
+    } catch (e) {
+      return null;
+    }
+  }
+  
+  // Debug: Force reload from storage
+  _forceReload() {
+    this.data = this.load();
+    return this.data;
+  }
 }
 
 const saveManager = new SaveManager();
@@ -531,7 +879,7 @@ class MainMenuScene extends Phaser.Scene {
     bg.setStrokeStyle(2, 0x4488ff);
     panel.add(bg);
     panel.add(this.add.text(0, -110, 'CREDITS', { fontSize: '24px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5));
-    const credits = [{ role: 'Developer', name: 'GhostShift Team' }, { role: 'Engine', name: 'Phaser 3' }, { role: 'Version', name: '0.4.0 (Phase 4)' }, { role: 'Levels', name: '5 Total' }];
+    const credits = [{ role: 'Developer', name: 'GhostShift Team' }, { role: 'Engine', name: 'Phaser 3' }, { role: 'Version', name: '0.5.0 (Phase 5)' }, { role: 'Levels', name: '5 Total' }, { role: 'Save', name: 'Hardened v5' }];
     let yOffset = -60;
     credits.forEach(c => { panel.add(this.add.text(-120, yOffset, c.role + ':', { fontSize: '14px', fill: '#ffaa00', fontFamily: 'Courier New' }).setOrigin(0, 0.5)); panel.add(this.add.text(30, yOffset, c.name, { fontSize: '14px', fill: '#cccccc', fontFamily: 'Courier New' }).setOrigin(0, 0.5)); yOffset += 35; });
     panel.add(this.add.text(0, 100, '[ Press any key or click to close ]', { fontSize: '12px', fill: '#666688', fontFamily: 'Courier New' }).setOrigin(0.5));
@@ -779,7 +1127,7 @@ class SettingsScene extends Phaser.Scene {
       } 
     });
     
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE - 30, 'GhostShift v0.4.0 - Phase 4', { fontSize: '12px', fill: '#444455', fontFamily: 'Courier New' }).setOrigin(0.5);
+    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE - 30, 'GhostShift v0.5.0 - Phase 5', { fontSize: '12px', fill: '#444455', fontFamily: 'Courier New' }).setOrigin(0.5);
     this.input.keyboard.once('keydown', () => sfx.init());
     this.input.on('pointerdown', () => sfx.init(), this);
   }
