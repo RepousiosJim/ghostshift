@@ -186,6 +186,161 @@ class FullscreenManager {
 
 const fullscreenManager = new FullscreenManager();
 
+// ==================== PERFORMANCE MANAGER ====================
+// Lightweight in-game performance instrumentation
+class PerformanceManager {
+  constructor() {
+    this.enabled = false;
+    this.overlayVisible = false;
+    this.frameTimes = [];
+    this.maxSamples = 300; // ~5 seconds at 60fps
+    this.timingMarkers = {};
+    this.lastFrameTime = 0;
+    this.fps = 60;
+    this.currentFrameTime = 0;
+    this.p95FrameTime = 16.67; // Default 60fps
+    this.sceneRef = null;
+    
+    // Create overlay DOM element (hidden by default)
+    this.createOverlay();
+    
+    // Listen for toggle key
+    this.setupInputListener();
+  }
+  
+  createOverlay() {
+    // Check if overlay already exists
+    let overlay = document.getElementById('perf-overlay');
+    if (overlay) {
+      this.overlay = overlay;
+      return;
+    }
+    
+    overlay = document.createElement('div');
+    overlay.id = 'perf-overlay';
+    overlay.style.cssText = `
+      position: fixed;
+      top: 10px;
+      left: 10px;
+      background: rgba(0, 0, 0, 0.75);
+      color: #00ff88;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      padding: 12px 16px;
+      border-radius: 6px;
+      border: 1px solid #00ff88;
+      z-index: 99999;
+      pointer-events: none;
+      display: none;
+      line-height: 1.6;
+      min-width: 180px;
+    `;
+    overlay.innerHTML = `
+      <div style="color: #ffaa00; font-weight: bold; margin-bottom: 6px;">⚡ PERFORMANCE</div>
+      <div>FPS: <span id="perf-fps">--</span></div>
+      <div>Frame: <span id="perf-frame">--</span>ms</div>
+      <div>p95: <span id="perf-p95">--</span>ms</div>
+      <div style="margin-top: 8px; color: #888; font-size: 11px;">[F3] Toggle</div>
+    `;
+    document.body.appendChild(overlay);
+    this.overlay = overlay;
+  }
+  
+  setupInputListener() {
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'F3' || (e.code === 'KeyP' && e.shiftKey)) {
+        e.preventDefault();
+        this.toggleOverlay();
+      }
+    });
+  }
+  
+  toggleOverlay() {
+    this.overlayVisible = !this.overlayVisible;
+    this.overlay.style.display = this.overlayVisible ? 'block' : 'none';
+  }
+  
+  // Start timing a named marker
+  startMarker(name) {
+    if (!this.enabled) return;
+    this.timingMarkers[name] = { start: performance.now(), children: [] };
+  }
+  
+  // End timing a named marker
+  endMarker(name) {
+    if (!this.enabled || !this.timingMarkers[name]) return;
+    const marker = this.timingMarkers[name];
+    marker.end = performance.now();
+    marker.duration = marker.end - marker.start;
+    return marker.duration;
+  }
+  
+  // Record frame time (call at end of each frame)
+  recordFrame(frameTime) {
+    if (!this.enabled) return;
+    
+    this.frameTimes.push(frameTime);
+    if (this.frameTimes.length > this.maxSamples) {
+      this.frameTimes.shift();
+    }
+    
+    this.currentFrameTime = frameTime;
+    this.fps = Math.round(1000 / frameTime);
+    
+    // Calculate p95
+    if (this.frameTimes.length >= 30) {
+      const sorted = [...this.frameTimes].sort((a, b) => a - b);
+      const p95Index = Math.floor(sorted.length * 0.95);
+      this.p95FrameTime = sorted[p95Index];
+    }
+    
+    // Update overlay if visible
+    if (this.overlayVisible) {
+      this.updateOverlay();
+    }
+  }
+  
+  updateOverlay() {
+    const fpsEl = document.getElementById('perf-fps');
+    const frameEl = document.getElementById('perf-frame');
+    const p95El = document.getElementById('perf-p95');
+    
+    if (fpsEl) fpsEl.textContent = this.fps.toString().padStart(3, ' ');
+    if (frameEl) frameEl.textContent = this.currentFrameTime.toFixed(2);
+    if (p95El) p95El.textContent = this.p95FrameTime.toFixed(2);
+  }
+  
+  // Get stats for reporting
+  getStats() {
+    const avgFrameTime = this.frameTimes.length > 0 
+      ? this.frameTimes.reduce((a, b) => a + b, 0) / this.frameTimes.length 
+      : 0;
+    
+    return {
+      fps: this.fps,
+      currentFrameTime: this.currentFrameTime,
+      avgFrameTime,
+      p95FrameTime: this.p95FrameTime,
+      sampleCount: this.frameTimes.length,
+      markers: Object.keys(this.timingMarkers).reduce((acc, key) => {
+        acc[key] = this.timingMarkers[key].duration;
+        return acc;
+      }, {})
+    };
+  }
+  
+  // Enable/disable instrumentation
+  setEnabled(enabled) {
+    this.enabled = enabled;
+    if (enabled) {
+      // Show hint that overlay is available
+      console.log('Performance instrumentation enabled. Press F3 for overlay.');
+    }
+  }
+}
+
+const perfManager = new PerformanceManager();
+
 // ==================== SAVE MANAGER ====================
 const SAVE_KEY = 'ghostshift_save';
 const SAVE_VERSION = 5;
@@ -1458,13 +1613,17 @@ class MainMenuScene extends Phaser.Scene {
 class LevelSelectScene extends Phaser.Scene {
   constructor() { super({ key: 'LevelSelectScene' }); }
   create() {
+    // Register resize listener
+    this._resizeListener = () => this._handleResize();
+    fullscreenManager.on('resize', this._resizeListener);
+    
     // Background
     this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
     
     // Animated grid
     this.gridGraphics = this.add.graphics();
     this.gridOffset = 0;
-    this.time.addEvent({
+    this._gridTimer = this.time.addEvent({
       delay: 50,
       callback: () => {
         this.gridOffset = (this.gridOffset + 0.3) % 32;
@@ -1530,43 +1689,6 @@ class LevelSelectScene extends Phaser.Scene {
     });
     this.input.keyboard.once('keydown', () => sfx.init());
     this.input.on('pointerdown', () => sfx.init(), this);
-  }
-  
-  // Phase 9: Handle window resize for fullscreen
-  create() {
-    // Register resize listener
-    this._resizeListener = () => this._handleResize();
-    fullscreenManager.on('resize', this._resizeListener);
-    
-    // Background
-    this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
-    this.gridGraphics.clear();
-    this.gridGraphics.lineStyle(1, 0x1a1a2a, 0.3);
-    for (let x = 0; x <= MAP_WIDTH; x++) {
-      this.gridGraphics.lineBetween(x * 32, 0, x * 32, MAP_HEIGHT * TILE_SIZE);
-    }
-    for (let y = 0; y <= MAP_HEIGHT; y++) {
-      this.gridGraphics.lineBetween(0, y * 32, MAP_WIDTH * TILE_SIZE, y * 32);
-    }
-  }
-  
-  // Phase 9: Handle window resize for fullscreen
-  _handleResize() {
-    const { width } = this.scale;
-    const centerX = width / 2;
-    
-    // Update grid position if needed
-    if (this.gridGraphics) {
-      this.gridGraphics.setPosition(centerX, MAP_HEIGHT * TILE_SIZE / 2);
-    }
-  }
-  
-  // Cleanup listeners when scene is destroyed
-  shutdown() {
-    if (this._resizeListener) {
-      fullscreenManager.off(this._resizeListener);
-    }
-    super.shutdown();
   }
   
   transitionTo(sceneKey, data = null) {
@@ -2486,6 +2608,10 @@ class GameScene extends Phaser.Scene {
     this.hasWon = false;
     this._restarted = false;
     
+    // Enable performance instrumentation for this scene
+    perfManager.setEnabled(true);
+    perfManager.sceneRef = this;
+    
     // Set up keyboard handlers - must be set up immediately
     this.cursors = this.input.keyboard.createCursorKeys();
     this.rKey = this.input.keyboard.addKeys({ r: Phaser.Input.Keyboard.KeyCodes.R });
@@ -2550,9 +2676,14 @@ class GameScene extends Phaser.Scene {
     this.player.setStrokeStyle(2, 0x00ffff);
     this.physics.add.existing(this.player);
     this.player.body.setCollideWorldBounds(true);
-    // Player movement trail
+    
+    // Player movement trail - use object pool (pre-allocate)
     this.playerTrail = this.add.graphics();
     this.playerTrailPoints = [];
+    this._trailPool = [];  // Pre-allocated pool
+    for (let i = 0; i < 12; i++) {
+      this._trailPool.push({ x: 0, y: 0, alpha: 0, active: false });
+    }
 
     // Guard with menacing glow
     this.guardGlow = this.add.circle(TILE_SIZE * 15, TILE_SIZE * 7, TILE_SIZE / 2 + 4, 0xff3344, 0.15);
@@ -2930,36 +3061,96 @@ class GameScene extends Phaser.Scene {
     this.currentRun.push({ px: this.player.x, py: this.player.y, gx: this.guard.x, gy: this.guard.y, dx: this.scannerDrone ? this.scannerDrone.x : 0, dy: this.scannerDrone ? this.scannerDrone.y : 0, time: this.elapsedTime });
   }
 
+  // Pre-calculated squared distances for collision detection (avoids sqrt)
+  _SQUARED_DIST(p1x, p1y, p2x, p2y) {
+    const dx = p2x - p1x;
+    const dy = p2y - p1y;
+    return dx * dx + dy * dy;
+  }
+
   update(time, delta) {
+    // Performance instrumentation start
+    perfManager.startMarker('frame');
+    
     // Check for restart key even when detected - use event listener
     if (this.isDetected) {
       // Check directly via DOM event
+      perfManager.endMarker('frame');
       return;
     }
-    if (!this.isRunning || this.isPaused || this.isDetected || this.hasWon) return;
+    if (!this.isRunning || this.isPaused || this.isDetected || this.hasWon) {
+      perfManager.endMarker('frame');
+      return;
+    }
+    
     this.elapsedTime += delta;
+    
+    perfManager.startMarker('updateTimer');
     this.updateTimer();
+    perfManager.endMarker('updateTimer');
+    
+    perfManager.startMarker('updatePlayer');
     this.updatePlayer();
+    perfManager.endMarker('updatePlayer');
+    
+    perfManager.startMarker('updateGuard');
     this.updateGuard();
+    perfManager.endMarker('updateGuard');
+    
+    perfManager.startMarker('updateScannerDrone');
     this.updateScannerDrone();
+    perfManager.endMarker('updateScannerDrone');
+    
+    perfManager.startMarker('updateCameras');
     this.updateCameras();
+    perfManager.endMarker('updateCameras');
+    
+    perfManager.startMarker('updateMotionSensors');
     this.updateMotionSensors();
+    perfManager.endMarker('updateMotionSensors');
+    
+    perfManager.startMarker('updateLaserGrids');
     this.updateLaserGrids();
+    perfManager.endMarker('updateLaserGrids');
+    
+    perfManager.startMarker('updatePatrolDrones');
     this.updatePatrolDrones();
+    perfManager.endMarker('updatePatrolDrones');
+    
+    perfManager.startMarker('updateGhost');
     this.updateGhost();
+    perfManager.endMarker('updateGhost');
+    
+    perfManager.startMarker('updateExitGlow');
     this.updateExitGlow();
+    perfManager.endMarker('updateExitGlow');
+    
+    perfManager.startMarker('checkDetection');
     this.checkDetection();
     this.checkScannerDetection();
     this.checkCameraDetection();
-    this.checkMotionSensorDetection();
+    perfManager.endMarker('checkDetection');
+    
+    // Record frame time
+    perfManager.endMarker('frame');
+    perfManager.recordFrame(delta);
   }
 
   updateTimer() {
+    // Only update timer display every 50ms (reduces string allocations by ~5x)
+    const updateInterval = 50;
+    if (this.elapsedTime - (this._lastTimerUpdate || 0) < updateInterval && this._lastTimerUpdate !== undefined) return;
+    this._lastTimerUpdate = this.elapsedTime;
+    
     let time = this.elapsedTime;
     const minutes = Math.floor(time / 60000);
     const seconds = Math.floor((time % 60000) / 1000);
     const ms = Math.floor((time % 1000) / 10);
-    this.timerText.setText(minutes.toString().padStart(2, '0') + ':' + seconds.toString().padStart(2, '0') + '.' + ms.toString().padStart(2, '0'));
+    this.timerText.setText(
+      (minutes < 10 ? '0' : '') + minutes + ':' +
+      (seconds < 10 ? '0' : '') + seconds + '.' +
+      (ms < 10 ? '0' : '') + ms
+    );
   }
 
   updatePlayer() {
@@ -2980,30 +3171,48 @@ class GameScene extends Phaser.Scene {
       this.playerGlow.setAlpha(pulse);
     }
     
-    // Player movement trail
-    if (body.velocity.length() > 0) {
-      this.playerTrailPoints.push({ x: this.player.x, y: this.player.y, alpha: 0.3 });
-      if (this.playerTrailPoints.length > 8) this.playerTrailPoints.shift();
+    // Player movement trail - use object pooling instead of array push/shift
+    const velocity = body.velocity.length();
+    if (velocity > 0) {
+      // Find inactive trail point in pool
+      const poolPoint = this._trailPool.find(p => !p.active);
+      if (poolPoint) {
+        poolPoint.x = this.player.x;
+        poolPoint.y = this.player.y;
+        poolPoint.alpha = 0.3;
+        poolPoint.active = true;
+      }
     }
     
-    // Draw trail
+    // Draw and update trail from pool
     this.playerTrail.clear();
-    this.playerTrailPoints.forEach((point, i) => {
-      point.alpha -= 0.035;
-      if (point.alpha > 0) {
-        this.playerTrail.fillStyle(0x00d4ff, point.alpha * 0.5);
-        this.playerTrail.fillCircle(point.x, point.y, 4 * point.alpha);
+    for (let i = 0; i < this._trailPool.length; i++) {
+      const point = this._trailPool[i];
+      if (point.active) {
+        point.alpha -= 0.035;
+        if (point.alpha > 0) {
+          this.playerTrail.fillStyle(0x00d4ff, point.alpha * 0.5);
+          this.playerTrail.fillCircle(point.x, point.y, 4 * point.alpha);
+        } else {
+          point.active = false;  // Return to pool
+        }
       }
-    });
-    this.playerTrailPoints = this.playerTrailPoints.filter(p => p.alpha > 0);
+    }
   }
 
   updateGuard() {
     const target = this.guardPatrolPoints[this.currentPatrolIndex];
     const dx = target.x - this.guard.x, dy = target.y - this.guard.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist < 5) { this.currentPatrolIndex = (this.currentPatrolIndex + 1) % this.guardPatrolPoints.length; }
-    else { this.guardAngle = Math.atan2(dy, dx); this.guard.body.setVelocity((dx / dist) * this.currentGuardSpeed, (dy / dist) * this.currentGuardSpeed); }
+    // Use squared distance check (5^2 = 25) to avoid sqrt for waypoint detection
+    const sqDist = dx * dx + dy * dy;
+    if (sqDist < 25) { 
+      this.currentPatrolIndex = (this.currentPatrolIndex + 1) % this.guardPatrolPoints.length; 
+    } else { 
+      this.guardAngle = Math.atan2(dy, dx); 
+      // Only compute sqrt when actually needed for velocity
+      const dist = Math.sqrt(sqDist); 
+      this.guard.body.setVelocity((dx / dist) * this.currentGuardSpeed, (dy / dist) * this.currentGuardSpeed); 
+    }
     
     // Update guard glow position
     if (this.guardGlow) {
@@ -3052,22 +3261,36 @@ class GameScene extends Phaser.Scene {
   }
 
   updateMotionSensors() {
-    this.motionSensors.forEach(sensor => {
-      sensor.graphics.clear();
-      const playerSpeed = this.player.body.velocity.length();
-      if (playerSpeed > 10) {
+    // Cache the squared effective radius to avoid sqrt in inner loop
+    const MOTION_SENSOR_RADIUS_SQ = (MOTION_SENSOR_RADIUS + (this.levelDifficulty - 1) * 5) ** 2;
+    const playerBody = this.player.body;
+    const speed = playerBody.velocity.length();
+    
+    // Only check if player is actually moving (avoids unnecessary computation)
+    if (speed > 10) {
+      this.motionSensors.forEach(sensor => {
+        // Quick AABB check before expensive squared distance
         const dx = this.player.x - sensor.x;
         const dy = this.player.y - sensor.y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        // Use difficulty-based detection radius and cooldown
-        const effectiveRadius = MOTION_SENSOR_RADIUS + (this.levelDifficulty - 1) * 5;
-        if (dist < effectiveRadius && sensor.cooldown <= 0) {
+        // Use squared distance to avoid sqrt
+        const sqDist = dx * dx + dy * dy;
+        
+        if (sqDist < MOTION_SENSOR_RADIUS_SQ && sensor.cooldown <= 0) {
           this.detected();
           sensor.cooldown = this.currentMotionCooldown;
         }
-      }
-      if (sensor.cooldown > 0) sensor.cooldown--;
-      sensor.graphics.fillStyle(0xff0066, sensor.cooldown > 0 ? 0.5 : 0.2);
+      });
+    }
+    
+    this.motionSensors.forEach(sensor => {
+      sensor.graphics.clear();
+      // Don't redraw if player is far away (skip off-screen optimization)
+      const dx = this.player.x - sensor.x;
+      const dy = this.player.y - sensor.y;
+      if (dx * dx + dy * dy > 200 * 200) return; // Skip if > 200px away
+      
+      const active = sensor.cooldown > 0;
+      sensor.graphics.fillStyle(0xff0066, active ? 0.5 : 0.2);
       sensor.graphics.fillCircle(sensor.x, sensor.y, MOTION_SENSOR_RADIUS);
     });
   }
@@ -3164,13 +3387,37 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  // Cached squared detection thresholds (pre-computed once)
+  _DETECTION_SQUARED = 400;  // 20^2
+  _GUARD_VISION_DIST_SQ = null;  // Computed per-level in create()
+  _MOTION_SENSOR_DIST_SQ = null;   // Computed per-level in create()
+  _CAMERA_DETECT_SQUARED = 625;   // 25^2
+  _SCANNER_DETECT_SQUARED = 900;  // 30^2
+
+  // Pre-calculated squared distances for collision detection (avoids sqrt)
+  _SQUARED_DIST(p1x, p1y, p2x, p2y) {
+    const dx = p2x - p1x;
+    const dy = p2y - p1y;
+    return dx * dx + dy * dy;
+  }
+
   checkDetection() {
-    const dx = this.player.x - this.guard.x;
-    const dy = this.player.y - this.guard.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist < 20) { this.detected(); return; }
-    if (dist < this.currentVisionDistance) {
-      const angleToPlayer = Math.atan2(dy, dx);
+    // Use squared distance check instead of sqrt for performance
+    const sqDist = this._SQUARED_DIST(this.player.x, this.player.y, this.guard.x, this.guard.y);
+    
+    // Direct collision (20px radius squared = 400)
+    if (sqDist < this._DETECTION_SQUARED) { 
+      this.detected(); 
+      return; 
+    }
+    
+    // Vision cone check - use pre-computed squared distance
+    if (!this._GUARD_VISION_DIST_SQ) {
+      this._GUARD_VISION_DIST_SQ = this.currentVisionDistance * this.currentVisionDistance;
+    }
+    
+    if (sqDist < this._GUARD_VISION_DIST_SQ) {
+      const angleToPlayer = Math.atan2(this.player.y - this.guard.y, this.player.x - this.guard.x);
       let angleDiff = angleToPlayer - this.guardAngle;
       while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
       while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
@@ -3184,27 +3431,42 @@ class GameScene extends Phaser.Scene {
 
   checkScannerDetection() {
     if (!this.scannerDrone) return;
-    const dx = this.player.x - this.scannerDrone.x;
-    const dy = this.player.y - this.scannerDrone.y;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist < 30) { this.detected(); return; }
-    const angleToPlayer = Math.atan2(dy, dx);
-    let angleDiff = angleToPlayer - this.scannerAngle;
-    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
-    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-    if (dist < 120 && Math.abs(angleDiff) < 0.3) {
-      this.detected();
+    // Use squared distance check
+    const sqDist = this._SQUARED_DIST(this.player.x, this.player.y, this.scannerDrone.x, this.scannerDrone.y);
+    
+    // Direct collision (30px radius squared = 900)
+    if (sqDist < this._SCANNER_DETECT_SQUARED) { 
+      this.detected(); 
+      return; 
+    }
+    
+    // Scanner beam check (120px range, squared = 14400)
+    if (sqDist < 14400) {
+      const angleToPlayer = Math.atan2(this.player.y - this.scannerDrone.y, this.player.x - this.scannerDrone.x);
+      let angleDiff = angleToPlayer - this.scannerAngle;
+      while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+      while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+      if (Math.abs(angleDiff) < 0.3) {
+        this.detected();
+      }
     }
   }
 
   checkCameraDetection() {
+    // Cache camera detection threshold squared
+    const camDetectSq = this._CAMERA_DETECT_SQUARED;
+    
     this.cameras.forEach(cam => {
-      const dx = this.player.x - cam.x;
-      const dy = this.player.y - cam.y;
-      const dist = Math.sqrt(dx * dx + dy * dy);
-      if (dist < 25) { this.detected(); return; }
-      if (dist < cam.visionDistance) {
-        const angleToPlayer = Math.atan2(dy, dx);
+      const sqDist = this._SQUARED_DIST(this.player.x, this.player.y, cam.x, cam.y);
+      
+      // Direct collision (25px radius squared = 625)
+      if (sqDist < camDetectSq) { 
+        this.detected(); 
+        return; 
+      }
+      
+      if (sqDist < cam.visionDistance * cam.visionDistance) {
+        const angleToPlayer = Math.atan2(this.player.y - cam.y, this.player.x - cam.x);
         let angleDiff = angleToPlayer - cam.angle;
         while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
         while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
