@@ -3,7 +3,7 @@
 ## Overview
 Phased roadmap for implementing the complete game flow system.
 
-## Current Status: Phase 5 Complete ✅
+## Current Status: Phase 6 Complete ✅
 
 ### Phase 1: Menu Foundation (DONE)
 - [x] Scene architecture with 6 scenes
@@ -47,7 +47,7 @@ Phased roadmap for implementing the complete game flow system.
 - [x] UI improvements: Difficulty indicator, additional objective tracking
 - [x] Game constant improvements for balancing
 
-## Phase 5: Save System Hardening (COMPLETE ✅)
+### Phase 5: Save System Hardening (COMPLETE ✅)
 - [x] Schema versioning (v5) with migration system
 - [x] Data validation on load (type checking, range validation, enum validation)
 - [x] Corruption recovery (handles invalid JSON, partial data recovery)
@@ -60,7 +60,18 @@ Phased roadmap for implementing the complete game flow system.
 - [x] Build verification (compiles without errors)
 - [x] Dev server startup verified
 
-## Phase 6: Future Work
+### Phase 6: Polish & Content (COMPLETE ✅)
+- [x] Map readability pass - Enhanced wall rendering with top edge highlights
+- [x] Level name indicator in-game HUD
+- [x] Improved exit zone visibility with pulsing glow animation
+- [x] Difficulty indicator improvement - color-coded labels (EASY/MEDIUM/HARD)
+- [x] Enhanced detection feedback - more dramatic screen shake, red vignette pulse
+- [x] Results scene improvements - Level name display, "NEW BEST!" indicator
+- [x] Save progression integrity maintained (no changes to save system)
+- [x] Build/dev/tests - 0 console errors verified
+- [x] Version bump: v0.5.0 → v0.6.0
+
+## Phase 7: Future Work
 - [ ] Multiple save slots
 - [ ] Cloud save (stretch)
 - [ ] Achievement system
@@ -99,7 +110,7 @@ SettingsScene
 ├── Fullscreen toggle
 ├── Reduced motion toggle
 ├── Reset progress (with confirmation)
-├── Version info (v0.3.0 - Phase 3)
+├── Version info (v0.6.0 - Phase 6)
 └── Back → MainMenuScene
 
 GameScene
@@ -113,6 +124,8 @@ ResultsScene
 ├── Display success/failure
 ├── Show credits earned
 ├── Show time and best time
+├── New best indicator
+├── Level name display
 ├── Particle effects (win/lose)
 ├── Title pop-in animation
 ├── Stats slide-in animation

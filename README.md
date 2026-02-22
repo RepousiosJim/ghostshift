@@ -10,11 +10,9 @@ A stealth evasion game built with Phaser 3 and Tauri.
 - Build passes with no errors
 - Tests: `npm run test:e2e`
 
-## Game Flow (Phase 5 Complete)
+## Game Flow (Phase 6 Complete)
 
-The game now features 5 playable levels with progressive difficulty and hardened save system:
-
-The game now features 5 playable levels with progressive difficulty:
+The game now features 5 playable levels with progressive difficulty and Phase 6 polish improvements:
 
 ### Scene Flow
 ```
@@ -36,9 +34,18 @@ BootScene → MainMenuScene → LevelSelectScene → GameScene
 - **LevelSelectScene**: Level selection with lock/unlock status and best times
 - **GameScene**: Core gameplay with difficulty-based balancing
 - **SettingsScene**: Audio toggle, volume slider, effects quality, fullscreen, reduced motion, reset progress
-- **ResultsScene**: Mission complete/failed display with animations, particles, and Retry, Next Level, Level Select, and Menu buttons
+- **ResultsScene**: Mission complete/failed display with animations, particles, level name, "NEW BEST!" indicator, and Retry, Next Level, Level Select, and Menu buttons
 
-### Phase 5 New Features (Save System Hardening)
+### Phase 6 New Features (Polish & Content)
+- **Enhanced wall rendering** - Top edge highlights for better map readability
+- **Level name indicator** - Shows current level name in-game HUD
+- **Improved exit zone** - Pulsing glow animation when exit is unlocked
+- **Color-coded difficulty** - EASY/MEDIUM/HARD labels with distinct colors
+- **Enhanced detection feedback** - More dramatic screen shake and red vignette pulse
+- **Results improvements** - Level name display and "NEW BEST!" indicator for personal records
+- **Version bump**: v0.5.0 → v0.6.0
+
+### Phase 5 Features (Save System Hardening)
 - **Schema versioning**: Save data now includes version (v5) for future migrations
 - **Automatic migration**: Old save formats are automatically migrated to latest version
 - **Corruption recovery**: Invalid save data is detected and recovered to defaults

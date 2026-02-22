@@ -879,7 +879,7 @@ class MainMenuScene extends Phaser.Scene {
     bg.setStrokeStyle(2, 0x4488ff);
     panel.add(bg);
     panel.add(this.add.text(0, -110, 'CREDITS', { fontSize: '24px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5));
-    const credits = [{ role: 'Developer', name: 'GhostShift Team' }, { role: 'Engine', name: 'Phaser 3' }, { role: 'Version', name: '0.5.0 (Phase 5)' }, { role: 'Levels', name: '5 Total' }, { role: 'Save', name: 'Hardened v5' }];
+    const credits = [{ role: 'Developer', name: 'GhostShift Team' }, { role: 'Engine', name: 'Phaser 3' }, { role: 'Version', name: '0.6.0 (Phase 6)' }, { role: 'Levels', name: '5 Total' }, { role: 'Save', name: 'Hardened v5' }];
     let yOffset = -60;
     credits.forEach(c => { panel.add(this.add.text(-120, yOffset, c.role + ':', { fontSize: '14px', fill: '#ffaa00', fontFamily: 'Courier New' }).setOrigin(0, 0.5)); panel.add(this.add.text(30, yOffset, c.name, { fontSize: '14px', fill: '#cccccc', fontFamily: 'Courier New' }).setOrigin(0, 0.5)); yOffset += 35; });
     panel.add(this.add.text(0, 100, '[ Press any key or click to close ]', { fontSize: '12px', fill: '#666688', fontFamily: 'Courier New' }).setOrigin(0.5));
@@ -1127,7 +1127,7 @@ class SettingsScene extends Phaser.Scene {
       } 
     });
     
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE - 30, 'GhostShift v0.5.0 - Phase 5', { fontSize: '12px', fill: '#444455', fontFamily: 'Courier New' }).setOrigin(0.5);
+    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE - 30, 'GhostShift v0.6.0 - Phase 6', { fontSize: '12px', fill: '#444455', fontFamily: 'Courier New' }).setOrigin(0.5);
     this.input.keyboard.once('keydown', () => sfx.init());
     this.input.on('pointerdown', () => sfx.init(), this);
   }
@@ -1207,18 +1207,32 @@ class ResultsScene extends Phaser.Scene {
       ease: 'Back.easeOut'
     });
     
+    // Phase 6: Add level name indicator
+    const levelName = LEVEL_LAYOUTS[this.levelIndex]?.name || `Level ${this.levelIndex + 1}`;
+    const levelLabel = this.add.text(MAP_WIDTH * TILE_SIZE / 2, 95, levelName.toUpperCase(), { fontSize: '12px', fill: '#556677', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    
     // Stats panel
-    const statsY = 120;
+    const statsY = 140;
     if (this.success) {
       const creditsText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY, '+' + this.credits + ' Credits', { fontSize: '20px', fill: '#ffaa00', fontFamily: 'Courier New' }).setOrigin(0.5);
       const timeText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY + 30, 'Time: ' + this.formatTime(this.time), { fontSize: '16px', fill: '#888888', fontFamily: 'Courier New' }).setOrigin(0.5);
       
-      // Best time for this level
-      const bestTime = saveManager.getBestTime(this.levelIndex);
-      const bestText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY + 55, 'Best: ' + this.formatTime(bestTime), { fontSize: '14px', fill: '#4488ff', fontFamily: 'Courier New' }).setOrigin(0.5);
+      // Best time for this level - Phase 6: check for new record
+      const previousBest = saveManager.getBestTime(this.levelIndex);
+      const isNewRecord = previousBest === null || this.time < previousBest;
+      const bestTime = isNewRecord ? this.time : previousBest;
+      
+      let bestText, newBestText;
+      if (isNewRecord) {
+        newBestText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY + 55, '★ NEW BEST!', { fontSize: '16px', fill: '#ffdd00', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+        bestText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY + 75, 'Best: ' + this.formatTime(bestTime), { fontSize: '14px', fill: '#4488ff', fontFamily: 'Courier New' }).setOrigin(0.5);
+      } else {
+        bestText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, statsY + 55, 'Best: ' + this.formatTime(bestTime), { fontSize: '14px', fill: '#4488ff', fontFamily: 'Courier New' }).setOrigin(0.5);
+      }
       
       // Animate stats
-      [creditsText, timeText, bestText].forEach((t, i) => {
+      const statsToAnimate = isNewRecord ? [creditsText, timeText, newBestText, bestText] : [creditsText, timeText, bestText];
+      statsToAnimate.forEach((t, i) => {
         t.setAlpha(0);
         t.setY(t.y + 20);
         this.tweens.add({
@@ -1517,6 +1531,10 @@ class GameScene extends Phaser.Scene {
     this.createPatrolDrones();
     this.createVisionCone();
 
+    // Phase 6: Level name indicator at top
+    const levelName = this.currentLayout.name || `Level ${this.currentLevelIndex + 1}`;
+    this.add.text(20, 12, levelName.toUpperCase(), { fontSize: '14px', fill: '#667788', fontFamily: 'Courier New', fontStyle: 'bold' });
+
     const dcPos = this.currentLayout.dataCore;
     this.dataCore = this.add.rectangle(dcPos.x * TILE_SIZE, dcPos.y * TILE_SIZE, TILE_SIZE - 4, TILE_SIZE - 4, 0xffaa00);
     this.dataCore.setStrokeStyle(2, 0xffdd44);
@@ -1556,12 +1574,14 @@ class GameScene extends Phaser.Scene {
     }
 
     const exitPos = this.currentLayout.exitZone;
-    // Exit zone with glow
-    this.exitZoneGlow = this.add.rectangle(exitPos.x * TILE_SIZE, exitPos.y * TILE_SIZE, TILE_SIZE * 2 + 10, TILE_SIZE * 3 + 10, 0x222222, 0.3);
-    this.exitZone = this.add.rectangle(exitPos.x * TILE_SIZE, exitPos.y * TILE_SIZE, TILE_SIZE * 2, TILE_SIZE * 3, 0x222222, 0.5);
-    this.exitZone.setStrokeStyle(2, 0x444455);
+    // Exit zone with enhanced glow - Phase 6 improved
+    this.exitZoneGlow = this.add.rectangle(exitPos.x * TILE_SIZE, exitPos.y * TILE_SIZE, TILE_SIZE * 2 + 20, TILE_SIZE * 3 + 20, 0x222222, 0.2);
+    this.exitZone = this.add.rectangle(exitPos.x * TILE_SIZE, exitPos.y * TILE_SIZE, TILE_SIZE * 2, TILE_SIZE * 3, 0x222222, 0.6);
+    this.exitZone.setStrokeStyle(3, 0x666677);
     this.physics.add.existing(this.exitZone, true);
     this.exitText = this.add.text(exitPos.x * TILE_SIZE, exitPos.y * TILE_SIZE, 'LOCKED', { fontSize: '12px', fill: '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    // Phase 6: Exit zone pulsing glow animation
+    this.tweens.add({ targets: this.exitZoneGlow, alpha: 0.4, duration: 800, yoyo: true, repeat: -1 });
 
     this.ghost = this.add.rectangle(-100, -100, TILE_SIZE - 8, TILE_SIZE - 8, 0x44ffaa);
     this.ghost.setAlpha(GHOST_ALPHA);
@@ -1702,8 +1722,10 @@ class GameScene extends Phaser.Scene {
     this.objectiveText5 = this.add.text(10, 150, '[O] Power Cell', { fontSize: '12px', fill: '#ff00ff', fontFamily: 'Courier New' });
     this.statusText = this.add.text(10, 170, 'Find the Key Card!', { fontSize: '11px', fill: '#666666', fontFamily: 'Courier New' });
     this.perksText = this.add.text(10, 185, 'Perks: S' + gameSave.perks.speed + '/L' + gameSave.perks.luck + '/St' + gameSave.perks.stealth, { fontSize: '10px', fill: '#666666', fontFamily: 'Courier New' });
-    // Phase 4: Add difficulty indicator
-    this.difficultyText = this.add.text(MAP_WIDTH * TILE_SIZE - 10, 10, 'DIFF: ' + this.levelDifficulty, { fontSize: '12px', fill: this.levelDifficulty >= 3 ? '#ff4444' : '#44ff88', fontFamily: 'Courier New' }).setOrigin(1, 0);
+    // Phase 4: Add difficulty indicator - Phase 6: improved color coding
+    const diffColor = this.levelDifficulty === 1 ? '#44ff88' : (this.levelDifficulty === 2 ? '#ffaa00' : '#ff4444');
+    const diffLabel = this.levelDifficulty === 1 ? 'EASY' : (this.levelDifficulty === 2 ? 'MEDIUM' : 'HARD');
+    this.difficultyText = this.add.text(MAP_WIDTH * TILE_SIZE - 10, 10, diffLabel, { fontSize: '12px', fill: diffColor, fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(1, 0);
     this.add.text(10, MAP_HEIGHT * TILE_SIZE - 25, 'ARROWS/WASD: Move | R: Restart | ESC: Pause', { fontSize: '10px', fill: '#444455', fontFamily: 'Courier New' });
   }
 
@@ -1792,9 +1814,11 @@ class GameScene extends Phaser.Scene {
       const wy = obs.y * TILE_SIZE + TILE_SIZE / 2;
       // Wall shadow for depth
       const shadow = this.add.rectangle(wx + 3, wy + 3, TILE_SIZE - 2, TILE_SIZE - 2, 0x000000, 0.4);
-      // Wall body
+      // Wall body - Phase 6: improved readability with top highlight
       const wall = this.add.rectangle(wx, wy, TILE_SIZE - 2, TILE_SIZE - 2, 0x3d3d52);
-      wall.setStrokeStyle(1, 0x4d4d62);
+      wall.setStrokeStyle(2, 0x5a5a72);
+      // Top edge highlight for depth
+      const highlight = this.add.rectangle(wx, wy - TILE_SIZE/2 + 4, TILE_SIZE - 4, 2, 0x6a6a82);
       this.walls.add(wall);
       this.physics.add.existing(wall, true);
     });
@@ -2183,33 +2207,33 @@ class GameScene extends Phaser.Scene {
     sfx.alert();
     sfx.detection(); // Additional detection sound
     
-    // Detection pulse effect - red flash overlay
+    // Phase 6: Enhanced detection pulse effect - red flash overlay
     const { width, height } = this.scale;
     const pulseOverlay = this.add.rectangle(width/2, height/2, width, height, 0xff0000);
     pulseOverlay.setDepth(200);
     pulseOverlay.setAlpha(0);
     
-    // Pulse animation
+    // Pulse animation - more dramatic
     this.tweens.add({
       targets: pulseOverlay,
-      alpha: 0.4,
-      duration: 100,
+      alpha: 0.5,
+      duration: 80,
       yoyo: true,
-      repeat: 3,
+      repeat: 5,
       onComplete: () => {
         pulseOverlay.destroy();
       }
     });
     
-    // Player shake/glow red
+    // Player shake/glow red - more dramatic
     if (this.playerGlow) {
-      this.playerGlow.setFillStyle(0xff0000, 0.5);
+      this.playerGlow.setFillStyle(0xff0000, 0.6);
       this.tweens.add({
         targets: this.playerGlow,
-        alpha: 0.8,
-        duration: 100,
+        alpha: 1,
+        duration: 80,
         yoyo: true,
-        repeat: 3
+        repeat: 5
       });
     }
     
@@ -2217,8 +2241,19 @@ class GameScene extends Phaser.Scene {
       this.statusText.setText('DETECTED! Press R to restart');
       this.statusText.setFill('#ff0000');
     }
-    if (this.vignette) this.vignette.setAlpha(0.5);
-    if (this.cameras?.main) this.cameras.main.shake(300, 0.02);
+    // Phase 6: Enhanced vignette effect on detection
+    if (this.vignette) {
+      this.vignette.setFillStyle(0xff0000, 0.3);
+      this.tweens.add({
+        targets: this.vignette,
+        alpha: 0.8,
+        duration: 150,
+        yoyo: true,
+        repeat: 3
+      });
+    }
+    // Phase 6: More dramatic camera shake
+    if (this.cameras?.main) this.cameras.main.shake(500, 0.03);
     
     // Store reference for restart check
     const sceneKey = this.scene.key;
