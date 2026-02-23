@@ -2341,20 +2341,29 @@ class LevelSelectScene extends Phaser.Scene {
       ease: 'Quad.easeOut'
     });
     
-    // ========== PREMIUM LEVEL CARDS V2 ==========
-    // Enhanced level selector with improved hierarchy and UX
-    // Increased spacing for better visual separation and future scalability
-    const startY = 85, spacingY = 95;
+    // ========== LEVEL SELECT CARDS V3 ==========
+    // Restructured 3-column layout: Identity | Objective-Progress | Action-State
+    // Optimized for 10+ levels with standardized sizing
+    const startY = 82, spacingY = 70;
     const cardWidth = 440;
-    const cardHeight = 80;
+    const cardHeight = 60;
     const centerX = MAP_WIDTH * TILE_SIZE / 2;
     
-    // Track selected level for keyboard navigation
+    // Track selected level (clicked/played) vs focused level (keyboard nav)
     this.selectedLevelIndex = null;
+    this.focusedLevelIndex = 0; // Default focus to first unlocked level
     
     // Track which level was last played for "selected" state
     const lastPlayedLevel = saveManager.getLastPlayed() ? 
       saveManager.data.unlockedLevels[saveManager.data.unlockedLevels.length - 1] : 0;
+    
+    // Get list of unlocked level indices for keyboard navigation
+    const unlockedIndices = LEVEL_LAYOUTS.map((_, idx) => idx).filter(idx => saveManager.isLevelUnlocked(idx));
+    const firstUnlockedIndex = unlockedIndices[0] || 0;
+    this.focusedLevelIndex = firstUnlockedIndex;
+    
+    // Store card references for focus management
+    const levelCards = [];
     
     LEVEL_LAYOUTS.forEach((level, index) => {
       const isUnlocked = saveManager.isLevelUnlocked(index);
@@ -2363,6 +2372,7 @@ class LevelSelectScene extends Phaser.Scene {
       const stars = mastery?.stars || 0;
       const isLastPlayed = lastPlayedLevel === index;
       const isSelected = this.selectedLevelIndex === index;
+      const isFocused = this.focusedLevelIndex === index; // Keyboard navigation focus
       
       const y = startY + index * spacingY;
       
@@ -2370,9 +2380,10 @@ class LevelSelectScene extends Phaser.Scene {
       
       // 1. OUTER GLOW - Different colors for different states
       if (isUnlocked) {
-        // Playable: cyan/blue glow, locked: dim gray, selected: bright gold
-        const glowColor = isSelected ? 0xffdd00 : (isLastPlayed ? 0x44ffaa : 0x4488ff);
-        const glowAlpha = isSelected ? 0.18 : 0.1;
+        // Playable: cyan/blue glow, locked: dim gray, selected: bright gold, focused: cyan outline
+        // Priority: Selected > Focused > LastPlayed > Default
+        const glowColor = isSelected ? 0xffdd00 : (isFocused ? 0x00ffff : (isLastPlayed ? 0x44ffaa : 0x4488ff));
+        const glowAlpha = isSelected ? 0.18 : (isFocused ? 0.22 : 0.1);
         const outerGlow = this.add.rectangle(centerX, y, cardWidth + 10, cardHeight + 10, glowColor, glowAlpha);
         if (isSelected) {
           // Selected state gets pulsing animation
@@ -2380,6 +2391,16 @@ class LevelSelectScene extends Phaser.Scene {
             targets: outerGlow,
             alpha: 0.25,
             duration: 600,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+          });
+        } else if (isFocused) {
+          // Focused state gets cyan pulsing animation
+          this.tweens.add({
+            targets: outerGlow,
+            alpha: 0.30,
+            duration: 500,
             yoyo: true,
             repeat: -1,
             ease: 'Sine.easeInOut'
@@ -2400,11 +2421,15 @@ class LevelSelectScene extends Phaser.Scene {
       }
       
       // 2. MAIN CARD BACKGROUND - Premium dark with gradient feel
-      // Different backgrounds: unlocked=premium dark, locked=dim, selected=highlighted
+      // Different backgrounds: unlocked=premium dark, locked=dim, selected=highlighted, focused=cyan accent
       let cardBgColor, cardStrokeColor, cardStrokeWidth;
       if (isSelected) {
         cardBgColor = 0x1a2840;
         cardStrokeColor = 0xffdd00;
+        cardStrokeWidth = 2;
+      } else if (isFocused) {
+        cardBgColor = 0x142830;
+        cardStrokeColor = 0x00ffff;
         cardStrokeWidth = 2;
       } else if (isUnlocked) {
         cardBgColor = 0x141a24;
@@ -2423,17 +2448,17 @@ class LevelSelectScene extends Phaser.Scene {
       
       // ===== LEFT SECTION: Level Index Badge =====
       const badgeX = centerX - cardWidth/2 + 35;
-      const badgeRadius = 20;
+      const badgeRadius = 17;
       
       // Badge background - circular with glow for unlocked
-      const badgeBg = this.add.circle(badgeX, y - 8, badgeRadius, isUnlocked ? (isSelected ? 0x2a3a50 : 0x1a2a3a) : 0x0a0c10);
-      badgeBg.setStrokeStyle(isSelected ? 3 : 2, isUnlocked ? (isSelected ? 0xffdd00 : (isLastPlayed ? 0x44ffaa : 0x4488ff)) : 0x333340);
+      const badgeBg = this.add.circle(badgeX, y, badgeRadius, isUnlocked ? (isSelected ? 0x2a3a50 : (isFocused ? 0x1a3040 : 0x1a2a3a)) : 0x0a0c10);
+      badgeBg.setStrokeStyle(isSelected ? 3 : 2, isUnlocked ? (isSelected ? 0xffdd00 : (isFocused ? 0x00ffff : (isLastPlayed ? 0x44ffaa : 0x4488ff))) : 0x333340);
       badgeBg.setDepth(2);
       
       // Level number
-      const levelNum = this.add.text(badgeX, y - 8, String(index + 1), { 
+      const levelNum = this.add.text(badgeX, y, String(index + 1), { 
         fontSize: '20px', 
-        fill: isUnlocked ? (isSelected ? '#ffdd00' : '#66aaff') : '#444448', 
+        fill: isUnlocked ? (isSelected ? '#ffdd00' : (isFocused ? '#00ffff' : '#66aaff')) : '#667788', 
         fontFamily: 'Courier New', 
         fontStyle: 'bold' 
       }).setOrigin(0.5).setDepth(3);
@@ -2442,9 +2467,9 @@ class LevelSelectScene extends Phaser.Scene {
       const contentX = centerX - cardWidth/2 + 75;
       
       // Level name - prominent, clear
-      this.add.text(contentX, y - 18, level.name, { 
+      this.add.text(contentX, y - 10, level.name, { 
         fontSize: '16px', 
-        fill: isUnlocked ? (isSelected ? '#ffdd00' : '#ffffff') : '#444448', 
+        fill: isUnlocked ? (isSelected ? '#ffdd00' : (isFocused ? '#00ffff' : '#ffffff')) : '#778899', 
         fontFamily: 'Courier New',
         fontStyle: 'bold'
       }).setOrigin(0, 0.5).setDepth(3);
@@ -2462,7 +2487,7 @@ class LevelSelectScene extends Phaser.Scene {
       
       this.add.text(contentX, y + 2, objectiveHint, { 
         fontSize: '10px', 
-        fill: isUnlocked ? '#668899' : '#333338', 
+        fill: isUnlocked ? '#668899' : '#556666', 
         fontFamily: 'Courier New',
         fontStyle: 'italic'
       }).setOrigin(0, 0.5).setDepth(3);
@@ -2479,7 +2504,7 @@ class LevelSelectScene extends Phaser.Scene {
       
       this.add.text(diffX, y - 18, diffLabel, { 
         fontSize: '10px', 
-        fill: isUnlocked ? diffColor : '#333338', 
+        fill: isUnlocked ? diffColor : '#667788', 
         fontFamily: 'Courier New',
         fontStyle: 'bold'
       }).setOrigin(0.5).setDepth(3);
@@ -2489,15 +2514,15 @@ class LevelSelectScene extends Phaser.Scene {
       const ctaY = y + 5;
       
       if (isUnlocked) {
-        // PLAY button
-        const ctaBg = this.add.rectangle(ctaX, ctaY, 85, 26, isSelected ? 0x2a5a3a : 0x1a4a2a);
-        ctaBg.setStrokeStyle(isSelected ? 3 : 2, isSelected ? 0xffdd00 : 0x44ff88);
+        // PLAY button - show focus state
+        const ctaBg = this.add.rectangle(ctaX, ctaY, 85, 26, isSelected ? 0x2a5a3a : (isFocused ? 0x1a4a4a : 0x1a4a2a));
+        ctaBg.setStrokeStyle(isSelected ? 3 : 2, isSelected ? 0xffdd00 : (isFocused ? 0x00ffff : 0x44ff88));
         ctaBg.setDepth(2);
         ctaBg.setInteractive({ useHandCursor: true });
         
-        const ctaText = this.add.text(ctaX, ctaY, isSelected ? '▶ SELECTED' : '▶ PLAY', { 
+        const ctaText = this.add.text(ctaX, ctaY, isSelected ? '▶ SELECTED' : (isFocused ? '▶ PLAY' : '▶ PLAY'), { 
           fontSize: '12px', 
-          fill: isSelected ? '#ffdd00' : '#44ff88', 
+          fill: isSelected ? '#ffdd00' : (isFocused ? '#00ffff' : '#44ff88'), 
           fontFamily: 'Courier New',
           fontStyle: 'bold'
         }).setOrigin(0.5).setDepth(3);
@@ -2517,7 +2542,7 @@ class LevelSelectScene extends Phaser.Scene {
         
         const ctaText = this.add.text(ctaX, ctaY, '🔒 LOCKED', { 
           fontSize: '11px', 
-          fill: '#444448', 
+          fill: '#778899', 
           fontFamily: 'Courier New',
           fontStyle: 'bold'
         }).setOrigin(0.5).setDepth(3);
@@ -2529,7 +2554,7 @@ class LevelSelectScene extends Phaser.Scene {
       
       // Best time display
       const bestTimeStr = bestTime ? this.formatTime(bestTime) : (isUnlocked ? 'No record' : '---');
-      const bestTimeColor = bestTime ? '#88aacc' : (isUnlocked ? '#556677' : '#333338');
+      const bestTimeColor = bestTime ? '#88aacc' : (isUnlocked ? '#556677' : '#556666');
       this.add.text(footerLeftX, footerY, '⏱ ' + bestTimeStr, { 
         fontSize: '11px', 
         fill: bestTimeColor, 
@@ -2568,13 +2593,13 @@ class LevelSelectScene extends Phaser.Scene {
         const prevLevelName = LEVEL_LAYOUTS[index - 1]?.name || `Level ${index}`;
         const unlockText = 'Beat: ' + prevLevelName;
         
-        const unlockBg = this.add.rectangle(unlockX, unlockRuleY, 90, 14, 0x1a1520);
-        unlockBg.setStrokeStyle(1, 0x4a3a2a);
+        const unlockBg = this.add.rectangle(unlockX, unlockRuleY, 95, 16, 0x1a1520);
+        unlockBg.setStrokeStyle(1, 0x5a4a3a);
         unlockBg.setDepth(2);
         
         this.add.text(unlockX, unlockRuleY, unlockText, { 
-          fontSize: '8px', 
-          fill: '#aa6644', 
+          fontSize: '10px', 
+          fill: '#cc9977', 
           fontFamily: 'Courier New',
           fontStyle: 'italic'
         }).setOrigin(0.5, 0.5).setDepth(3);
@@ -2582,25 +2607,37 @@ class LevelSelectScene extends Phaser.Scene {
       
       // ===== INTERACTION =====
       if (isUnlocked) {
-        // Card hover effects
+        // Card hover effects - don't override focus state visuals
         cardBg.on('pointerover', () => { 
-          cardBg.setFillStyle(isSelected ? 0x2a3850 : (isLastPlayed ? 0x1e3030 : 0x1e2838));
-          cardBg.setStrokeStyle(2, isSelected ? 0xffdd00 : (isLastPlayed ? 0x66ffaa : 0x66aaff));
-          badgeBg.setStrokeStyle(3, isSelected ? 0xffdd00 : (isLastPlayed ? 0x66ffaa : 0x88ccff));
-          if (cardBg.ctaBg) {
-            cardBg.ctaBg.setFillStyle(isSelected ? 0x3a6a4a : 0x2a5a3a);
-            cardBg.ctaBg.setStrokeStyle(3, isSelected ? 0xffdd00 : 0x66ffaa);
+          // Only apply hover if not already focused by keyboard
+          if (!isFocused) {
+            cardBg.setFillStyle(isSelected ? 0x2a3850 : (isLastPlayed ? 0x1e3030 : 0x1e2838));
+            cardBg.setStrokeStyle(2, isSelected ? 0xffdd00 : (isLastPlayed ? 0x66ffaa : 0x66aaff));
+            badgeBg.setStrokeStyle(3, isSelected ? 0xffdd00 : (isLastPlayed ? 0x66ffaa : 0x88ccff));
+            if (cardBg.ctaBg) {
+              cardBg.ctaBg.setFillStyle(isSelected ? 0x3a6a4a : 0x2a5a3a);
+              cardBg.ctaBg.setStrokeStyle(3, isSelected ? 0xffdd00 : 0x66ffaa);
+            }
           }
           sfx.menuHover(); 
         });
         
         cardBg.on('pointerout', () => { 
-          cardBg.setFillStyle(isSelected ? 0x1a2840 : (isLastPlayed ? 0x142428 : 0x141a24))
-            .setStrokeStyle(isSelected ? 2 : (isLastPlayed ? 2 : 1), isSelected ? 0xffdd00 : (isLastPlayed ? 0x44ffaa : 0x3a5a8a));
-          badgeBg.setStrokeStyle(isSelected ? 3 : 2, isSelected ? 0xffdd00 : (isLastPlayed ? 0x44ffaa : 0x4488ff));
-          if (cardBg.ctaBg) {
-            cardBg.ctaBg.setFillStyle(isSelected ? 0x2a5a3a : 0x1a4a2a)
-              .setStrokeStyle(isSelected ? 3 : 2, isSelected ? 0xffdd00 : 0x44ff88);
+          // Restore based on state (focus takes priority over hover)
+          if (isFocused) {
+            cardBg.setFillStyle(0x142830).setStrokeStyle(2, 0x00ffff);
+            badgeBg.setStrokeStyle(2, 0x00ffff);
+            if (cardBg.ctaBg) {
+              cardBg.ctaBg.setFillStyle(0x1a4a4a).setStrokeStyle(2, 0x00ffff);
+            }
+          } else {
+            cardBg.setFillStyle(isSelected ? 0x1a2840 : (isLastPlayed ? 0x142428 : 0x141a24))
+              .setStrokeStyle(isSelected ? 2 : (isLastPlayed ? 2 : 1), isSelected ? 0xffdd00 : (isLastPlayed ? 0x44ffaa : 0x3a5a8a));
+            badgeBg.setStrokeStyle(isSelected ? 3 : 2, isSelected ? 0xffdd00 : (isLastPlayed ? 0x44ffaa : 0x4488ff));
+            if (cardBg.ctaBg) {
+              cardBg.ctaBg.setFillStyle(isSelected ? 0x2a5a3a : 0x1a4a2a)
+                .setStrokeStyle(isSelected ? 3 : 2, isSelected ? 0xffdd00 : 0x44ff88);
+            }
           }
         });
         
@@ -2627,13 +2664,20 @@ class LevelSelectScene extends Phaser.Scene {
         // CTA button specific interactions
         if (cardBg.ctaBg) {
           cardBg.ctaBg.on('pointerover', () => {
-            cardBg.ctaBg.setFillStyle(isSelected ? 0x3a6a4a : 0x2a5a3a);
-            cardBg.ctaBg.setStrokeStyle(3, isSelected ? 0xffdd00 : 0x66ffaa);
+            // Don't override focus state
+            if (!isFocused) {
+              cardBg.ctaBg.setFillStyle(isSelected ? 0x3a6a4a : 0x2a5a3a);
+              cardBg.ctaBg.setStrokeStyle(3, isSelected ? 0xffdd00 : 0x66ffaa);
+            }
             sfx.menuHover();
           });
           cardBg.ctaBg.on('pointerout', () => {
-            cardBg.ctaBg.setFillStyle(isSelected ? 0x2a5a3a : 0x1a4a2a)
-              .setStrokeStyle(isSelected ? 3 : 2, isSelected ? 0xffdd00 : 0x44ff88);
+            if (isFocused) {
+              cardBg.ctaBg.setFillStyle(0x1a4a4a).setStrokeStyle(2, 0x00ffff);
+            } else {
+              cardBg.ctaBg.setFillStyle(isSelected ? 0x2a5a3a : 0x1a4a2a)
+                .setStrokeStyle(isSelected ? 3 : 2, isSelected ? 0xffdd00 : 0x44ff88);
+            }
           });
           cardBg.ctaBg.on('pointerdown', () => {
             this.selectedLevelIndex = index;
@@ -2652,9 +2696,117 @@ class LevelSelectScene extends Phaser.Scene {
           });
         }
       }
+      
+      // Store card reference for keyboard navigation
+      levelCards.push({
+        index,
+        isUnlocked,
+        cardBg,
+        badgeBg,
+        y
+      });
     });
+    
+    // ========== KEYBOARD NAVIGATION ==========
+    // Add keyboard navigation (arrow keys + enter)
+    this._setupKeyboardNavigation(unlockedIndices);
+    
+    // ========== FOCUS INDICATOR UI ==========
+    // Add visual hint for keyboard navigation
+    const hintText = this.add.text(centerX, MAP_HEIGHT * TILE_SIZE - 25, '↑↓ Navigate  |  ENTER Select  |  ESC Back', { 
+      fontSize: '11px', 
+      fill: '#556677', 
+      fontFamily: 'Courier New' 
+    }).setOrigin(0.5);
+    
+    // Fade in hint
+    hintText.setAlpha(0);
+    this.tweens.add({
+      targets: hintText,
+      alpha: 1,
+      duration: 500,
+      delay: 800
+    });
+    
+    // Store for cleanup
+    this._levelCards = levelCards;
+    this._unlockedIndices = unlockedIndices;
+    this._centerX = centerX;
+    
     this.input.keyboard.once('keydown', () => sfx.init());
     this.input.on('pointerdown', () => sfx.init(), this);
+  }
+  
+  // ========== KEYBOARD NAVIGATION SETUP ==========
+  _setupKeyboardNavigation(unlockedIndices) {
+    // Handle arrow up/down for level navigation
+    this.input.keyboard.on('keydown-UP', () => {
+      this._navigateLevel(-1, unlockedIndices);
+    });
+    
+    this.input.keyboard.on('keydown-DOWN', () => {
+      this._navigateLevel(1, unlockedIndices);
+    });
+    
+    // Handle W/S keys as alternatives
+    this.input.keyboard.on('keydown-W', () => {
+      this._navigateLevel(-1, unlockedIndices);
+    });
+    
+    this.input.keyboard.on('keydown-S', () => {
+      this._navigateLevel(1, unlockedIndices);
+    });
+    
+    // Handle Enter to select focused level
+    this.input.keyboard.on('keydown-ENTER', () => {
+      this._selectFocusedLevel();
+    });
+    
+    // Handle Space as alternative for select
+    this.input.keyboard.on('keydown-SPACE', () => {
+      this._selectFocusedLevel();
+    });
+  }
+  
+  // Navigate to previous/next unlocked level
+  _navigateLevel(direction, unlockedIndices) {
+    if (unlockedIndices.length === 0) return;
+    
+    const currentIndex = unlockedIndices.indexOf(this.focusedLevelIndex);
+    let newIndex = currentIndex + direction;
+    
+    // Wrap around
+    if (newIndex < 0) newIndex = unlockedIndices.length - 1;
+    if (newIndex >= unlockedIndices.length) newIndex = 0;
+    
+    this.focusedLevelIndex = unlockedIndices[newIndex];
+    sfx.menuHover();
+    
+    // Scroll to make focused card visible if needed
+    this._scrollToFocusedCard();
+  }
+  
+  // Select the currently focused level
+  _selectFocusedLevel() {
+    if (saveManager.isLevelUnlocked(this.focusedLevelIndex)) {
+      this.selectedLevelIndex = this.focusedLevelIndex;
+      sfx.select();
+      this.transitionTo('GameScene', { levelIndex: this.focusedLevelIndex });
+    }
+  }
+  
+  // Scroll the view to show the focused card
+  _scrollToFocusedCard() {
+    const { width, height } = this.scale;
+    const cardHeight = 80;
+    const startY = 85;
+    const spacingY = 105;
+    
+    const focusedCardY = startY + this.focusedLevelIndex * spacingY;
+    const viewportHeight = height;
+    
+    // If card is below viewport, no scrolling needed for now (fixed layout)
+    // Future: implement virtual scrolling for many levels
   }
   
   // ========== CYBER BACKGROUND RENDERING ==========
@@ -2752,8 +2904,42 @@ class LevelSelectScene extends Phaser.Scene {
   formatTime(ms) { if (!ms) return '--:--'; const minutes = Math.floor(ms / 60000); const seconds = Math.floor((ms % 60000) / 1000); const centis = Math.floor((ms % 1000) / 10); return minutes.toString().padStart(2, '0') + ':' + seconds.toString().padStart(2, '0') + '.' + centis.toString().padStart(2, '0'); }
   
   // Phase 9: Handle window resize for fullscreen
+  // Phase 14: Stress-check layout for multi-row lists and different viewport/fullscreen states
   _handleResize() {
-    // Grid removed per visual overhaul
+    const { width, height } = this.scale;
+    const centerX = width / 2;
+    
+    // Update center reference
+    this._centerX = centerX;
+    
+    // Reposition title (if exists)
+    const titleObj = this.children?.list?.find?.(c => c?.type === 'Text' && c?.text === 'SELECT LEVEL');
+    if (titleObj) {
+      titleObj.setPosition(centerX, 30);
+    }
+    
+    // Calculate if we need scrolling based on number of levels and viewport height
+    const totalLevels = LEVEL_LAYOUTS.length;
+    const startY = 85;
+    const spacingY = 95;
+    const cardHeight = 80;
+    const totalContentHeight = startY + totalLevels * spacingY;
+    const viewportHeight = height;
+    
+    // If content exceeds viewport, cards should be repositioned (future: implement virtual scrolling)
+    // For now, ensure cards stay within bounds when possible
+    const bottomMargin = 60; // Space for hint text
+    
+    // Adjust card positions based on available space
+    if (totalContentHeight > viewportHeight - bottomMargin) {
+      // Content exceeds viewport - could implement scrolling here
+      // For now, just ensure we don't draw off-screen
+      console.log('[LevelSelect] Note: ' + totalLevels + ' levels may exceed viewport height. Consider pagination.');
+    }
+    
+    // Update progress bar position
+    const progressBarX = centerX;
+    // Find and update progress bar elements if they exist
   }
   
   // Cleanup timers and listeners when scene is destroyed
@@ -2775,6 +2961,13 @@ class LevelSelectScene extends Phaser.Scene {
       this.input.keyboard.off('keydown-ESC', this._backButtonEscHandler);
       this._backButtonEscHandler = null;
     }
+    // Cleanup keyboard navigation handlers
+    this.input.keyboard.off('keydown-UP');
+    this.input.keyboard.off('keydown-DOWN');
+    this.input.keyboard.off('keydown-W');
+    this.input.keyboard.off('keydown-S');
+    this.input.keyboard.off('keydown-ENTER');
+    this.input.keyboard.off('keydown-SPACE');
     super.shutdown();
   }
 }
@@ -2797,8 +2990,17 @@ class SettingsScene extends Phaser.Scene {
     
     const screenWidth = this.scale.width || (MAP_WIDTH * TILE_SIZE);
     const centerX = screenWidth / 2;
+    
+    // ==================== RESPONSIVE RIGHT BOUNDARY ====================
+    // Safe margin prevents right-side controls from clipping at screen edges
+    // Accounts for toggle glow (+6px), hit area padding (+10px), and text overflow
+    const RIGHT_SAFE_MARGIN = 48; // Conservative margin for all right-side elements
     const contentLeft = 26;
-    const contentRight = screenWidth - 26;
+    const contentRight = screenWidth - RIGHT_SAFE_MARGIN;
+    
+    // Right column grid - consistent X positions for all right-aligned controls
+    // All toggles, value labels, quality chips, and RESET align to this grid
+    const rightColumnX = contentRight; // Anchor point for right-aligned elements
 
     // Title
     this.add.text(centerX, 30, 'SETTINGS', { fontSize: '28px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
@@ -2830,34 +3032,37 @@ class SettingsScene extends Phaser.Scene {
     // ==================== AUDIO SETTINGS ====================
     const audioStartY = sectionY + 35;
     const rowHeight = 45;
-    const rightAlignX = contentRight - 12;
+    // Toggle dimensions - consistent across all toggles
     const toggleWidth = 70;
     const toggleHeight = 28;
+    // Right column anchor - toggle text aligns here
+    const toggleTextX = rightColumnX;
+    // Toggle widget positioned with padding from right column anchor
+    const toggleWidgetX = rightColumnX - 10;
     
     // ========== PREMIUM TOGGLE BUTTONS ==========
     // Audio Enabled toggle with premium styling
     this.add.text(40, audioStartY, 'Sound Effects', { fontSize: '15px', fill: '#ffffff', fontFamily: 'Courier New' });
     
-    // Toggle background with premium look
-    const toggleX = rightAlignX - 10;
+    // Toggle background with premium look - use consistent right column grid
     const toggleY = audioStartY + 2;
     
     // Toggle track
-    const audioToggleBg = this.add.rectangle(toggleX + toggleWidth/2, toggleY, toggleWidth, toggleHeight, sfx.isEnabled ? 0x1a4a2a : 0x2a1a1a);
+    const audioToggleBg = this.add.rectangle(toggleWidgetX + toggleWidth/2, toggleY, toggleWidth, toggleHeight, sfx.isEnabled ? 0x1a4a2a : 0x2a1a1a);
     audioToggleBg.setStrokeStyle(2, sfx.isEnabled ? 0x44ff88 : 0xff4444);
     
-    // Toggle glow when on
-    const audioToggleGlow = this.add.rectangle(toggleX + toggleWidth/2, toggleY, toggleWidth + 6, toggleHeight + 6, sfx.isEnabled ? 0x44ff88 : 0xff4444, sfx.isEnabled ? 0.12 : 0.08);
+    // Toggle glow when on - clipped to stay within safe margin
+    const audioToggleGlow = this.add.rectangle(toggleWidgetX + toggleWidth/2, toggleY, toggleWidth + 6, toggleHeight + 6, sfx.isEnabled ? 0x44ff88 : 0xff4444, sfx.isEnabled ? 0.12 : 0.08);
     
     // Toggle indicator circle
-    const audioToggleIndicator = this.add.circle(toggleX + (sfx.isEnabled ? toggleWidth - 12 : 12), toggleY, 8, sfx.isEnabled ? 0x44ff88 : 0xff4444);
+    const audioToggleIndicator = this.add.circle(toggleWidgetX + (sfx.isEnabled ? toggleWidth - 12 : 12), toggleY, 8, sfx.isEnabled ? 0x44ff88 : 0xff4444);
     
-    // Toggle text
-    const audioToggle = this.add.text(rightAlignX, audioStartY + 2, sfx.isEnabled ? 'ON' : 'OFF', { fontSize: '12px', fill: sfx.isEnabled ? '#44ff88' : '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
+    // Toggle text - aligned to consistent right column grid
+    const audioToggle = this.add.text(toggleTextX, audioStartY + 2, sfx.isEnabled ? 'ON' : 'OFF', { fontSize: '12px', fill: sfx.isEnabled ? '#44ff88' : '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
     audioToggle.setOrigin(1, 0);
     
-    // Toggle hit area (larger for easier clicking)
-    const audioToggleHit = this.add.rectangle(toggleX + toggleWidth/2, toggleY, toggleWidth + 20, toggleHeight + 10, 0x000000, 0);
+    // Toggle hit area (larger for easier clicking) - within safe bounds
+    const audioToggleHit = this.add.rectangle(toggleWidgetX + toggleWidth/2, toggleY, toggleWidth + 20, toggleHeight + 10, 0x000000, 0);
     audioToggleHit.setInteractive({ useHandCursor: true });
     
     const updateAudioToggle = (enabled) => {
@@ -2865,7 +3070,7 @@ class SettingsScene extends Phaser.Scene {
       audioToggleBg.setStrokeStyle(2, enabled ? 0x44ff88 : 0xff4444);
       audioToggleGlow.setFillStyle(enabled ? 0x44ff88 : 0xff4444, enabled ? 0.12 : 0.08);
       audioToggleIndicator.setFillStyle(enabled ? 0x44ff88 : 0xff4444);
-      audioToggleIndicator.x = toggleX + (enabled ? toggleWidth - 12 : 12);
+      audioToggleIndicator.x = toggleWidgetX + (enabled ? toggleWidth - 12 : 12);
       audioToggle.setText(enabled ? 'ON' : 'OFF');
       audioToggle.setFill(enabled ? '#44ff88' : '#ff4444');
     };
@@ -2900,10 +3105,10 @@ class SettingsScene extends Phaser.Scene {
     
     // Volume percentage display - aligned consistently with other right-column values
     const volPercent = Math.round(sfx.volume * 100);
-    const volPercentText = this.add.text(rightAlignX, volY + 2, volPercent + '%', { fontSize: '14px', fill: '#88ccff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(1, 0);
+    const volPercentText = this.add.text(toggleTextX, volY + 2, volPercent + '%', { fontSize: '14px', fill: '#88ccff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(1, 0);
     
-    // Mute button - positioned after percentage with consistent spacing
-    const muteBtn = this.add.text(rightAlignX + 38, volY + 2, sfx.volume === 0 || !sfx.isEnabled ? '🔇' : '🔊', { fontSize: '16px' }).setInteractive({ useHandCursor: true });
+    // Mute button - positioned after percentage with consistent spacing (within safe margin)
+    const muteBtn = this.add.text(toggleTextX + 38, volY + 2, sfx.volume === 0 || !sfx.isEnabled ? '🔇' : '🔊', { fontSize: '16px' }).setInteractive({ useHandCursor: true });
     muteBtn.on('pointerover', () => muteBtn.setAlpha(0.7));
     muteBtn.on('pointerout', () => muteBtn.setAlpha(1));
     muteBtn.on('pointerdown', () => {
@@ -2924,7 +3129,7 @@ class SettingsScene extends Phaser.Scene {
     // ========== PREMIUM SLIDER SYSTEM ==========
     // Responsive slider positioning - scale with viewport
     const sliderStartX = 180;
-    const availableSliderWidth = rightAlignX - sliderStartX - 50; // Leave margin on right
+    const availableSliderWidth = rightColumnX - sliderStartX - 50; // Leave margin on right
     const sliderWidth = Math.max(200, Math.min(280, availableSliderWidth));
     const sliderX = sliderStartX + 20; // Start after label with consistent padding
     const sliderY = volY + 18;
@@ -3021,7 +3226,8 @@ class SettingsScene extends Phaser.Scene {
     this.add.text(40, graphicsStartY + 18, 'Visual detail level', { fontSize: '11px', fill: '#666677', fontFamily: 'Courier New' });
     
     const currentQuality = saveManager.getSetting('effectsQuality') || 'high';
-    const qualityBtn = this.add.text(rightAlignX, graphicsStartY + 2, currentQuality.toUpperCase(), { fontSize: '14px', fill: '#ffaa00', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
+    // Quality chip - aligned to consistent right column grid
+    const qualityBtn = this.add.text(toggleTextX, graphicsStartY + 2, currentQuality.toUpperCase(), { fontSize: '14px', fill: '#ffaa00', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
     qualityBtn.setOrigin(1, 0);
     const qualities = ['low', 'medium', 'high'];
     let qualIndex = qualities.indexOf(currentQuality);
@@ -3043,16 +3249,15 @@ class SettingsScene extends Phaser.Scene {
     // Check actual browser fullscreen state
     const isFullscreen = fullscreenManager.isFullscreen;
     
-    // Premium toggle styling
-    const fullToggleX = rightAlignX - 10;
+    // Premium toggle styling - use consistent right column grid
     const fullToggleY = fullY + 2;
-    const fullToggleBg = this.add.rectangle(fullToggleX + toggleWidth/2, fullToggleY, toggleWidth, toggleHeight, isFullscreen ? 0x1a4a2a : 0x2a1a1a);
+    const fullToggleBg = this.add.rectangle(toggleWidgetX + toggleWidth/2, fullToggleY, toggleWidth, toggleHeight, isFullscreen ? 0x1a4a2a : 0x2a1a1a);
     fullToggleBg.setStrokeStyle(2, isFullscreen ? 0x44ff88 : 0xff4444);
-    const fullToggleGlow = this.add.rectangle(fullToggleX + toggleWidth/2, fullToggleY, toggleWidth + 6, toggleHeight + 6, isFullscreen ? 0x44ff88 : 0xff4444, isFullscreen ? 0.12 : 0.08);
-    const fullToggleIndicator = this.add.circle(fullToggleX + (isFullscreen ? toggleWidth - 12 : 12), fullToggleY, 8, isFullscreen ? 0x44ff88 : 0xff4444);
-    const fullToggle = this.add.text(rightAlignX, fullY + 2, isFullscreen ? 'ON' : 'OFF', { fontSize: '12px', fill: isFullscreen ? '#44ff88' : '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
+    const fullToggleGlow = this.add.rectangle(toggleWidgetX + toggleWidth/2, fullToggleY, toggleWidth + 6, toggleHeight + 6, isFullscreen ? 0x44ff88 : 0xff4444, isFullscreen ? 0.12 : 0.08);
+    const fullToggleIndicator = this.add.circle(toggleWidgetX + (isFullscreen ? toggleWidth - 12 : 12), fullToggleY, 8, isFullscreen ? 0x44ff88 : 0xff4444);
+    const fullToggle = this.add.text(toggleTextX, fullY + 2, isFullscreen ? 'ON' : 'OFF', { fontSize: '12px', fill: isFullscreen ? '#44ff88' : '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
     fullToggle.setOrigin(1, 0);
-    const fullToggleHit = this.add.rectangle(fullToggleX + toggleWidth/2, fullToggleY, toggleWidth + 20, toggleHeight + 10, 0x000000, 0);
+    const fullToggleHit = this.add.rectangle(toggleWidgetX + toggleWidth/2, fullToggleY, toggleWidth + 20, toggleHeight + 10, 0x000000, 0);
     fullToggleHit.setInteractive({ useHandCursor: true });
     
     // Listen for fullscreen changes to keep toggle in sync
@@ -3061,7 +3266,7 @@ class SettingsScene extends Phaser.Scene {
       fullToggleBg.setStrokeStyle(2, isFs ? 0x44ff88 : 0xff4444);
       fullToggleGlow.setFillStyle(isFs ? 0x44ff88 : 0xff4444, isFs ? 0.12 : 0.08);
       fullToggleIndicator.setFillStyle(isFs ? 0x44ff88 : 0xff4444);
-      fullToggleIndicator.x = fullToggleX + (isFs ? toggleWidth - 12 : 12);
+      fullToggleIndicator.x = toggleWidgetX + (isFs ? toggleWidth - 12 : 12);
       fullToggle.setText(isFs ? 'ON' : 'OFF');
       fullToggle.setFill(isFs ? '#44ff88' : '#ff4444');
       saveManager.setSetting('fullscreen', isFs);
@@ -3095,15 +3300,15 @@ class SettingsScene extends Phaser.Scene {
     this.add.text(40, gameStartY + 18, 'Minimize animations', { fontSize: '11px', fill: '#666677', fontFamily: 'Courier New' });
     
     const reducedMotion = saveManager.getSetting('reducedMotion') || false;
-    const motionToggleX = rightAlignX - 10;
     const motionToggleY = gameStartY + 2;
-    const motionToggleBg = this.add.rectangle(motionToggleX + toggleWidth/2, motionToggleY, toggleWidth, toggleHeight, reducedMotion ? 0x1a4a2a : 0x2a1a1a);
+    // Reduced Motion toggle - using consistent right column grid
+    const motionToggleBg = this.add.rectangle(toggleWidgetX + toggleWidth/2, motionToggleY, toggleWidth, toggleHeight, reducedMotion ? 0x1a4a2a : 0x2a1a1a);
     motionToggleBg.setStrokeStyle(2, reducedMotion ? 0x44ff88 : 0xff4444);
-    const motionToggleGlow = this.add.rectangle(motionToggleX + toggleWidth/2, motionToggleY, toggleWidth + 6, toggleHeight + 6, reducedMotion ? 0x44ff88 : 0xff4444, reducedMotion ? 0.12 : 0.08);
-    const motionToggleIndicator = this.add.circle(motionToggleX + (reducedMotion ? toggleWidth - 12 : 12), motionToggleY, 8, reducedMotion ? 0x44ff88 : 0xff4444);
-    const motionToggle = this.add.text(rightAlignX, gameStartY + 2, reducedMotion ? 'ON' : 'OFF', { fontSize: '12px', fill: reducedMotion ? '#44ff88' : '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
+    const motionToggleGlow = this.add.rectangle(toggleWidgetX + toggleWidth/2, motionToggleY, toggleWidth + 6, toggleHeight + 6, reducedMotion ? 0x44ff88 : 0xff4444, reducedMotion ? 0.12 : 0.08);
+    const motionToggleIndicator = this.add.circle(toggleWidgetX + (reducedMotion ? toggleWidth - 12 : 12), motionToggleY, 8, reducedMotion ? 0x44ff88 : 0xff4444);
+    const motionToggle = this.add.text(toggleTextX, gameStartY + 2, reducedMotion ? 'ON' : 'OFF', { fontSize: '12px', fill: reducedMotion ? '#44ff88' : '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
     motionToggle.setOrigin(1, 0);
-    const motionToggleHit = this.add.rectangle(motionToggleX + toggleWidth/2, motionToggleY, toggleWidth + 20, toggleHeight + 10, 0x000000, 0);
+    const motionToggleHit = this.add.rectangle(toggleWidgetX + toggleWidth/2, motionToggleY, toggleWidth + 20, toggleHeight + 10, 0x000000, 0);
     motionToggleHit.setInteractive({ useHandCursor: true });
     
     const updateMotionToggle = (enabled) => {
@@ -3111,7 +3316,7 @@ class SettingsScene extends Phaser.Scene {
       motionToggleBg.setStrokeStyle(2, enabled ? 0x44ff88 : 0xff4444);
       motionToggleGlow.setFillStyle(enabled ? 0x44ff88 : 0xff4444, enabled ? 0.12 : 0.08);
       motionToggleIndicator.setFillStyle(enabled ? 0x44ff88 : 0xff4444);
-      motionToggleIndicator.x = motionToggleX + (enabled ? toggleWidth - 12 : 12);
+      motionToggleIndicator.x = toggleWidgetX + (enabled ? toggleWidth - 12 : 12);
       motionToggle.setText(enabled ? 'ON' : 'OFF');
       motionToggle.setFill(enabled ? '#44ff88' : '#ff4444');
     };
@@ -3142,12 +3347,12 @@ class SettingsScene extends Phaser.Scene {
       sfx.select();
     });
     
-    // Reset Progress
+    // Reset Progress - RESET button aligned to consistent right column grid
     const resetY = gameStartY + rowHeight + 15;
     this.add.text(40, resetY, 'Reset Progress', { fontSize: '15px', fill: '#ffffff', fontFamily: 'Courier New' });
     this.add.text(40, resetY + 18, 'Clear all save data', { fontSize: '11px', fill: '#666677', fontFamily: 'Courier New' });
     
-    const resetBtn = this.add.text(rightAlignX, resetY + 2, 'RESET', { fontSize: '14px', fill: '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
+    const resetBtn = this.add.text(toggleTextX, resetY + 2, 'RESET', { fontSize: '14px', fill: '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
     resetBtn.setOrigin(1, 0);
     resetBtn.on('pointerover', () => resetBtn.setFill('#ff6666'));
     resetBtn.on('pointerout', () => resetBtn.setFill('#ff4444'));
