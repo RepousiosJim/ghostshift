@@ -1,6 +1,7 @@
 // ==================== BACKGROUND COMPOSER ====================
 // Premium cyber-heist background system for GhostShift menus
 // Provides layered visual design with scene-specific variants
+// Grid pattern removed for cleaner, modern look
 
 // Note: saveManager is accessed via window.saveManager (set in main.js)
 
@@ -21,7 +22,6 @@ const LAYER_DEPTHS = {
 // Quality presets
 const QUALITY_PRESETS = {
   low: {
-    gridAnimationDelay: 200,
     particleCount: 5,
     fogEnabled: false,
     lightAccentCount: 1,
@@ -30,7 +30,6 @@ const QUALITY_PRESETS = {
     decorativeElements: false
   },
   medium: {
-    gridAnimationDelay: 100,
     particleCount: 10,
     fogEnabled: true,
     lightAccentCount: 2,
@@ -39,7 +38,6 @@ const QUALITY_PRESETS = {
     decorativeElements: true
   },
   high: {
-    gridAnimationDelay: 50,
     particleCount: 20,
     fogEnabled: true,
     lightAccentCount: 3,
@@ -210,59 +208,6 @@ export class BackgroundComposer {
     this.cachedLayers.set('architectural', arch);
   }
   
-  // ========== TACTICAL GRID ==========
-  
-  _createGridLayer() {
-    this.gridGraphics = this.scene.add.graphics();
-    this.gridOffset = 0;
-    this.gridGraphics.setDepth(LAYER_DEPTHS.GRID);
-    this.cachedLayers.set('grid', this.gridGraphics);
-    
-    // Initial draw
-    this._drawGrid();
-  }
-  
-  _drawGrid() {
-    if (!this.gridGraphics) return;
-    
-    this.gridGraphics.clear();
-    
-    const tileSize = 32;
-    const primaryColor = 0x1a2a3a;
-    const secondaryColor = 0x2a4060;
-    const primaryAlpha = 0.35;
-    const secondaryAlpha = 0.12;
-    
-    // Primary grid lines
-    this.gridGraphics.lineStyle(1, primaryColor, primaryAlpha);
-    
-    // Vertical lines
-    for (let x = 0; x <= this.width / tileSize + 1; x++) {
-      const drawX = x * tileSize - (this.gridOffset % tileSize);
-      this.gridGraphics.lineBetween(drawX, 0, drawX, this.height);
-    }
-    
-    // Horizontal lines (slower movement)
-    const yOffset = this.gridOffset * 0.5;
-    for (let y = 0; y <= this.height / tileSize + 1; y++) {
-      const drawY = y * tileSize - (yOffset % tileSize);
-      this.gridGraphics.lineBetween(0, drawY, this.width, drawY);
-    }
-    
-    // Secondary accent lines - every 4th for performance
-    if (this.quality !== 'low') {
-      this.gridGraphics.lineStyle(1, secondaryColor, secondaryAlpha);
-      for (let x = 0; x <= this.width / tileSize; x += 4) {
-        const drawX = x * tileSize - (this.gridOffset % tileSize);
-        this.gridGraphics.lineBetween(drawX, 0, drawX, this.height);
-      }
-      for (let y = 0; y <= this.height / tileSize; y += 4) {
-        const drawY = y * tileSize - (yOffset % tileSize);
-        this.gridGraphics.lineBetween(0, drawY, this.width, drawY);
-      }
-    }
-  }
-  
   // ========== FOG LAYER ==========
   
   _createFogLayer() {
@@ -393,12 +338,12 @@ export class BackgroundComposer {
   }
   
   // ========== VARIANTS ==========
+  // Grid pattern removed - all variants now use gradients, fog, light accents, and particles
   
   _createHeroVariant() {
     // Hero variant - Main Menu: dramatic, animated, eye-catching
     this._createBaseLayers();
     this._createArchitecturalLayer(this.qualitySettings.architecturalDetail);
-    this._createGridLayer();
     this._createFogLayer();
     this._createLightAccents();
     this._createParticles();
@@ -408,7 +353,6 @@ export class BackgroundComposer {
     // Tactical variant - Level Select: data-focused, clean, functional
     this._createBaseLayers();
     this._createArchitecturalLayer('minimal');
-    this._createGridLayer();
     // No fog for cleaner tactical look
     this._createLightAccents();
     // Fewer particles for cleaner look
@@ -419,7 +363,6 @@ export class BackgroundComposer {
     // Quiet variant - Settings/Controls: subtle, calm, minimal distractions
     this._createBaseLayers();
     this._createArchitecturalLayer('minimal');
-    this._createGridLayer();
     // Minimal fog
     if (this.qualitySettings.fogEnabled) {
       this._createFogLayer();
@@ -437,10 +380,7 @@ export class BackgroundComposer {
     // Deep dark base with subtle blue-green undertones
     this._createBaseLayers();
     
-    // Enhanced grid with tactical feel - tighter, more precise
-    this._createTacticalGrid();
-    
-    // Subtle horizontal data lines (like a HUD)
+    // Subtle horizontal data lines (like a HUD) - replaces grid
     this._createDataLines();
     
     // Corner brackets for tech feel
@@ -457,9 +397,6 @@ export class BackgroundComposer {
     // Settings variant - Calm, premium, minimal distractions
     this._createBaseLayers();
     
-    // Soft grid - slower animation, more subtle
-    this._createSoftGrid();
-    
     // Minimal decorative elements - subtle horizontal lines
     this._createSettingDecorations();
     
@@ -473,9 +410,6 @@ export class BackgroundComposer {
   _createControlsVariant() {
     // Controls variant - Technical but approachable
     this._createBaseLayers();
-    
-    // Grid with technical feel
-    this._createTacticalGrid();
     
     // Key indicator decorations
     this._createControlDecorations();
@@ -491,9 +425,6 @@ export class BackgroundComposer {
     // Results variant - Dynamic, success/failure themed
     this._createBaseLayers();
     
-    // Grid - tactical but minimal
-    this._createTacticalGrid();
-    
     // Result-specific decorations
     this._createResultDecorations();
     
@@ -507,9 +438,6 @@ export class BackgroundComposer {
   _createVictoryVariant() {
     // Victory variant - Celebratory, grand, golden
     this._createBaseLayers();
-    
-    // Enhanced grid with celebratory feel
-    this._createTacticalGrid();
     
     // Victory decorations - golden rays, celebration elements
     this._createVictoryDecorations();
@@ -685,84 +613,7 @@ export class BackgroundComposer {
     });
   }
   
-  // ========== ENHANCED GRID SYSTEMS ==========
-  
-  _createTacticalGrid() {
-    this.gridGraphics = this.scene.add.graphics();
-    this.gridOffset = 0;
-    this.gridGraphics.setDepth(LAYER_DEPTHS.GRID);
-    this.cachedLayers.set('grid', this.gridGraphics);
-    
-    this._drawTacticalGrid();
-  }
-  
-  _drawTacticalGrid() {
-    if (!this.gridGraphics) return;
-    
-    this.gridGraphics.clear();
-    
-    const tileSize = 24; // Tighter grid
-    const primaryColor = 0x1a3a4a;
-    const secondaryColor = 0x2a5a6a;
-    const accentColor = 0x3a7a8a;
-    
-    // Primary grid lines - subtle
-    this.gridGraphics.lineStyle(1, primaryColor, 0.25);
-    
-    for (let x = 0; x <= this.width / tileSize + 1; x++) {
-      const drawX = x * tileSize - (this.gridOffset % tileSize);
-      this.gridGraphics.lineBetween(drawX, 0, drawX, this.height);
-    }
-    
-    const yOffset = this.gridOffset * 0.4;
-    for (let y = 0; y <= this.height / tileSize + 1; y++) {
-      const drawY = y * tileSize - (yOffset % tileSize);
-      this.gridGraphics.lineBetween(0, drawY, this.width, drawY);
-    }
-    
-    // Accent lines every 4th - more visible
-    if (this.quality !== 'low') {
-      this.gridGraphics.lineStyle(1, accentColor, 0.15);
-      for (let x = 0; x <= this.width / tileSize; x += 4) {
-        const drawX = x * tileSize - (this.gridOffset % tileSize);
-        this.gridGraphics.lineBetween(drawX, 0, drawX, this.height);
-      }
-    }
-  }
-  
-  _createSoftGrid() {
-    this.gridGraphics = this.scene.add.graphics();
-    this.gridOffset = 0;
-    this.gridGraphics.setDepth(LAYER_DEPTHS.GRID);
-    this.cachedLayers.set('grid', this.gridGraphics);
-    
-    this._drawSoftGrid();
-  }
-  
-  _drawSoftGrid() {
-    if (!this.gridGraphics) return;
-    
-    this.gridGraphics.clear();
-    
-    const tileSize = 48; // Larger, softer grid
-    const color = 0x1a2a3a;
-    
-    // Very subtle grid lines
-    this.gridGraphics.lineStyle(1, color, 0.15);
-    
-    for (let x = 0; x <= this.width / tileSize + 1; x++) {
-      const drawX = x * tileSize - (this.gridOffset % tileSize);
-      this.gridGraphics.lineBetween(drawX, 0, drawX, this.height);
-    }
-    
-    const yOffset = this.gridOffset * 0.3;
-    for (let y = 0; y <= this.height / tileSize + 1; y++) {
-      const drawY = y * tileSize - (yOffset % tileSize);
-      this.gridGraphics.lineBetween(0, drawY, this.width, drawY);
-    }
-  }
-  
-  // ========== DECORATIVE ELEMENTS ==========
+  // ========== DECORATIVE ELEMENTS (replacements for grid) ==========
   
   _createDataLines() {
     if (!this.qualitySettings.decorativeElements) return;
@@ -920,10 +771,9 @@ export class BackgroundComposer {
   }
   
   _createStandardVariant() {
-    // Default: balanced between hero and quiet
+    // Default: balanced, no grid
     this._createBaseLayers();
     this._createArchitecturalLayer(this.qualitySettings.architecturalDetail);
-    this._createGridLayer();
     this._createFogLayer();
     this._createLightAccents();
     this._createParticles();
@@ -932,29 +782,7 @@ export class BackgroundComposer {
   // ========== ANIMATION CONTROL ==========
   
   _startAnimations() {
-    const gridDelay = this.qualitySettings.gridAnimationDelay;
-    
-    // Grid animation timer - call the appropriate draw method based on variant
-    if (this.gridGraphics) {
-      let drawMethod = '_drawGrid';
-      
-      // Determine which draw method to use based on variant
-      if (this.variant === 'tactical' || this.variant === 'levelselect' || this.variant === 'controls') {
-        drawMethod = '_drawTacticalGrid';
-      } else if (this.variant === 'quiet' || this.variant === 'settings') {
-        drawMethod = '_drawSoftGrid';
-      }
-      
-      const gridTimer = this.scene.time.addEvent({
-        delay: gridDelay,
-        callback: () => {
-          this.gridOffset = (this.gridOffset + 0.3) % 32;
-          this[drawMethod]();
-        },
-        loop: true
-      });
-      this.animationTimers.push(gridTimer);
-    }
+    // Grid animation removed - only particle, light, and fog animations remain
     
     // Particle animation timer (only if particles exist)
     if (this.particles.length > 0) {
