@@ -2485,7 +2485,7 @@ class LevelSelectScene extends Phaser.Scene {
         objectiveHint = 'Starting level';
       }
       
-      this.add.text(contentX, y + 2, objectiveHint, { 
+      this.add.text(contentX, y + 10, objectiveHint, { 
         fontSize: '10px', 
         fill: isUnlocked ? '#668899' : '#556666', 
         fontFamily: 'Courier New',
@@ -2498,11 +2498,11 @@ class LevelSelectScene extends Phaser.Scene {
       const diffColor = level.difficulty === 1 ? '#44ff88' : (level.difficulty === 2 ? '#ffaa00' : '#ff4444');
       
       // Difficulty pill background
-      const diffPill = this.add.rectangle(diffX, y - 18, 65, 18, isUnlocked ? 0x1a2030 : 0x0a0c10);
+      const diffPill = this.add.rectangle(diffX, y - 10, 58, 14, isUnlocked ? 0x1a2030 : 0x0a0c10);
       diffPill.setStrokeStyle(1, isUnlocked ? diffColor : 0x333340);
       diffPill.setDepth(2);
       
-      this.add.text(diffX, y - 18, diffLabel, { 
+      this.add.text(diffX, y - 10, diffLabel, { 
         fontSize: '10px', 
         fill: isUnlocked ? diffColor : '#667788', 
         fontFamily: 'Courier New',
@@ -2511,17 +2511,17 @@ class LevelSelectScene extends Phaser.Scene {
       
       // ===== RIGHT BOTTOM: Action Button =====
       const ctaX = centerX + cardWidth/2 - 55;
-      const ctaY = y + 5;
+      const ctaY = y + 10;
       
       if (isUnlocked) {
-        // PLAY button - show focus state
-        const ctaBg = this.add.rectangle(ctaX, ctaY, 85, 26, isSelected ? 0x2a5a3a : (isFocused ? 0x1a4a4a : 0x1a4a2a));
-        ctaBg.setStrokeStyle(isSelected ? 3 : 2, isSelected ? 0xffdd00 : (isFocused ? 0x00ffff : 0x44ff88));
+        // PLAY button
+        const ctaBg = this.add.rectangle(ctaX, ctaY, 70, 22, isSelected ? 0x2a5a3a : (isFocused ? 0x1a4a4a : 0x1a4a2a));
+        ctaBg.setStrokeStyle(2, isSelected ? 0xffdd00 : (isFocused ? 0x00ffff : 0x44ff88));
         ctaBg.setDepth(2);
         ctaBg.setInteractive({ useHandCursor: true });
         
-        const ctaText = this.add.text(ctaX, ctaY, isSelected ? '▶ SELECTED' : (isFocused ? '▶ PLAY' : '▶ PLAY'), { 
-          fontSize: '12px', 
+        const ctaText = this.add.text(ctaX, ctaY, isSelected ? '▶ SEL' : '▶ PLAY', { 
+          fontSize: '10px', 
           fill: isSelected ? '#ffdd00' : (isFocused ? '#00ffff' : '#44ff88'), 
           fontFamily: 'Courier New',
           fontStyle: 'bold'
@@ -2536,73 +2536,16 @@ class LevelSelectScene extends Phaser.Scene {
         cardBg.badgeBg = badgeBg;
       } else {
         // LOCKED button
-        const ctaBg = this.add.rectangle(ctaX, ctaY, 85, 26, 0x151518);
-        ctaBg.setStrokeStyle(1, 0x333340);
+        const ctaBg = this.add.rectangle(ctaX, ctaY, 70, 22, 0x101015);
+        ctaBg.setStrokeStyle(1, 0x252530);
         ctaBg.setDepth(2);
         
-        const ctaText = this.add.text(ctaX, ctaY, '🔒 LOCKED', { 
-          fontSize: '11px', 
-          fill: '#778899', 
+        const ctaText = this.add.text(ctaX, ctaY, '🔒 LOCK', { 
+          fontSize: '9px', 
+          fill: '#4a4a54', 
           fontFamily: 'Courier New',
           fontStyle: 'bold'
         }).setOrigin(0.5).setDepth(3);
-      }
-      
-      // ===== FOOTER: Best Time + Stars/Medals =====
-      const footerY = y + 18;
-      const footerLeftX = contentX;
-      
-      // Best time display
-      const bestTimeStr = bestTime ? this.formatTime(bestTime) : (isUnlocked ? 'No record' : '---');
-      const bestTimeColor = bestTime ? '#88aacc' : (isUnlocked ? '#556677' : '#556666');
-      this.add.text(footerLeftX, footerY, '⏱ ' + bestTimeStr, { 
-        fontSize: '11px', 
-        fill: bestTimeColor, 
-        fontFamily: 'Courier New' 
-      }).setOrigin(0, 0.5).setDepth(3);
-      
-      // Stars/Medals display
-      if (isUnlocked) {
-        const starsX = footerLeftX + 120;
-        const starColors = ['#333340', '#cd7f32', '#c0c0c0', '#88ccff', '#66aaff', '#ffdd00'];
-        let starStr = '';
-        for (let s = 0; s < 5; s++) {
-          starStr += s < stars ? '★' : '☆';
-        }
-        
-        // Medal background
-        const medalBg = this.add.rectangle(starsX + 35, footerY, 75, 16, 0x1a2030);
-        medalBg.setStrokeStyle(1, starColors[stars] === '#ffdd00' ? 0xffdd00 : 0x334455);
-        medalBg.setDepth(2);
-        
-        this.add.text(starsX + 35, footerY, starStr, { 
-          fontSize: '12px', 
-          fill: starColors[Math.min(stars, 5)], 
-          fontFamily: 'Courier New',
-          fontStyle: 'bold'
-        }).setOrigin(0.5, 0.5).setDepth(3);
-      }
-      
-      // ===== LOCKED STATE: Explicit Unlock Rule =====
-      // Moved to right side near LOCKED button to avoid collision with footer
-      if (!isUnlocked && index > 0) {
-        const unlockRuleY = y + 28; // Moved below the LOCKED button instead of colliding with footer
-        const unlockX = centerX + cardWidth/2 - 55;
-        
-        // Clear unlock hint text
-        const prevLevelName = LEVEL_LAYOUTS[index - 1]?.name || `Level ${index}`;
-        const unlockText = 'Beat: ' + prevLevelName;
-        
-        const unlockBg = this.add.rectangle(unlockX, unlockRuleY, 95, 16, 0x1a1520);
-        unlockBg.setStrokeStyle(1, 0x5a4a3a);
-        unlockBg.setDepth(2);
-        
-        this.add.text(unlockX, unlockRuleY, unlockText, { 
-          fontSize: '10px', 
-          fill: '#cc9977', 
-          fontFamily: 'Courier New',
-          fontStyle: 'italic'
-        }).setOrigin(0.5, 0.5).setDepth(3);
       }
       
       // ===== INTERACTION =====
