@@ -1267,6 +1267,7 @@ function getMotionSensorCooldownForLevel(difficulty) {
 // ==================== GUARD AI CONFIGURATION ====================
 // Tunable parameters for smarter guard movement
 // Phase 15: Enhanced with vision occlusion, separation, and state machine
+// Phase 16: Robust anti-stuck system for chokepoints and corners
 const GUARD_AI_CONFIG = {
   // === MOVEMENT & PATHFINDING ===
   // Lookahead distance for obstacle detection (in pixels, relative to TILE_SIZE)
@@ -1316,32 +1317,60 @@ const GUARD_AI_CONFIG = {
   // Strength of separation force (0-1)
   separationStrength: 0.4,
   
-  // === STATE MACHINE ===
+  // === STATE MACHINE (Phase 16: Full implementation) ===
   // Guard behavior states
   states: {
-    PATROL: 'patrol',
-    ALERT: 'alert',   // Suspicious - slight speed boost, head toward last known position
-    CHASE: 'chase'    // Active pursuit - faster movement
+    PATROL: 'patrol',      // Normal patrol behavior
+    INVESTIGATE: 'investigate',  // Moving to investigate a sound/disturbance
+    CHASE: 'chase',        // Active pursuit - player seen
+    SEARCH: 'search'       // Searching area where player was last seen
   },
   
-  // Time to stay in ALERT state before returning to PATROL (ms)
-  alertDuration: 2000,
+  // Time to stay in INVESTIGATE state before returning to PATROL (ms)
+  investigateDuration: 3000,
+  
+  // Time to stay in SEARCH state before returning to PATROL (ms)
+  searchDuration: 4000,
   
   // Time in ALERT before transitioning to CHASE (ms)
   alertToChaseTime: 800,
   
-  // Distance at which guard switches from PATROL to ALERT (vision cone + margin)
+  // Distance at which guard switches from PATROL to INVESTIGATE (vision cone + margin)
   alertTriggerDistance: 50,
   
   // Speed multipliers for different states
   speedMultipliers: {
     patrol: 1.0,
-    alert: 1.2,
-    chase: 1.5
+    investigate: 1.1,
+    chase: 1.5,
+    search: 1.2
   },
   
   // Hysteresis: minimum time in a state before allowing transition (ms)
-  stateHysteresis: 300,
+  stateHysteresis: 400,
+  
+  // State transition cooldown: prevents rapid state changes (ms)
+  stateTransitionCooldown: 500,
+  
+  // Detection cooldown: time after losing sight before can re-detect (ms)
+  detectionCooldown: 300,
+  
+  // Search pattern: number of points to check around last known position
+  searchPatternPoints: 4,
+  searchPatternRadius: 80,  // pixels
+  
+  // === TILE-BASED LOS (Phase 16) ===
+  // LOS raycast step size (smaller = more accurate but slower)
+  losStepSize: 4,  // pixels per step
+  
+  // Maximum LOS distance (tiles)
+  losMaxDistance: 15,  // tiles
+  
+  // Chokepoint recovery: max attempts to find path around obstacle
+  chokepointMaxAttempts: 8,
+  
+  // Chokepoint recovery: distance to check for alternative paths
+  chokepointCheckRadius: 96,  // 2 tiles
   
   // === OSCILLATION PREVENTION ===
   // Minimum time between direction changes (ms)
@@ -1351,7 +1380,35 @@ const GUARD_AI_CONFIG = {
   positionHistoryLength: 10,
   
   // Oscillation threshold: if position variance < this, guard is oscillating
-  oscillationThreshold: 16  // pixels
+  oscillationThreshold: 16,  // pixels
+  
+  // === ENHANCED ANTI-STUCK SYSTEM (Phase 16) ===
+  // Stuck detection window - track displacement over multiple frames
+  stuckDetectionWindow: 20,  // Number of frames to track for stuck detection
+  
+  // Minimum displacement threshold (pixels) - guard must move this much within window
+  minDisplacementThreshold: 8,  // Very small displacement = stuck
+  
+  // Escape vector cooldown (ms) - prevent rapid direction flipping
+  escapeVectorCooldown: 400,
+  
+  // Flip-flop detection: track last N direction changes
+  directionHistoryLength: 6,
+  
+  // Angle threshold for detecting opposite direction (radians)
+  oppositeDirectionThreshold: 2.5,  // ~143 degrees - detects significant reversals
+  
+  // Temporary waypoint duration (ms) - how long to use escape waypoint
+  temporaryWaypointDuration: 1500,
+  
+  // Narrow corridor detection - wall density threshold
+  narrowCorridorWallThreshold: 3,  // 3+ walls within radius = narrow corridor
+  
+  // Narrow corridor detection radius (pixels)
+  narrowCorridorRadius: 60,
+  
+  // Extra clearance push force in narrow corridors (0-1)
+  narrowCorridorPushForce: 0.5
 };
 
 // ==================== AUDIO SYSTEM ====================
@@ -5134,6 +5191,10 @@ class GameScene extends Phaser.Scene {
   
   createEntities() {
     const startPos = this.currentLayout.playerStart;
+    
+    // Phase 16: Build obstacle lookup for tile-based LOS
+    this._rebuildObstacleLookup();
+    
     // Player with glow effect
     this.playerGlow = this.add.circle(startPos.x * TILE_SIZE, startPos.y * TILE_SIZE, TILE_SIZE / 2 + 4, 0x00ffff, 0.15);
     this.player = this.add.rectangle(startPos.x * TILE_SIZE, startPos.y * TILE_SIZE, TILE_SIZE - 8, TILE_SIZE - 8, 0x00d4ff);
@@ -6070,8 +6131,10 @@ class GameScene extends Phaser.Scene {
   }
 
   updateGuard() {
-    // Phase 15: Enhanced guard AI with state machine, wall clearance, and oscillation prevention
-    // Smart guard AI with obstacle avoidance, wall sliding, and stuck recovery
+    // Phase 16: Enhanced guard AI with robust anti-stuck system for chokepoints/corners
+    // Features: time-window stuck detection, escape vectors with cooldowns, 
+    //           temporary waypoint nudging, flip-flop prevention, narrow corridor handling
+    //           Full state machine: Patrol -> Investigate -> Chase -> Search -> Patrol
     
     // === STATE MACHINE ===
     // Initialize state if not exists
@@ -6080,8 +6143,16 @@ class GameScene extends Phaser.Scene {
       this._guardStateTimer = 0;
       this._lastStateChange = this.time.now;
       this._lastDirectionChange = 0;
+      this._lastEscapeVector = 0;
       this._positionHistory = [];
+      this._directionHistory = [];
       this._lastKnownPlayerPos = null;
+      this._temporaryWaypoint = null;
+      this._temporaryWaypointExpiry = 0;
+      this._stuckDisplacementHistory = [];
+      // Phase 16: Search state variables
+      this._searchPoints = null;
+      this._currentSearchIndex = 0;
     }
     
     // Determine target based on state
@@ -6092,39 +6163,83 @@ class GameScene extends Phaser.Scene {
     const now = this.time.now;
     const timeSinceStateChange = now - this._lastStateChange;
     
-    // State transitions with hysteresis
+    // === PHASE 16: FULL STATE MACHINE (Patrol -> Investigate -> Chase -> Search -> Patrol) ===
+    // State transitions with hysteresis and cooldowns
+    
+    // Check if player is currently visible (for state transitions)
+    const playerVisible = this._isPlayerVisibleToGuard();
+    
     if (this.guardAwareness >= 2 && timeSinceStateChange >= GUARD_AI_CONFIG.stateHysteresis) {
-      // Transition to CHASE if alerted and player visible
+      // CHASE: Player definitely detected, active pursuit
       if (this._guardState !== GUARD_AI_CONFIG.states.CHASE) {
         this._guardState = GUARD_AI_CONFIG.states.CHASE;
         this._lastStateChange = now;
         this._lastKnownPlayerPos = { x: this.player.x, y: this.player.y };
+        this._searchPoints = null;  // Clear search pattern
+        this._currentSearchIndex = 0;
+        // Clear temporary waypoint when changing to chase
+        this._temporaryWaypoint = null;
+      } else if (playerVisible) {
+        // Update last known position while chasing
+        this._lastKnownPlayerPos = { x: this.player.x, y: this.player.y };
       }
       speedMultiplier = GUARD_AI_CONFIG.speedMultipliers.chase;
     } else if (this.guardAwareness === 1 && timeSinceStateChange >= GUARD_AI_CONFIG.stateHysteresis) {
-      // Transition to ALERT if suspicious
-      if (this._guardState !== GUARD_AI_CONFIG.states.ALERT) {
-        this._guardState = GUARD_AI_CONFIG.states.ALERT;
+      // INVESTIGATE: Suspicious, heading to check
+      if (this._guardState !== GUARD_AI_CONFIG.states.INVESTIGATE) {
+        this._guardState = GUARD_AI_CONFIG.states.INVESTIGATE;
         this._lastStateChange = now;
-        this._guardStateTimer = GUARD_AI_CONFIG.alertDuration;
+        this._guardStateTimer = GUARD_AI_CONFIG.investigateDuration;
+        this._lastKnownPlayerPos = { x: this.player.x, y: this.player.y };
       }
-      speedMultiplier = GUARD_AI_CONFIG.speedMultipliers.alert;
-    } else if (this._guardState === GUARD_AI_CONFIG.states.ALERT) {
-      // Decrement alert timer
+      speedMultiplier = GUARD_AI_CONFIG.speedMultipliers.investigate;
+    } else if (this._guardState === GUARD_AI_CONFIG.states.CHASE && !playerVisible) {
+      // Lost sight during chase -> switch to SEARCH
+      if (timeSinceStateChange >= GUARD_AI_CONFIG.stateHysteresis) {
+        this._guardState = GUARD_AI_CONFIG.states.SEARCH;
+        this._lastStateChange = now;
+        this._guardStateTimer = GUARD_AI_CONFIG.searchDuration;
+        // Generate search pattern around last known position
+        this._generateSearchPattern();
+      }
+      speedMultiplier = GUARD_AI_CONFIG.speedMultipliers.chase;
+    } else if (this._guardState === GUARD_AI_CONFIG.states.INVESTIGATE) {
+      // Decrement investigate timer
       this._guardStateTimer -= 16;  // Approximate frame time
       if (this._guardStateTimer <= 0) {
+        // Investigation timeout -> return to patrol
         this._guardState = GUARD_AI_CONFIG.states.PATROL;
         this._lastStateChange = now;
         this._lastKnownPlayerPos = null;
       }
-      speedMultiplier = GUARD_AI_CONFIG.speedMultipliers.alert;
+      speedMultiplier = GUARD_AI_CONFIG.speedMultipliers.investigate;
+    } else if (this._guardState === GUARD_AI_CONFIG.states.SEARCH) {
+      // Decrement search timer
+      this._guardStateTimer -= 16;
+      if (this._guardStateTimer <= 0 || this._currentSearchIndex >= (this._searchPoints?.length || 0)) {
+        // Search complete -> return to patrol
+        this._guardState = GUARD_AI_CONFIG.states.PATROL;
+        this._lastStateChange = now;
+        this._lastKnownPlayerPos = null;
+        this._searchPoints = null;
+        this._currentSearchIndex = 0;
+      }
+      speedMultiplier = GUARD_AI_CONFIG.speedMultipliers.search;
+    } else {
+      // PATROL state
+      speedMultiplier = GUARD_AI_CONFIG.speedMultipliers.patrol;
     }
     
-    // Set target based on state
-    if (this._guardState === GUARD_AI_CONFIG.states.CHASE && this._lastKnownPlayerPos) {
+    // Set target based on state (use temporary waypoint if active)
+    if (this._temporaryWaypoint && now < this._temporaryWaypointExpiry) {
+      target = this._temporaryWaypoint;
+    } else if (this._guardState === GUARD_AI_CONFIG.states.CHASE && this._lastKnownPlayerPos) {
       target = this._lastKnownPlayerPos;
-    } else if (this._guardState === GUARD_AI_CONFIG.states.ALERT && this._lastKnownPlayerPos) {
+    } else if (this._guardState === GUARD_AI_CONFIG.states.INVESTIGATE && this._lastKnownPlayerPos) {
       target = this._lastKnownPlayerPos;
+    } else if (this._guardState === GUARD_AI_CONFIG.states.SEARCH && this._searchPoints) {
+      // Use search pattern points
+      target = this._searchPoints[this._currentSearchIndex || 0];
     } else {
       // PATROL: use patrol points
       target = this.guardPatrolPoints[this.currentPatrolIndex];
@@ -6134,23 +6249,51 @@ class GameScene extends Phaser.Scene {
     const dy = target.y - this.guard.y;
     const sqDist = dx * dx + dy * dy;
     
-    // Check if reached waypoint (larger threshold for chase targets)
-    const waypointThreshold = this._guardState === GUARD_AI_CONFIG.states.CHASE ? 100 : 25;
+    // Check if reached waypoint (larger threshold for chase/search targets)
+    const waypointThreshold = (this._guardState === GUARD_AI_CONFIG.states.CHASE || 
+                               this._guardState === GUARD_AI_CONFIG.states.SEARCH) ? 100 : 25;
     if (sqDist < waypointThreshold) {
-      if (this._guardState === GUARD_AI_CONFIG.states.PATROL) {
+      if (this._temporaryWaypoint) {
+        // Reached temporary waypoint - clear it and continue to actual target
+        this._temporaryWaypoint = null;
+        this._temporaryWaypointExpiry = 0;
+      } else if (this._guardState === GUARD_AI_CONFIG.states.PATROL) {
         this.currentPatrolIndex = (this.currentPatrolIndex + 1) % this.guardPatrolPoints.length;
-      } else if (this._guardState === GUARD_AI_CONFIG.states.ALERT || this._guardState === GUARD_AI_CONFIG.states.CHASE) {
-        // Reached last known player position - return to patrol if no player visible
-        if (this.guardAwareness < 2) {
+      } else if (this._guardState === GUARD_AI_CONFIG.states.SEARCH) {
+        // Move to next search point
+        this._currentSearchIndex = (this._currentSearchIndex || 0) + 1;
+        if (this._currentSearchIndex >= (this._searchPoints?.length || 0)) {
+          // Search complete -> return to patrol
           this._guardState = GUARD_AI_CONFIG.states.PATROL;
           this._lastStateChange = now;
           this._lastKnownPlayerPos = null;
+          this._searchPoints = null;
+        }
+      } else if (this._guardState === GUARD_AI_CONFIG.states.INVESTIGATE || this._guardState === GUARD_AI_CONFIG.states.CHASE) {
+        // Reached last known player position
+        if (this.guardAwareness >= 2 && playerVisible) {
+          // Still see player, continue chase
+          this._lastKnownPlayerPos = { x: this.player.x, y: this.player.y };
+        } else if (this._guardState === GUARD_AI_CONFIG.states.INVESTIGATE) {
+          // Investigation complete without sighting -> start search
+          this._guardState = GUARD_AI_CONFIG.states.SEARCH;
+          this._lastStateChange = now;
+          this._guardStateTimer = GUARD_AI_CONFIG.searchDuration;
+          this._generateSearchPattern();
+        } else {
+          // Chase lost target -> start search
+          this._guardState = GUARD_AI_CONFIG.states.SEARCH;
+          this._lastStateChange = now;
+          this._guardStateTimer = GUARD_AI_CONFIG.searchDuration;
+          this._generateSearchPattern();
         }
       }
       // Reset stuck detection state on waypoint arrival
       this._guardStuckFrames = 0;
       this._guardLastValidPos = null;
       this._positionHistory = [];
+      this._stuckDisplacementHistory = [];
+      this._directionHistory = [];
       return;
     }
     
@@ -6160,11 +6303,39 @@ class GameScene extends Phaser.Scene {
     let desiredVx = (dx / dist) * effectiveSpeed;
     let desiredVy = (dy / dist) * effectiveSpeed;
     
-    // === WALL CLEARANCE ===
+    // === ENHANCED STUCK DETECTION (Time-Window Based) ===
+    // Track displacement over a time window
+    if (!this._guardLastValidPos) {
+      this._guardLastValidPos = { x: this.guard.x, y: this.guard.y };
+    }
+    
+    const displacementThisFrame = Math.hypot(
+      this.guard.x - this._guardLastValidPos.x,
+      this.guard.y - this._guardLastValidPos.y
+    );
+    
+    // Add to displacement history
+    this._stuckDisplacementHistory.push(displacementThisFrame);
+    if (this._stuckDisplacementHistory.length > GUARD_AI_CONFIG.stuckDetectionWindow) {
+      this._stuckDisplacementHistory.shift();
+    }
+    
+    // Calculate total displacement over window
+    const totalDisplacement = this._stuckDisplacementHistory.reduce((a, b) => a + b, 0);
+    const isStuckByDisplacement = this._stuckDisplacementHistory.length >= GUARD_AI_CONFIG.stuckDetectionWindow &&
+                                    totalDisplacement < GUARD_AI_CONFIG.minDisplacementThreshold;
+    
+    this._guardLastValidPos = { x: this.guard.x, y: this.guard.y };
+    
+    // === WALL CLEARANCE (Enhanced for narrow corridors) ===
+    // Detect narrow corridor scenario
+    const isNarrowCorridor = this._isNarrowCorridor(this.guard.x, this.guard.y);
+    const clearanceForceMultiplier = isNarrowCorridor ? GUARD_AI_CONFIG.narrowCorridorPushForce : 0.3;
+    
     // Adjust movement to maintain distance from walls
     const clearance = this._getWallClearanceForce(this.guard.x, this.guard.y);
-    desiredVx += clearance.x * effectiveSpeed * 0.3;
-    desiredVy += clearance.y * effectiveSpeed * 0.3;
+    desiredVx += clearance.x * effectiveSpeed * clearanceForceMultiplier;
+    desiredVy += clearance.y * effectiveSpeed * clearanceForceMultiplier;
     
     // === OBSTACLE AVOIDANCE SYSTEM ===
     const lookahead = GUARD_AI_CONFIG.lookaheadFactor * TILE_SIZE;
@@ -6174,7 +6345,7 @@ class GameScene extends Phaser.Scene {
     // Check if lookahead point would collide with a wall
     let hasObstacleAhead = this._isWallAt(checkX, checkY);
     
-    // === OSCILLATION DETECTION ===
+    // === OSCILLATION DETECTION (Enhanced with flip-flop detection) ===
     // Track position history
     this._positionHistory.push({ x: this.guard.x, y: this.guard.y, time: now });
     if (this._positionHistory.length > GUARD_AI_CONFIG.positionHistoryLength) {
@@ -6182,40 +6353,43 @@ class GameScene extends Phaser.Scene {
     }
     
     // Check for oscillation (low position variance = oscillating in place)
-    const isOscillating = this._positionHistory.length >= GUARD_AI_CONFIG.positionHistoryLength && 
-                          this._calculatePositionVariance() < GUARD_AI_CONFIG.oscillationThreshold;
+    const positionVariance = this._calculatePositionVariance();
+    const isOscillatingByPosition = this._positionHistory.length >= GUARD_AI_CONFIG.positionHistoryLength && 
+                                     positionVariance < GUARD_AI_CONFIG.oscillationThreshold;
     
-    // === STUCK DETECTION ===
-    if (!this._guardLastValidPos) {
-      this._guardLastValidPos = { x: this.guard.x, y: this.guard.y };
-      this._guardStuckFrames = 0;
+    // === FLIP-FLOP DETECTION (Direction reversal oscillation) ===
+    // Track current direction angle
+    const currentAngle = Math.atan2(desiredVy, desiredVx);
+    
+    // Add to direction history
+    if (this._directionHistory.length === 0 || 
+        Math.abs(currentAngle - this._directionHistory[this._directionHistory.length - 1].angle) > 0.1) {
+      this._directionHistory.push({ angle: currentAngle, time: now });
+      if (this._directionHistory.length > GUARD_AI_CONFIG.directionHistoryLength) {
+        this._directionHistory.shift();
+      }
     }
     
-    const movedSinceLastFrame = Math.hypot(
-      this.guard.x - this._guardLastValidPos.x,
-      this.guard.y - this._guardLastValidPos.y
-    );
+    // Detect flip-flop pattern (alternating between opposite directions)
+    const isFlipFlopping = this._detectFlipFlop();
     
-    // Track consecutive frames where guard isn't moving much
-    if (movedSinceLastFrame < 2) {
-      this._guardStuckFrames = (this._guardStuckFrames || 0) + 1;
-    } else {
-      this._guardStuckFrames = 0;
-    }
+    // === COMBINED STUCK STATE ===
+    const isStuck = isStuckByDisplacement || isOscillatingByPosition || isFlipFlopping;
     
-    this._guardLastValidPos = { x: this.guard.x, y: this.guard.y };
+    // === ESCAPE VECTOR WITH COOLDOWN ===
+    const canUseEscapeVector = (now - this._lastEscapeVector) > GUARD_AI_CONFIG.escapeVectorCooldown;
+    const canChangeDirection = (now - this._lastDirectionChange) > GUARD_AI_CONFIG.directionChangeCooldown;
     
-    // === OBSTACLE AVOIDANCE & WALL SLIDING ===
-    if (hasObstacleAhead || isOscillating || (this._guardStuckFrames && this._guardStuckFrames > GUARD_AI_CONFIG.pathRecalcThreshold)) {
-      // Check direction change cooldown to prevent jitter
-      const canChangeDirection = (now - this._lastDirectionChange) > GUARD_AI_CONFIG.directionChangeCooldown;
-      
-      if (canChangeDirection) {
-        // Find best alternative direction
-        const alternativeDir = this._findAlternativeDirection(
+    // === OBSTACLE AVOIDANCE & STUCK RECOVERY ===
+    if (hasObstacleAhead || isStuck) {
+      if (canChangeDirection || isStuck) {
+        // Find best alternative direction with anti-flip-flop logic
+        const alternativeDir = this._findAlternativeDirectionEnhanced(
           this.guard.x, this.guard.y,
           desiredVx, desiredVy,
-          effectiveSpeed
+          effectiveSpeed,
+          isStuck,
+          isFlipFlopping
         );
         
         if (alternativeDir) {
@@ -6223,20 +6397,27 @@ class GameScene extends Phaser.Scene {
           desiredVy = alternativeDir.vy;
           this._lastDirectionChange = now;
           
+          // Create temporary waypoint for stuck recovery
+          if (isStuck && canUseEscapeVector) {
+            this._lastEscapeVector = now;
+            this._createTemporaryEscapeWaypoint(this.guard.x, this.guard.y, desiredVx, desiredVy, effectiveSpeed);
+          }
+          
           // If stuck, also try backing up slightly
-          if (this._guardStuckFrames > GUARD_AI_CONFIG.pathRecalcThreshold) {
+          if (isStuckByDisplacement) {
             const backupFactor = -GUARD_AI_CONFIG.stuckBackupDist / Math.max(dist, 1);
             this.guard.x += dx * backupFactor;
             this.guard.y += dy * backupFactor;
-            this._guardStuckFrames = 0;  // Reset after backup
+            // Clear stuck history after backup
+            this._stuckDisplacementHistory = [];
           }
           
-          // If oscillating, add random perturbation
-          if (isOscillating) {
-            const perturbAngle = (Math.random() - 0.5) * Math.PI * 0.5;
-            const angle = Math.atan2(desiredVy, desiredVx);
-            desiredVx = Math.cos(angle + perturbAngle) * effectiveSpeed;
-            desiredVy = Math.sin(angle + perturbAngle) * effectiveSpeed;
+          // If flip-flopping, add perpendicular bias
+          if (isFlipFlopping) {
+            // Choose a perpendicular direction and stick to it
+            const perpendicularAngle = currentAngle + (Math.PI / 2) * (Math.random() > 0.5 ? 1 : -1);
+            desiredVx = Math.cos(perpendicularAngle) * effectiveSpeed;
+            desiredVy = Math.sin(perpendicularAngle) * effectiveSpeed;
           }
         }
       }
@@ -6267,15 +6448,203 @@ class GameScene extends Phaser.Scene {
       // OPTIMIZATION: Only calculate pulse every 4th frame (reduces Math.sin calls by 75%)
       this._guardGlowFrame = (this._guardGlowFrame || 0) + 1;
       if (this._guardGlowFrame % 4 === 0) {
-        // Faster pulse when in alert/chase state
-        const pulseSpeed = this._guardState === GUARD_AI_CONFIG.states.CHASE ? 100 : 
-                          (this._guardState === GUARD_AI_CONFIG.states.ALERT ? 150 : 250);
+        // Faster pulse based on state (Phase 16: new states)
+        let pulseSpeed;
+        if (this._guardState === GUARD_AI_CONFIG.states.CHASE) {
+          pulseSpeed = 100;
+        } else if (this._guardState === GUARD_AI_CONFIG.states.SEARCH) {
+          pulseSpeed = 120;
+        } else if (this._guardState === GUARD_AI_CONFIG.states.INVESTIGATE) {
+          pulseSpeed = 150;
+        } else {
+          pulseSpeed = 250;  // Patrol
+        }
         const pulse = 0.1 + Math.sin(this.time.now / pulseSpeed) * 0.05;
         this.guardGlow.setAlpha(pulse);
       }
     }
     
     this.updateVisionCone();
+  }
+  
+  // Detect narrow corridor scenario (dense walls nearby)
+  _isNarrowCorridor(x, y) {
+    const radius = GUARD_AI_CONFIG.narrowCorridorRadius;
+    let nearbyWallCount = 0;
+    
+    // Check in 8 directions
+    const directions = [
+      { dx: 1, dy: 0 }, { dx: -1, dy: 0 },
+      { dx: 0, dy: 1 }, { dx: 0, dy: -1 },
+      { dx: 0.707, dy: 0.707 }, { dx: -0.707, dy: 0.707 },
+      { dx: 0.707, dy: -0.707 }, { dx: -0.707, dy: -0.707 }
+    ];
+    
+    for (const dir of directions) {
+      const checkX = x + dir.dx * radius;
+      const checkY = y + dir.dy * radius;
+      if (this._isWallAt(checkX, checkY)) {
+        nearbyWallCount++;
+      }
+    }
+    
+    return nearbyWallCount >= GUARD_AI_CONFIG.narrowCorridorWallThreshold;
+  }
+  
+  // Detect flip-flop oscillation pattern (alternating opposite directions)
+  _detectFlipFlop() {
+    if (this._directionHistory.length < GUARD_AI_CONFIG.directionHistoryLength) {
+      return false;
+    }
+    
+    // Check for alternating opposite direction pattern
+    let flipFlopCount = 0;
+    for (let i = 1; i < this._directionHistory.length; i++) {
+      const prevAngle = this._directionHistory[i - 1].angle;
+      const currAngle = this._directionHistory[i].angle;
+      
+      // Normalize angle difference to [-PI, PI]
+      let angleDiff = currAngle - prevAngle;
+      while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+      while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+      
+      // Check if direction reversed (angle diff close to ±PI)
+      if (Math.abs(Math.abs(angleDiff) - Math.PI) < (Math.PI - GUARD_AI_CONFIG.oppositeDirectionThreshold)) {
+        flipFlopCount++;
+      }
+    }
+    
+    // If multiple reversals detected, it's a flip-flop pattern
+    return flipFlopCount >= 2;
+  }
+  
+  // Create temporary escape waypoint to unstick guard from corners
+  _createTemporaryEscapeWaypoint(x, y, vx, vy, speed) {
+    // Calculate escape direction (perpendicular to current + bias toward open space)
+    const escapeAngle = Math.atan2(vy, vx);
+    
+    // Try multiple escape angles
+    const escapeOffsets = [
+      Math.PI / 2,   // 90 degrees
+      -Math.PI / 2,  // -90 degrees
+      Math.PI / 4,   // 45 degrees
+      -Math.PI / 4   // -45 degrees
+    ];
+    
+    for (const offset of escapeOffsets) {
+      const testAngle = escapeAngle + offset;
+      const waypointDist = TILE_SIZE * 2;  // 2 tiles away
+      const testX = x + Math.cos(testAngle) * waypointDist;
+      const testY = y + Math.sin(testAngle) * waypointDist;
+      
+      // Check if this location is clear
+      if (!this._isWallAt(testX, testY)) {
+        // Check if path to this waypoint is clear
+        if (this._hasPathClearance(x, y, testX, testY, 10)) {
+          this._temporaryWaypoint = { x: testX, y: testY };
+          this._temporaryWaypointExpiry = this.time.now + GUARD_AI_CONFIG.temporaryWaypointDuration;
+          return;
+        }
+      }
+    }
+    
+    // If no perpendicular escape found, try backing up
+    const backupAngle = escapeAngle + Math.PI;
+    const backupX = x + Math.cos(backupAngle) * TILE_SIZE;
+    const backupY = y + Math.sin(backupAngle) * TILE_SIZE;
+    
+    if (!this._isWallAt(backupX, backupY)) {
+      this._temporaryWaypoint = { x: backupX, y: backupY };
+      this._temporaryWaypointExpiry = this.time.now + GUARD_AI_CONFIG.temporaryWaypointDuration;
+    }
+  }
+  
+  // Enhanced alternative direction finder with anti-flip-flop logic
+  _findAlternativeDirectionEnhanced(x, y, desiredVx, desiredVy, speed, isStuck, isFlipFlopping) {
+    const weights = GUARD_AI_CONFIG.avoidWeights;
+    const checkRadius = GUARD_AI_CONFIG.cornerCheckRadius;
+    
+    // Normalize desired direction
+    const desiredSpeed = Math.hypot(desiredVx, desiredVy);
+    if (desiredSpeed === 0) return null;
+    const desiredNx = desiredVx / desiredSpeed;
+    const desiredNy = desiredVy / desiredSpeed;
+    
+    // Generate candidate directions with weights
+    const candidates = [
+      // Forward (toward target)
+      { vx: desiredNx * speed, vy: desiredNy * speed, weight: weights.forward, name: 'forward' },
+      // Perpendicular clockwise
+      { vx: -desiredNy * speed, vy: desiredNx * speed, weight: weights.perpendicular, name: 'cw' },
+      // Perpendicular counter-clockwise
+      { vx: desiredNy * speed, vy: -desiredNx * speed, weight: weights.perpendicular, name: 'ccw' },
+      // 45 degree angles (for smoother corner navigation)
+      { vx: (desiredNx - desiredNy) * 0.707 * speed, vy: (desiredNy + desiredNx) * 0.707 * speed, weight: weights.perpendicular * 0.9, name: 'cw45' },
+      { vx: (desiredNx + desiredNy) * 0.707 * speed, vy: (desiredNy - desiredNx) * 0.707 * speed, weight: weights.perpendicular * 0.9, name: 'ccw45' },
+      // Reverse (last resort)
+      { vx: -desiredNx * speed, vy: -desiredNy * speed, weight: weights.reverse, name: 'reverse' }
+    ];
+    
+    // If flip-flopping, penalize directions similar to recent directions
+    if (isFlipFlopping && this._directionHistory.length > 0) {
+      const recentAngles = this._directionHistory.slice(-3).map(d => d.angle);
+      
+      candidates.forEach(candidate => {
+        const candidateAngle = Math.atan2(candidate.vy, candidate.vx);
+        
+        // Penalize if similar to recent direction
+        for (const recentAngle of recentAngles) {
+          let angleDiff = Math.abs(candidateAngle - recentAngle);
+          while (angleDiff > Math.PI) angleDiff -= 2 * Math.PI;
+          while (angleDiff < -Math.PI) angleDiff += 2 * Math.PI;
+          
+          // Heavy penalty for opposite direction
+          if (Math.abs(Math.abs(angleDiff) - Math.PI) < 0.5) {
+            candidate.weight *= 0.1;  // Heavily penalize reversal
+          }
+          // Moderate penalty for similar direction
+          else if (Math.abs(angleDiff) < 0.5) {
+            candidate.weight *= 0.5;  // Penalize repeating same direction
+          }
+        }
+      });
+    }
+    
+    // Sort by weight (higher is better)
+    candidates.sort((a, b) => b.weight - a.weight);
+    
+    // Try each candidate
+    for (const candidate of candidates) {
+      // Check if this direction would result in collision
+      const checkX = x + candidate.vx / speed * checkRadius;
+      const checkY = y + candidate.vy / speed * checkRadius;
+      
+      if (!this._isWallAt(checkX, checkY)) {
+        // Additional clearance check
+        if (this._hasPathClearance(x, y, checkX, checkY, 8)) {
+          return { vx: candidate.vx, vy: candidate.vy };
+        }
+      }
+    }
+    
+    // If all else fails, try random perturbations
+    const angle = Math.atan2(desiredVy, desiredVx);
+    for (let offset = 15; offset <= 90; offset += 15) {
+      for (const sign of [1, -1]) {
+        const testAngle = angle + (offset * sign) * Math.PI / 180;
+        const testVx = Math.cos(testAngle) * speed;
+        const testVy = Math.sin(testAngle) * speed;
+        
+        const testX = x + testVx / speed * checkRadius * 0.5;
+        const testY = y + testVy / speed * checkRadius * 0.5;
+        
+        if (!this._isWallAt(testX, testY)) {
+          return { vx: testVx, vy: testVy };
+        }
+      }
+    }
+    
+    return null;
   }
   
   // Calculate position variance for oscillation detection
@@ -6295,6 +6664,68 @@ class GameScene extends Phaser.Scene {
       variance += (pos.x - avgX) ** 2 + (pos.y - avgY) ** 2;
     }
     return Math.sqrt(variance / this._positionHistory.length);
+  }
+  
+  // Phase 16: Check if player is currently visible to guard using tile-based LOS
+  _isPlayerVisibleToGuard() {
+    if (!this.guard || !this.player) return false;
+    
+    const sqDist = this._SQUARED_DIST(this.player.x, this.player.y, this.guard.x, this.guard.y);
+    const visionDistSq = this._GUARD_VISION_DIST_SQ || (this.currentVisionDistance * this.currentVisionDistance);
+    
+    // Check distance first
+    if (sqDist >= visionDistSq) return false;
+    
+    // Check if player is in vision cone
+    const angleToPlayer = Math.atan2(this.player.y - this.guard.y, this.player.x - this.guard.x);
+    let angleDiff = angleToPlayer - this.guardAngle;
+    while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+    while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+    
+    if (Math.abs(angleDiff) >= this.currentVisionAngle / 2) return false;
+    
+    // Use tile-based LOS check
+    return !this.isLineBlocked(this.guard.x, this.guard.y, this.player.x, this.player.y);
+  }
+  
+  // Phase 16: Generate search pattern points around last known position
+  _generateSearchPattern() {
+    if (!this._lastKnownPlayerPos) {
+      this._searchPoints = null;
+      this._currentSearchIndex = 0;
+      return;
+    }
+    
+    const center = this._lastKnownPlayerPos;
+    const numPoints = GUARD_AI_CONFIG.searchPatternPoints || 4;
+    const radius = GUARD_AI_CONFIG.searchPatternRadius || 80;
+    
+    this._searchPoints = [];
+    
+    // Start with the last known position
+    this._searchPoints.push({ x: center.x, y: center.y });
+    
+    // Add points in a spiral pattern around the center
+    for (let i = 0; i < numPoints; i++) {
+      const angle = (i / numPoints) * Math.PI * 2;
+      const dist = radius * (0.5 + (i % 2) * 0.5);  // Alternate between inner and outer radius
+      
+      const px = center.x + Math.cos(angle) * dist;
+      const py = center.y + Math.sin(angle) * dist;
+      
+      // Only add if not blocked by wall
+      if (!this._isWallAt(px, py)) {
+        this._searchPoints.push({ x: px, y: py });
+      }
+    }
+    
+    this._currentSearchIndex = 0;
+  }
+  
+  // Phase 16: Initialize search state variables
+  _initSearchState() {
+    this._searchPoints = null;
+    this._currentSearchIndex = 0;
   }
   
   // Get wall clearance force - pushes guard away from nearby walls
@@ -6808,18 +7239,12 @@ class GameScene extends Phaser.Scene {
     this.visionGraphics.fillStyle(0xff4422, Math.min(1.0, innerAlpha));
   }
   
-  // Phase 15: Raycast to find where vision hits a wall
+  // Phase 16: Raycast to find where vision hits a wall (using tile-based LOS)
   _raycastVision(startX, startY, angle, maxDist) {
-    const steps = 20;  // Number of samples along ray
-    for (let i = 1; i <= steps; i++) {
-      const dist = (maxDist * i) / steps;
-      const checkX = startX + Math.cos(angle) * dist;
-      const checkY = startY + Math.sin(angle) * dist;
-      
-      // Check if this point hits a wall
-      if (this._isWallAt(checkX, checkY)) {
-        return dist - 8;  // Return slightly before wall for visual clarity
-      }
+    // Use the new tile-based LOS with hit point detection
+    const result = this._raycastLOSWithHitPoint(startX, startY, angle, maxDist);
+    if (result.blocked) {
+      return result.distance - 4;  // Return slightly before wall for visual clarity
     }
     return maxDist;  // No wall hit, return full distance
   }
@@ -7135,19 +7560,127 @@ class GameScene extends Phaser.Scene {
     this.guardAwareness = 0;
   }
 
+  // Phase 16: Tile-based Line of Sight using DDA-like algorithm
+  // Properly steps through tiles to prevent wall-clipping
+  // Uses blocks_los property if available, otherwise falls back to obstacles
   isLineBlocked(x1, y1, x2, y2) {
-    const steps = 10;
-    for (let i = 1; i < steps; i++) {
-      const t = i / steps;
-      const checkX = x1 + (x2 - x1) * t;
-      const checkY = y1 + (y2 - y1) * t;
-      const tileX = Math.floor(checkX / TILE_SIZE);
-      const tileY = Math.floor(checkY / TILE_SIZE);
+    // Build obstacle lookup set for O(1) checks
+    if (!this._obstacleLookup) {
+      this._obstacleLookup = new Set();
       for (const obs of this.currentLayout.obstacles) {
-        if (obs.x === tileX && obs.y === tileY) return true;
+        this._obstacleLookup.add(`${obs.x},${obs.y}`);
       }
     }
+    
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const dist = Math.hypot(dx, dy);
+    
+    if (dist < 1) return false;  // Same point
+    
+    // Normalize direction
+    const nx = dx / dist;
+    const ny = dy / dist;
+    
+    // Use smaller step size for accuracy (configurable via GUARD_AI_CONFIG)
+    const stepSize = GUARD_AI_CONFIG.losStepSize || 4;
+    const maxSteps = Math.ceil(dist / stepSize);
+    
+    // Track visited tiles to avoid redundant checks
+    const visitedTiles = new Set();
+    
+    for (let i = 1; i < maxSteps; i++) {
+      const checkX = x1 + nx * stepSize * i;
+      const checkY = y1 + ny * stepSize * i;
+      
+      const tileX = Math.floor(checkX / TILE_SIZE);
+      const tileY = Math.floor(checkY / TILE_SIZE);
+      const tileKey = `${tileX},${tileY}`;
+      
+      // Skip if already checked this tile
+      if (visitedTiles.has(tileKey)) continue;
+      visitedTiles.add(tileKey);
+      
+      // Check if this tile blocks LOS
+      if (this._tileBlocksLOS(tileX, tileY)) {
+        return true;
+      }
+    }
+    
     return false;
+  }
+  
+  // Check if a specific tile blocks line of sight
+  // Phase 16: Supports blocks_los property for fine-grained control
+  _tileBlocksLOS(tileX, tileY) {
+    // Check world bounds
+    if (tileX < 0 || tileX >= MAP_WIDTH || tileY < 0 || tileY >= MAP_HEIGHT) {
+      return true;  // Out of bounds blocks LOS
+    }
+    
+    // Check obstacle lookup
+    const tileKey = `${tileX},${tileY}`;
+    if (this._obstacleLookup && this._obstacleLookup.has(tileKey)) {
+      // Check if obstacle has blocks_los property (default: true for obstacles)
+      // This allows for transparent obstacles in the future
+      const obstacles = this.currentLayout.obstacles;
+      for (const obs of obstacles) {
+        if (obs.x === tileX && obs.y === tileY) {
+          // blocks_los defaults to true for all obstacles
+          return obs.blocks_los !== false;
+        }
+      }
+      return true;
+    }
+    
+    return false;
+  }
+  
+  // Rebuild obstacle lookup (call when level changes)
+  _rebuildObstacleLookup() {
+    this._obstacleLookup = new Set();
+    if (this.currentLayout?.obstacles) {
+      for (const obs of this.currentLayout.obstacles) {
+        this._obstacleLookup.add(`${obs.x},${obs.y}`);
+      }
+    }
+  }
+  
+  // Phase 16: Enhanced LOS check with early exit for vision cone
+  // Returns { blocked: boolean, hitPoint: {x, y} | null }
+  _raycastLOSWithHitPoint(startX, startY, angle, maxDist) {
+    const nx = Math.cos(angle);
+    const ny = Math.sin(angle);
+    const stepSize = GUARD_AI_CONFIG.losStepSize || 4;
+    const maxSteps = Math.ceil(maxDist / stepSize);
+    
+    const visitedTiles = new Set();
+    
+    for (let i = 1; i <= maxSteps; i++) {
+      const checkX = startX + nx * stepSize * i;
+      const checkY = startY + ny * stepSize * i;
+      
+      const tileX = Math.floor(checkX / TILE_SIZE);
+      const tileY = Math.floor(checkY / TILE_SIZE);
+      const tileKey = `${tileX},${tileY}`;
+      
+      if (visitedTiles.has(tileKey)) continue;
+      visitedTiles.add(tileKey);
+      
+      if (this._tileBlocksLOS(tileX, tileY)) {
+        return {
+          blocked: true,
+          hitPoint: { x: checkX, y: checkY },
+          distance: stepSize * i
+        };
+      }
+    }
+    
+    return {
+      blocked: false,
+      hitPoint: { x: startX + nx * maxDist, y: startY + ny * maxDist },
+      distance: maxDist
+    };
   }
 
   detected() {
