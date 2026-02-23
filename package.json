@@ -10,7 +10,8 @@
     "generate-assets": "node scripts/generate-ui-assets.js",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "validate:maps": "node scripts/map-validator.js"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
