@@ -1520,6 +1520,14 @@ class BootScene extends Phaser.Scene {
       safeSceneStart(this, 'MainMenuScene');
     });
   }
+  
+  // Cleanup on shutdown
+  shutdown() {
+    // Stop any pending timers
+    this.time.removeAllEvents();
+    this.tweens.killAll();
+    super.shutdown();
+  }
 }
 
 // ==================== MAIN MENU SCENE ====================
@@ -2125,6 +2133,10 @@ class MainMenuScene extends Phaser.Scene {
   
   // Cleanup listeners when scene is destroyed
   shutdown() {
+    // Stop all timers and tweens first
+    this.time.removeAllEvents();
+    this.tweens.killAll();
+    
     // Clean up BackgroundComposer
     if (this.backgroundComposer) {
       this.backgroundComposer.destroy();
@@ -2958,6 +2970,10 @@ class SettingsScene extends Phaser.Scene {
   
   // Cleanup listeners when scene is destroyed
   shutdown() {
+    // Stop all timers and tweens first
+    this.time.removeAllEvents();
+    this.tweens.killAll();
+    
     // Clean up BackgroundComposer
     if (this.backgroundComposer) {
       this.backgroundComposer.destroy();
@@ -3149,6 +3165,10 @@ class ControlsScene extends Phaser.Scene {
   
   // Cleanup listeners when scene is destroyed
   shutdown() {
+    // Stop all timers and tweens first
+    this.time.removeAllEvents();
+    this.tweens.killAll();
+    
     // Clean up BackgroundComposer
     if (this.backgroundComposer) {
       this.backgroundComposer.destroy();
@@ -3505,6 +3525,11 @@ class ResultsScene extends Phaser.Scene {
       this._particleTimer.remove();
       this._particleTimer = null;
     }
+    // Clean up result particles
+    if (this.resultParticles) {
+      this.resultParticles.forEach(p => p.destroy());
+      this.resultParticles = [];
+    }
     if (this._resizeListener) {
       fullscreenManager.off(this._resizeListener);
     }
@@ -3516,6 +3541,9 @@ class ResultsScene extends Phaser.Scene {
       this.input.keyboard.off('keydown-ESC', this._menuKeyHandler);
       this._menuKeyHandler = null;
     }
+    // Stop all tweens and timers
+    this.tweens.killAll();
+    this.time.removeAllEvents();
     super.shutdown();
   }
   
@@ -3787,6 +3815,11 @@ class VictoryScene extends Phaser.Scene {
       this._particleTimer.remove();
       this._particleTimer = null;
     }
+    // Clean up victory particles
+    if (this.resultParticles) {
+      this.resultParticles.forEach(p => p.destroy());
+      this.resultParticles = [];
+    }
     if (this._resizeListener) {
       fullscreenManager.off(this._resizeListener);
     }
@@ -3798,6 +3831,9 @@ class VictoryScene extends Phaser.Scene {
       this.input.keyboard.off('keydown-ESC', this._menuKeyHandler);
       this._menuKeyHandler = null;
     }
+    // Stop all tweens and timers
+    this.tweens.killAll();
+    this.time.removeAllEvents();
     super.shutdown();
   }
   
@@ -4012,6 +4048,9 @@ class GameScene extends Phaser.Scene {
   
   // Cleanup listeners when scene is destroyed
   shutdown() {
+    // Mark scene as shutting down to prevent callbacks from running
+    this.isRunning = false;
+    
     // Clean up HUD backdrop accents
     if (this._hudAccents) {
       this._hudAccents.destroy();
@@ -4036,6 +4075,115 @@ class GameScene extends Phaser.Scene {
       this.detectedSceneEvent.remove();
       this.detectedSceneEvent = null;
     }
+    // Clean up all game entity graphics
+    if (this.visionGraphics) {
+      this.visionGraphics.destroy();
+      this.visionGraphics = null;
+    }
+    if (this.scannerBeam) {
+      this.scannerBeam.destroy();
+      this.scannerBeam = null;
+    }
+    if (this.playerTrail) {
+      this.playerTrail.destroy();
+      this.playerTrail = null;
+    }
+    if (this.ghostTrail) {
+      this.ghostTrail.destroy();
+      this.ghostTrail = null;
+    }
+    if (this.guardAwarenessIndicator) {
+      this.guardAwarenessIndicator.destroy();
+      this.guardAwarenessIndicator = null;
+    }
+    if (this.motionSensorWarning) {
+      this.motionSensorWarning.destroy();
+      this.motionSensorWarning = null;
+    }
+    if (this.vignette) {
+      this.vignette.destroy();
+      this.vignette = null;
+    }
+    // Clean up player/guard glow effects
+    if (this.playerGlow) {
+      this.playerGlow.destroy();
+      this.playerGlow = null;
+    }
+    if (this.guardGlow) {
+      this.guardGlow.destroy();
+      this.guardGlow = null;
+    }
+    // Clean up camera graphics arrays
+    if (this.cameras) {
+      this.cameras.forEach(cam => {
+        if (cam.graphics) cam.graphics.destroy();
+        if (cam.body) cam.body.destroy();
+      });
+      this.cameras = [];
+    }
+    // Clean up motion sensor graphics
+    if (this.motionSensors) {
+      this.motionSensors.forEach(sensor => {
+        if (sensor.graphics) sensor.graphics.destroy();
+        if (sensor.body) sensor.body.destroy();
+      });
+      this.motionSensors = [];
+    }
+    // Clean up laser grid graphics
+    if (this.laserGrids) {
+      this.laserGrids.forEach(grid => {
+        if (grid.graphics) grid.graphics.destroy();
+        if (grid.body) grid.body.destroy();
+      });
+      this.laserGrids = [];
+    }
+    // Clean up patrol drone graphics
+    if (this.patrolDrones) {
+      this.patrolDrones.forEach(drone => {
+        if (drone.graphics) drone.graphics.destroy();
+        if (drone.body) drone.body.destroy();
+      });
+      this.patrolDrones = [];
+    }
+    // Clean up scanner drone
+    if (this.scannerDrone) {
+      this.scannerDrone.destroy();
+      this.scannerDrone = null;
+    }
+    // Clean up physics sprites (player, guard, items)
+    const physicsSprites = [
+      'player', 'guard', 'dataCore', 'keyCard', 'hackTerminal', 
+      'relayTerminal', 'securityCode', 'powerCell', 'exitZone', 'ghost'
+    ];
+    physicsSprites.forEach(name => {
+      if (this[name] && this[name].body) {
+        this[name].body.stop();
+        this[name].body.destroy();
+        this[name].destroy();
+        this[name] = null;
+      }
+    });
+    // Clean up text objects
+    const textFields = ['timerText', 'runText', 'objectiveText', 'statusText', 'creditsText', 'perksText', 'exitText'];
+    textFields.forEach(name => {
+      if (this[name]) {
+        this[name].destroy();
+        this[name] = null;
+      }
+    });
+    // Clean up zones
+    const zones = ['hackTerminalArea', 'relayTerminalArea'];
+    zones.forEach(name => {
+      if (this[name]) {
+        this[name].destroy();
+        this[name] = null;
+      }
+    });
+    // Clear physics groups if any
+    if (this.walls) {
+      this.walls.clear(true, true);
+      this.walls = null;
+    }
     if (this._resizeListener) {
       fullscreenManager.off(this._resizeListener);
     }
@@ -4043,6 +4191,11 @@ class GameScene extends Phaser.Scene {
       this.input.keyboard.off('keydown', this._keyRestartHandler);
       this._keyRestartHandler = null;
     }
+    // Stop all tweens to prevent callbacks after shutdown
+    this.tweens.killAll();
+    // Clear any pending delayed calls
+    this.time.removeAllEvents();
+    
     super.shutdown();
   }
   
