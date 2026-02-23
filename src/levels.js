@@ -70,40 +70,43 @@ const RAW_LEVEL_LAYOUTS = [
   {
     name: 'Warehouse',
     obstacles: shiftArray6([
-      // Left storage racks
-      {x:3,y:3},{x:4,y:3},{x:3,y:4},{x:4,y:4},{x:3,y:5},{x:4,y:5},{x:3,y:6},{x:4,y:6},
-      {x:3,y:11},{x:4,y:11},{x:3,y:12},{x:4,y:12},{x:3,y:13},{x:4,y:13},
-      {x:6,y:5},{x:6,y:6},{x:6,y:12},{x:6,y:13},
-      // Central crate stacks
+      // West storage racks
+      {x:2,y:3},{x:3,y:3},{x:2,y:4},{x:3,y:4},{x:2,y:5},{x:3,y:5},{x:2,y:6},{x:3,y:6},
+      {x:2,y:10},{x:3,y:10},{x:2,y:11},{x:3,y:11},{x:2,y:12},{x:3,y:12},
+      {x:5,y:4},{x:5,y:5},{x:5,y:10},{x:5,y:11},
+      // Central container stacks
       {x:8,y:5},{x:9,y:5},{x:8,y:6},{x:9,y:6},
-      {x:8,y:10},{x:9,y:10},{x:8,y:11},{x:9,y:11},
+      {x:8,y:9},{x:9,y:9},{x:8,y:10},{x:9,y:10},
       {x:11,y:7},{x:12,y:7},{x:11,y:8},{x:12,y:8},
-      {x:11,y:12},{x:12,y:12},{x:11,y:13},{x:12,y:13},
-      // Right-side office enclosure (door gaps at x=16)
-      {x:15,y:3},{x:16,y:3},{x:17,y:3},
+      {x:11,y:11},{x:12,y:11},{x:11,y:12},{x:12,y:12},
+      // East office enclosure (door gap at x=16,y=4)
+      {x:15,y:2},{x:16,y:2},{x:17,y:2},
+      {x:15,y:3},{x:17,y:3},
       {x:15,y:4},{x:17,y:4},
       {x:15,y:5},{x:17,y:5},
-      {x:15,y:6},{x:17,y:6},
+      {x:15,y:6},{x:16,y:6},{x:17,y:6},
       // Loading bay barricades
-      {x:14,y:13},{x:16,y:13},{x:14,y:14},{x:15,y:14},{x:16,y:14},
-      {x:14,y:15},{x:16,y:15}
+      {x:13,y:13},{x:14,y:13},{x:15,y:13},{x:16,y:13},{x:17,y:13},
+      {x:13,y:14},{x:17,y:14},{x:13,y:15},{x:17,y:15},
+      // Upper-right crates
+      {x:19,y:5},{x:19,y:6}
     ]),
     guardPatrol: shiftArray6([
-      {x:6,y:8},{x:13,y:8},{x:13,y:12},{x:6,y:12}
+      {x:5,y:7},{x:14,y:7},{x:14,y:13},{x:5,y:13}
     ]),
     dataCore: shiftBy6({x:16,y:5}),
-    keyCard: shiftBy6({x:5,y:12}),
-    hackTerminal: shiftBy6({x:10,y:9}),
+    keyCard: shiftBy6({x:4,y:11}),
+    hackTerminal: shiftBy6({x:11,y:9}),
     playerStart: shiftBy6({x:2,y:14}),
-    exitZone: shiftBy6({x:20,y:3}),
-    cameras: shiftArray6([{x:7,y:2},{x:16,y:10}]),
+    exitZone: shiftBy6({x:20,y:2}),
+    cameras: shiftArray6([{x:6,y:2},{x:18,y:10}]),
     motionSensors: shiftArray6([{x:10,y:14}]),
     laserGrids: shiftArray6([{x:12,y:5,h:true},{x:14,y:9,v:true}]),
     patrolDrones: [
-      {x:17,y:11,patrol:shiftArray6([{x:15,y:9},{x:19,y:9},{x:19,y:13},{x:15,y:13}])}
+      {x:18,y:11,patrol:shiftArray6([{x:14,y:9},{x:18,y:9},{x:18,y:14},{x:14,y:14}])}
     ],
     securityCode: shiftBy6({x:6,y:4}),
-    powerCell: shiftBy6({x:15,y:15}),
+    powerCell: shiftBy6({x:18,y:14}),
     difficulty: 1
   },
 
