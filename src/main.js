@@ -3005,7 +3005,7 @@ class ControlsScene extends Phaser.Scene {
     this.backgroundComposer = new BackgroundComposer(this, { variant: 'controls' });
     
     // Title
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2, 30, '🎮 CONTROLS', { fontSize: '28px', fill: '#66ccff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    this.add.text(MAP_WIDTH * TILE_SIZE / 2, 30, '🎮 CONTROLS', { fontSize: '28px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
     
     // Back button
     const backBtn = this.add.text(20, 15, '< BACK', { fontSize: '14px', fill: '#888888', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
@@ -3932,8 +3932,11 @@ class GameScene extends Phaser.Scene {
     this.guardAwareness = 0; // 0=calm, 1=suspicious, 2=alerted, 3=detected
     this.guardAwarenessIndicator = null; // Visual indicator above guard
     this.preAlertTimer = 0; // Countdown before detection
-    this.preAlertDuration = 800; // ms - time player has to react in pre-alert
+    this.preAlertDuration = 1200; // ms - time player has to react in pre-alert (increased from 800 for better fairness)
     this.isPreAlerting = false; // Currently in pre-alert phase
+    // Phase 14: Motion sensor proximity warning for fairness
+    this.motionSensorWarning = null; // Visual warning when near motion sensor
+    this.isNearMotionSensor = false; // Track if player is near a motion sensor
     this.scannerAngle = 0; this.applySpeedBoost = false; this.applyStealth = false;
     this.hasWon = false;
     this._restarted = false;
@@ -4299,6 +4302,10 @@ class GameScene extends Phaser.Scene {
       this.physics.add.existing(sensor.body, true);
       this.motionSensors.push(sensor);
     });
+    // Phase 14: Create motion sensor proximity warning graphics (initially hidden)
+    this.motionSensorWarning = this.add.graphics();
+    this.motionSensorWarning.setDepth(15); // Above most elements
+    this.motionSensorWarning.setVisible(false);
   }
 
   createVisionCone() { 
@@ -5055,8 +5062,16 @@ class GameScene extends Phaser.Scene {
   updateMotionSensors() {
     // Cache the squared effective radius to avoid sqrt in inner loop
     const MOTION_SENSOR_RADIUS_SQ = (MOTION_SENSOR_RADIUS + (this.levelDifficulty - 1) * 5) ** 2;
+    // Phase 14: Warning radius is 1.5x detection radius for fairness
+    const MOTION_SENSOR_WARNING_RADIUS_SQ = MOTION_SENSOR_RADIUS_SQ * 2.25;
     const playerBody = this.player.body;
     const speed = playerBody.velocity.length();
+    
+    // Track if player is near any motion sensor for warning display
+    this.isNearMotionSensor = false;
+    let nearestSensorX = 0;
+    let nearestSensorY = 0;
+    let nearestWarningDist = Infinity;
     
     // Only check if player is actually moving (avoids unnecessary computation)
     if (speed > 10) {
@@ -5071,8 +5086,21 @@ class GameScene extends Phaser.Scene {
           this.detected();
           sensor.cooldown = this.currentMotionCooldown;
         }
+        
+        // Track nearest sensor for warning
+        if (sqDist < MOTION_SENSOR_WARNING_RADIUS_SQ && sqDist >= MOTION_SENSOR_RADIUS_SQ) {
+          if (sqDist < nearestWarningDist) {
+            nearestWarningDist = sqDist;
+            nearestSensorX = sensor.x;
+            nearestSensorY = sensor.y;
+          }
+          this.isNearMotionSensor = true;
+        }
       });
     }
+    
+    // Phase 14: Update motion sensor proximity warning
+    this._updateMotionSensorWarning(nearestSensorX, nearestSensorY, nearestWarningDist);
     
     // OPTIMIZATION: Only redraw sensor graphics every 2nd frame
     // Reduces draw calls by 50% while maintaining visual quality
@@ -5094,6 +5122,49 @@ class GameScene extends Phaser.Scene {
       sensor.graphics.fillStyle(0xff0066, active ? 0.5 : 0.2);
       sensor.graphics.fillCircle(sensor.x, sensor.y, MOTION_SENSOR_RADIUS);
     });
+  }
+  
+  // Phase 14: Motion sensor proximity warning visualization
+  _updateMotionSensorWarning(sensorX, sensorY, distSq) {
+    if (!this.motionSensorWarning) return;
+    
+    this.motionSensorWarning.clear();
+    
+    // Only show warning if near a sensor and not already detected
+    if (!this.isNearMotionSensor || this.isDetected || this.hasWon) {
+      this.motionSensorWarning.setVisible(false);
+      return;
+    }
+    
+    // Draw warning indicator at player's position
+    const px = this.player.x;
+    const py = this.player.y;
+    
+    // Pulsing warning circle around player
+    const pulse = Math.sin(this.time.now / 80) * 0.5 + 0.5; // Fast pulse for urgency
+    const warningRadius = TILE_SIZE * 0.8;
+    
+    this.motionSensorWarning.fillStyle(0xff0066, 0.15 + pulse * 0.15);
+    this.motionSensorWarning.fillCircle(px, py, warningRadius);
+    
+    // Warning ring
+    this.motionSensorWarning.lineStyle(2, 0xff3388, 0.6 + pulse * 0.3);
+    this.motionSensorWarning.strokeCircle(px, py, warningRadius);
+    
+    // Direction indicator pointing to sensor
+    const angle = Math.atan2(sensorY - py, sensorX - px);
+    const arrowDist = warningRadius + 10;
+    const arrowX = px + Math.cos(angle) * arrowDist;
+    const arrowY = py + Math.sin(angle) * arrowDist;
+    
+    this.motionSensorWarning.fillStyle(0xff0066, 0.9);
+    this.motionSensorWarning.fillTriangle(
+      arrowX, arrowY,
+      arrowX + Math.cos(angle + 0.4) * 8, arrowY + Math.sin(angle + 0.4) * 8,
+      arrowX + Math.cos(angle - 0.4) * 8, arrowY + Math.sin(angle - 0.4) * 8
+    );
+    
+    this.motionSensorWarning.setVisible(true);
   }
   
   updateLaserGrids() {
@@ -5417,6 +5488,7 @@ class GameScene extends Phaser.Scene {
   }
 
   // Phase 13: Pre-alert system - gives player warning before detection
+  // Phase 14: Enhanced with screen border warning for better fairness
   startPreAlert() {
     if (this.isPreAlerting || this.isDetected) return;
     
@@ -5428,6 +5500,27 @@ class GameScene extends Phaser.Scene {
     if (sfx && sfx.alert) {
       sfx.alert();
     }
+    
+    // Phase 14: Create screen border warning effect for better fairness
+    this._createPreAlertBorder();
+  }
+  
+  // Phase 14: Create a pulsing border warning effect during pre-alert
+  _createPreAlertBorder() {
+    // Remove existing border if any
+    if (this._preAlertBorder) {
+      this._preAlertBorder.destroy();
+    }
+    
+    const { width, height } = this.scale;
+    const borderWidth = 8;
+    
+    // Create a container for border segments
+    this._preAlertBorder = this.add.graphics();
+    this._preAlertBorder.setDepth(150); // Very high to be above everything
+    this._preAlertBorder.setScrollFactor(0); // Fixed to screen
+    
+    // Border will be drawn in updateGuardAwareness for animation
   }
 
   // Update guard awareness state and handle pre-alert countdown
