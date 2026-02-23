@@ -288,9 +288,9 @@ test('Level select -> play level -> restart cycle works', async ({ page }) => {
   await page.waitForTimeout(500)
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('LevelSelectScene'))
 
-  // Click on first level card (y position: startY=80, spacingY=70)
+  // Click on first level card (y position: startY=80, spacingY=88)
   await clickGamePoint(page, centerX, 80)
-  await page.waitForTimeout(1000)
+  await page.waitForTimeout(2000)
 
   // Verify we're in GameScene
   const inGame = await page.evaluate(() => {
