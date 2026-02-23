@@ -117,6 +117,13 @@ export class BackgroundComposer {
   // ========== IMAGE-BASED BACKGROUND ==========
   
   _createImageBackground(imagePath) {
+    // Ensure the texture exists; fall back to procedural to avoid missing-texture artifacts
+    if (!this.scene.textures.exists(imagePath)) {
+      console.warn(`[BackgroundComposer] Missing background texture: ${imagePath}. Falling back to procedural.`);
+      this._createProceduralBackground();
+      return;
+    }
+
     // Load the background image
     const bgImage = this.scene.add.image(this.width / 2, this.height / 2, imagePath);
     bgImage.setOrigin(0.5, 0.5);
