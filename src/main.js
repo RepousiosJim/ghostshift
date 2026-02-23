@@ -4896,6 +4896,13 @@ class GameScene extends Phaser.Scene {
     this.preAlertTimer = 0; // Countdown before detection
     this.preAlertDuration = 1200; // ms - time player has to react in pre-alert (increased from 800 for better fairness)
     this.isPreAlerting = false; // Currently in pre-alert phase
+    // Phase 15: Guard state machine for smarter AI
+    this._guardState = null;  // Will be initialized in updateGuard
+    this._guardStateTimer = 0;
+    this._lastStateChange = 0;
+    this._lastDirectionChange = 0;
+    this._positionHistory = [];
+    this._lastKnownPlayerPos = null;
     // Phase 14: Motion sensor proximity warning for fairness
     this.motionSensorWarning = null; // Visual warning when near motion sensor
     this.isNearMotionSensor = false; // Track if player is near a motion sensor
@@ -6976,6 +6983,10 @@ class GameScene extends Phaser.Scene {
     // Calculate warning intensity based on distance (closer = more intense)
     const intensity = 1 - (Math.sqrt(sqDist) / Math.sqrt(this._GUARD_VISION_DIST_SQ || 19600));
     const clampedIntensity = Math.max(0.2, Math.min(1, intensity));
+    
+    // Phase 15: Update last known player position for guard AI
+    // This allows the guard to track where the player was last seen
+    this._lastKnownPlayerPos = { x: this.player.x, y: this.player.y };
     
     // Pulsing warning effect - faster pulse when closer
     const pulseSpeed = 150 - (clampedIntensity * 100); // 50-150ms based on proximity
