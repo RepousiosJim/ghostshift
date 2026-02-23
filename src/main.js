@@ -3140,81 +3140,100 @@ class ControlsScene extends Phaser.Scene {
     };
     this.input.keyboard.on('keydown-ESC', this._escKeyHandler);
     
-    // Scrollable content container
-    const panelWidth = 520;
-    const panelHeight = 440;
-    const startY = 85;
-    
+    // Main panel (centered + responsive)
+    const centerX = MAP_WIDTH * TILE_SIZE / 2;
+    const panelWidth = Math.min(860, this.scale.width - 64);
+    const panelHeight = 560;
+    const panelTop = 68;
+    const panelLeft = centerX - panelWidth / 2;
+    this.add.rectangle(centerX, panelTop + panelHeight / 2, panelWidth, panelHeight, 0x0f1724, 0.78)
+      .setStrokeStyle(2, 0x2d4a78);
+
+    // Content columns
+    const contentLeft = panelLeft + 26;
+    const contentRight = panelLeft + panelWidth - 26;
+    const actionColumnX = contentLeft + 130;
+    const hintColumnX = contentLeft + Math.floor(panelWidth * 0.55);
+
+    const sectionTitleStyle = { fontSize: '16px', fill: '#ffdd00', fontFamily: 'Courier New', fontStyle: 'bold' };
+
     // Movement controls section
-    this.add.text(40, startY, '🚶 MOVEMENT', { fontSize: '16px', fill: '#ffdd00', fontFamily: 'Courier New', fontStyle: 'bold' });
-    
+    const startY = panelTop + 20;
+    this.add.text(contentLeft, startY, '🚶 MOVEMENT', sectionTitleStyle);
+
     const movementControls = [
       { keys: 'W / ↑', action: 'Move Up', example: 'Walk forward' },
       { keys: 'S / ↓', action: 'Move Down', example: 'Walk backward' },
       { keys: 'A / ←', action: 'Move Left', example: 'Go left' },
       { keys: 'D / →', action: 'Move Right', example: 'Go right' }
     ];
-    
+
     let yPos = startY + 30;
     movementControls.forEach(ctrl => {
-      this.createKeybindRow(40, yPos, ctrl.keys, ctrl.action, ctrl.example, '#00d4ff');
-      yPos += 32;
+      this.createKeybindRow(contentLeft, yPos, ctrl.keys, ctrl.action, ctrl.example, '#00d4ff', actionColumnX, hintColumnX);
+      yPos += 34;
     });
-    
+
     // Game controls section
-    yPos += 15;
-    this.add.text(40, yPos, '🎯 GAME ACTIONS', { fontSize: '16px', fill: '#ffdd00', fontFamily: 'Courier New', fontStyle: 'bold' });
+    yPos += 14;
+    this.add.text(contentLeft, yPos, '🎯 GAME ACTIONS', sectionTitleStyle);
     yPos += 30;
-    
+
     const gameControls = [
       { keys: 'R', action: 'Restart Level', example: 'Try again if caught' },
       { keys: 'ESC', action: 'Pause Game', example: 'Take a break' },
       { keys: 'SPACE', action: 'Start/Confirm', example: 'Begin your mission' },
       { keys: 'M', action: 'Main Menu', example: 'Return to title' }
     ];
-    
+
     gameControls.forEach(ctrl => {
-      this.createKeybindRow(40, yPos, ctrl.keys, ctrl.action, ctrl.example, '#66ff88');
-      yPos += 32;
+      this.createKeybindRow(contentLeft, yPos, ctrl.keys, ctrl.action, ctrl.example, '#66ff88', actionColumnX, hintColumnX);
+      yPos += 34;
     });
-    
-    // Mouse/Touch section
-    yPos += 15;
-    this.add.text(40, yPos, '🖱️ MOUSE', { fontSize: '16px', fill: '#ffdd00', fontFamily: 'Courier New', fontStyle: 'bold' });
+
+    // Mouse section
+    yPos += 14;
+    this.add.text(contentLeft, yPos, '🖱️ MOUSE', sectionTitleStyle);
     yPos += 30;
-    
+
     const mouseControls = [
       { keys: 'Click', action: 'Select/Interact', example: 'Press buttons' },
       { keys: 'Hover', action: 'Highlight', example: 'See button glow' }
     ];
-    
+
     mouseControls.forEach(ctrl => {
-      this.createKeybindRow(40, yPos, ctrl.keys, ctrl.action, ctrl.example, '#ff88ff');
-      yPos += 32;
+      this.createKeybindRow(contentLeft, yPos, ctrl.keys, ctrl.action, ctrl.example, '#ff88ff', actionColumnX, hintColumnX);
+      yPos += 34;
     });
-    
-    // Tips section
+
+    // Tips section (fixed alignment + wrap)
     yPos += 20;
-    const tipsBox = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, yPos + 40, panelWidth, 90, 0x1a2a3a);
+    const tipsHeight = 108;
+    const tipsBox = this.add.rectangle(centerX, yPos + tipsHeight / 2, panelWidth - 52, tipsHeight, 0x1a2a3a, 0.95);
     tipsBox.setStrokeStyle(2, 0x4488ff);
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2, yPos + 10, '💡 PRO TIPS', { fontSize: '14px', fill: '#66ccff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
-    
+    this.add.text(centerX, yPos + 14, '💡 PRO TIPS', { fontSize: '14px', fill: '#66ccff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+
     const tips = [
-      '• Move diagonally by pressing two arrow keys at once',
-      '• Stay in shadows to avoid detection!',
-      '• Press R quickly to restart if you get caught'
+      '• Move diagonally by pressing two movement keys together',
+      '• Stay in shadows to avoid detection',
+      '• If caught, press R immediately to retry fast'
     ];
-    
+
     tips.forEach((tip, i) => {
-      this.add.text(40, yPos + 30 + (i * 18), tip, { fontSize: '12px', fill: '#aaaaaa', fontFamily: 'Courier New' });
+      this.add.text(panelLeft + 34, yPos + 34 + (i * 20), tip, {
+        fontSize: '12px',
+        fill: '#c3d2e8',
+        fontFamily: 'Courier New',
+        wordWrap: { width: panelWidth - 90 }
+      });
     });
-    
+
     // How to Play link
-    yPos += 110;
-    const howToPlayBtn = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, yPos, 280, 45, 0x1a3a5a);
+    yPos += tipsHeight + 22;
+    const howToPlayBtn = this.add.rectangle(centerX, yPos, 320, 48, 0x1a3a5a);
     howToPlayBtn.setStrokeStyle(2, 0x66ccff);
     howToPlayBtn.setInteractive({ useHandCursor: true });
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2, yPos, '📖 View How to Play Guide', { fontSize: '14px', fill: '#66ccff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    this.add.text(centerX, yPos, '📖 View How to Play Guide', { fontSize: '14px', fill: '#66ccff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
     
     howToPlayBtn.on('pointerover', () => {
       howToPlayBtn.setFillStyle(0x2a4a6a);
@@ -3237,20 +3256,34 @@ class ControlsScene extends Phaser.Scene {
     this.input.on('pointerdown', () => sfx.init(), this);
   }
   
-  createKeybindRow(x, y, keys, action, example, keyColor) {
+  createKeybindRow(x, y, keys, action, example, keyColor, actionX = null, exampleX = null) {
     // Key badge
-    const keyWidth = keys.length * 10 + 20;
-    const keyBg = this.add.rectangle(x + keyWidth/2, y, keyWidth, 24, 0x2a2a3a);
+    const keyWidth = Math.max(58, keys.length * 10 + 20);
+    const keyBg = this.add.rectangle(x + keyWidth / 2, y, keyWidth, 24, 0x2a2a3a, 0.95);
     keyBg.setStrokeStyle(2, keyColor);
-    const keyText = this.add.text(x + keyWidth/2, y, keys, { fontSize: '12px', fill: keyColor, fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
-    
+    this.add.text(x + keyWidth / 2, y, keys, {
+      fontSize: '12px',
+      fill: keyColor,
+      fontFamily: 'Courier New',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+
     // Action name
-    const actionX = x + keyWidth + 20;
-    this.add.text(actionX, y, action, { fontSize: '13px', fill: '#ffffff', fontFamily: 'Courier New' }).setOrigin(0, 0.5);
-    
-    // Example (kid-friendly)
-    const exampleX = x + keyWidth + 160;
-    this.add.text(exampleX, y, example, { fontSize: '12px', fill: '#888888', fontFamily: 'Courier New', fontStyle: 'italic' }).setOrigin(0, 0.5);
+    const actionColX = actionX ?? (x + keyWidth + 20);
+    this.add.text(actionColX, y, action, {
+      fontSize: '13px',
+      fill: '#ffffff',
+      fontFamily: 'Courier New'
+    }).setOrigin(0, 0.5);
+
+    // Hint/example
+    const hintColX = exampleX ?? (actionColX + 170);
+    this.add.text(hintColX, y, example, {
+      fontSize: '12px',
+      fill: '#9fb2ce',
+      fontFamily: 'Courier New',
+      fontStyle: 'italic'
+    }).setOrigin(0, 0.5);
   }
   
   // Phase 9: Handle window resize for fullscreen
