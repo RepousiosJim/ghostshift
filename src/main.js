@@ -1266,9 +1266,11 @@ function getMotionSensorCooldownForLevel(difficulty) {
 
 // ==================== GUARD AI CONFIGURATION ====================
 // Tunable parameters for smarter guard movement
+// Phase 15: Enhanced with vision occlusion, separation, and state machine
 const GUARD_AI_CONFIG = {
+  // === MOVEMENT & PATHFINDING ===
   // Lookahead distance for obstacle detection (in pixels, relative to TILE_SIZE)
-  lookaheadFactor: 1.5,  // 1.5x tile size ahead
+  lookaheadFactor: 1.8,  // 1.8x tile size ahead (increased for earlier detection)
   
   // Wall sliding: fraction of velocity to preserve when sliding along walls
   wallSlideFactor: 0.85,
@@ -1278,27 +1280,78 @@ const GUARD_AI_CONFIG = {
   alignmentThreshold: 0.3,
   
   // Stuck detection: time in ms before considering guard stuck
-  stuckTimeout: 800,
+  stuckTimeout: 600,  // Reduced from 800 for faster recovery
   
   // Stuck recovery: distance to back up when stuck (pixels)
-  stuckBackupDist: 20,
+  stuckBackupDist: 24,  // Slightly increased
   
   // Corner avoidance: check radius for finding path around corners
-  cornerCheckRadius: 36,  // ~0.75 * TILE_SIZE
+  cornerCheckRadius: 40,  // Increased for better clearance
   
   // Path recalculation: force recalculation when blocked for this many frames
-  pathRecalcThreshold: 15,
+  pathRecalcThreshold: 12,  // Reduced from 15 for faster response
   
   // Smoothing: interpolation factor for direction changes (0-1, higher = smoother)
-  directionSmoothing: 0.2,
+  directionSmoothing: 0.15,  // Reduced from 0.2 for snappier response
   
   // Alternative direction weights for obstacle avoidance
   // Higher = more likely to choose that direction
   avoidWeights: {
     forward: 1.0,    // Try to keep going toward target
-    perpendicular: 0.6,  // 90 degree turns
-    reverse: 0.1    // Turning around (last resort)
-  }
+    perpendicular: 0.7,  // Increased from 0.6 for more corner-cutting
+    reverse: 0.15   // Increased from 0.1 as slightly better option
+  },
+  
+  // === WALL CLEARANCE ===
+  // Minimum distance to maintain from walls (pixels)
+  wallClearanceDistance: 12,
+  
+  // Number of ray samples for vision cone occlusion (higher = more accurate but slower)
+  visionRaySamples: 12,
+  
+  // === SEPARATION (for multi-guard support) ===
+  // Minimum distance between guards (pixels)
+  separationDistance: 60,
+  
+  // Strength of separation force (0-1)
+  separationStrength: 0.4,
+  
+  // === STATE MACHINE ===
+  // Guard behavior states
+  states: {
+    PATROL: 'patrol',
+    ALERT: 'alert',   // Suspicious - slight speed boost, head toward last known position
+    CHASE: 'chase'    // Active pursuit - faster movement
+  },
+  
+  // Time to stay in ALERT state before returning to PATROL (ms)
+  alertDuration: 2000,
+  
+  // Time in ALERT before transitioning to CHASE (ms)
+  alertToChaseTime: 800,
+  
+  // Distance at which guard switches from PATROL to ALERT (vision cone + margin)
+  alertTriggerDistance: 50,
+  
+  // Speed multipliers for different states
+  speedMultipliers: {
+    patrol: 1.0,
+    alert: 1.2,
+    chase: 1.5
+  },
+  
+  // Hysteresis: minimum time in a state before allowing transition (ms)
+  stateHysteresis: 300,
+  
+  // === OSCILLATION PREVENTION ===
+  // Minimum time between direction changes (ms)
+  directionChangeCooldown: 150,
+  
+  // Number of recent positions to track for oscillation detection
+  positionHistoryLength: 10,
+  
+  // Oscillation threshold: if position variance < this, guard is oscillating
+  oscillationThreshold: 16  // pixels
 };
 
 // ==================== AUDIO SYSTEM ====================
@@ -1706,19 +1759,18 @@ class MainMenuScene extends Phaser.Scene {
       ease: 'Sine.easeInOut'
     });
     
-    // Stats
+    // Stats bar (compact, top-left)
     if (saveManager.hasSave()) {
-      this.add.text(40, 110, 'Runs: ' + saveManager.data.totalRuns + ' | Best: ' + this.formatTime(saveManager.data.bestTime), { fontSize: '12px', fill: '#888888', fontFamily: 'Courier New' });
+      this.add.text(40, 108, 'Runs: ' + saveManager.data.totalRuns + ' | Best: ' + this.formatTime(saveManager.data.bestTime), { fontSize: '11px', fill: '#667788', fontFamily: 'Courier New' });
     }
     
-    // Total mastery stars display
-    const totalStars = saveManager.getTotalStars();
-    const maxStars = saveManager.getMaxStars();
-    const starsText = '⭐ ' + totalStars + '/' + maxStars + ' Stars';
-    this.add.text(40, 125, starsText, { fontSize: '12px', fill: '#ffdd00', fontFamily: 'Courier New' });
+    // ========== PREMIUM STARS SUMMARY CARD ==========
+    // Polished card with progress visualization and per-level grid
+    this.createStarsSummaryCard();
     
-    // Credits
-    this.creditsText = this.add.text(MAP_WIDTH * TILE_SIZE - 40, 20, 'Credits: ' + saveManager.data.credits, { fontSize: '16px', fill: '#ffaa00', fontFamily: 'Courier New' }).setOrigin(1, 0);
+    // ========== PREMIUM CREDITS DISPLAY ==========
+    // Enhanced credits panel with neon sci-fi styling
+    this.createCreditsDisplay();
     
     // Phase 7: Larger buttons with better spacing
     const buttonWidth = 300, buttonHeight = 52, startY = 190, spacing = 65;
@@ -1787,6 +1839,229 @@ class MainMenuScene extends Phaser.Scene {
   transitionTo(sceneKey, data = null) {
     sfx.click();
     runSceneTransition(this, sceneKey, data);
+  }
+  
+  // ========== PREMIUM STARS SUMMARY CARD ==========
+  // Polished card showing total stars, progress bar, and per-level star grid
+  createStarsSummaryCard() {
+    const totalStars = saveManager.getTotalStars();
+    const maxStars = saveManager.getMaxStars();
+    const progress = maxStars > 0 ? totalStars / maxStars : 0;
+    
+    // Card position - left side of screen, below stats
+    const cardX = 40;
+    const cardY = 125;
+    const cardWidth = 280;
+    const cardHeight = 60;
+    
+    // Store references for cleanup and resize
+    this.starsCardElements = [];
+    
+    // 1. Card background with subtle glow
+    const outerGlow = this.add.rectangle(cardX + cardWidth / 2, cardY + cardHeight / 2, cardWidth + 6, cardHeight + 6, 0xffdd00, 0.08);
+    const cardBg = this.add.rectangle(cardX + cardWidth / 2, cardY + cardHeight / 2, cardWidth, cardHeight, 0x141a24, 0.95);
+    cardBg.setStrokeStyle(1, 0x3a5a6a);
+    this.starsCardElements.push(outerGlow, cardBg);
+    
+    // 2. Star icon with glow animation
+    const starIcon = this.add.text(cardX + 15, cardY + 12, '★', { 
+      fontSize: '24px', 
+      fill: '#ffdd00', 
+      fontFamily: 'Courier New',
+      fontStyle: 'bold'
+    });
+    starIcon.setShadow(0, 0, '#ffdd00', 6, true, true);
+    this.starsCardElements.push(starIcon);
+    
+    // Subtle pulse animation for the star icon
+    this.tweens.add({
+      targets: starIcon,
+      alpha: 0.7,
+      duration: 1500,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
+    
+    // 3. Stars count text
+    const starsCount = this.add.text(cardX + 42, cardY + 8, `${totalStars}/${maxStars}`, { 
+      fontSize: '18px', 
+      fill: '#ffffff', 
+      fontFamily: 'Courier New',
+      fontStyle: 'bold'
+    });
+    const starsLabel = this.add.text(cardX + 42, cardY + 28, 'STARS', { 
+      fontSize: '10px', 
+      fill: '#88aacc', 
+      fontFamily: 'Courier New'
+    });
+    this.starsCardElements.push(starsCount, starsLabel);
+    
+    // 4. Progress bar background
+    const barX = cardX + 115;
+    const barY = cardY + 15;
+    const barWidth = 100;
+    const barHeight = 8;
+    
+    const progressBg = this.add.rectangle(barX + barWidth / 2, barY + barHeight / 2, barWidth, barHeight, 0x1a2030);
+    progressBg.setStrokeStyle(1, 0x2a3a4a);
+    this.starsCardElements.push(progressBg);
+    
+    // 5. Progress bar fill (animated)
+    const progressFill = this.add.rectangle(
+      barX + (barWidth * progress) / 2, 
+      barY + barHeight / 2, 
+      Math.max(2, barWidth * progress), 
+      barHeight - 2, 
+      0xffdd00, 
+      0.9
+    );
+    this.starsCardElements.push(progressFill);
+    
+    // Animate progress bar on first load
+    progressFill.setScale(0.01, 1);
+    this.tweens.add({
+      targets: progressFill,
+      scaleX: 1,
+      duration: 800,
+      ease: 'Quad.easeOut',
+      delay: 200
+    });
+    
+    // 6. Progress percentage text
+    const progressText = this.add.text(barX + barWidth + 8, barY, `${Math.round(progress * 100)}%`, { 
+      fontSize: '11px', 
+      fill: '#66aacc', 
+      fontFamily: 'Courier New'
+    });
+    this.starsCardElements.push(progressText);
+    
+    // 7. Per-level star mini-grid (below the card)
+    const gridY = cardY + cardHeight + 8;
+    const levelCount = LEVEL_LAYOUTS.length;
+    const cellWidth = 38;
+    const cellHeight = 22;
+    const gridStartX = cardX + 5;
+    
+    this.starsGridElements = [];
+    
+    LEVEL_LAYOUTS.forEach((level, index) => {
+      const isUnlocked = saveManager.isLevelUnlocked(index);
+      const mastery = saveManager.getMastery(index);
+      const stars = mastery?.stars || 0;
+      
+      const cellX = gridStartX + index * cellWidth;
+      
+      // Level badge background
+      const badgeBg = this.add.rectangle(cellX + cellWidth / 2 - 2, gridY + cellHeight / 2, cellWidth - 4, cellHeight, 
+        isUnlocked ? 0x1a2a3a : 0x0a0c10, 0.9);
+      badgeBg.setStrokeStyle(1, isUnlocked ? 0x4488ff : 0x252530);
+      this.starsGridElements.push(badgeBg);
+      
+      // Level number
+      const levelNum = this.add.text(cellX + 6, gridY + cellHeight / 2, String(index + 1), { 
+        fontSize: '10px', 
+        fill: isUnlocked ? '#66aaff' : '#445566', 
+        fontFamily: 'Courier New',
+        fontStyle: 'bold'
+      }).setOrigin(0, 0.5);
+      this.starsGridElements.push(levelNum);
+      
+      // Star count for this level
+      const starText = this.add.text(cellX + cellWidth - 8, gridY + cellHeight / 2, isUnlocked ? `${stars}★` : '🔒', { 
+        fontSize: '9px', 
+        fill: isUnlocked ? (stars > 0 ? '#ffdd00' : '#667788') : '#334455', 
+        fontFamily: 'Courier New'
+      }).setOrigin(1, 0.5);
+      this.starsGridElements.push(starText);
+      
+      // Subtle glow for completed levels
+      if (stars >= 5) {
+        badgeBg.setStrokeStyle(1, 0xffdd00);
+        this.tweens.add({
+          targets: badgeBg,
+          alpha: 0.7,
+          duration: 2000,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut'
+        });
+      }
+    });
+    
+    // Store combined elements for resize handling
+    this._starsCardBounds = { x: cardX, y: cardY, width: cardWidth, height: cardHeight + 30 };
+  }
+  
+  // ========== PREMIUM CREDITS DISPLAY ==========
+  // Enhanced credits panel with neon sci-fi styling
+  createCreditsDisplay() {
+    const credits = saveManager.data.credits;
+    const totalEarned = saveManager.data.totalCreditsEarned || 0;
+    
+    // Panel position - top right
+    const panelX = MAP_WIDTH * TILE_SIZE - 20;
+    const panelY = 15;
+    
+    // Store references for resize
+    this.creditsPanelElements = [];
+    
+    // 1. Panel background
+    const panelWidth = 140;
+    const panelHeight = 50;
+    const panelBg = this.add.rectangle(panelX - panelWidth / 2, panelY + panelHeight / 2, panelWidth, panelHeight, 0x141a24, 0.9);
+    panelBg.setStrokeStyle(1, 0x3a5a6a);
+    this.creditsPanelElements.push(panelBg);
+    
+    // 2. Credits icon
+    const creditsIcon = this.add.text(panelX - panelWidth + 12, panelY + 10, '◆', { 
+      fontSize: '18px', 
+      fill: '#ffaa00', 
+      fontFamily: 'Courier New'
+    });
+    creditsIcon.setShadow(0, 0, '#ffaa00', 4, true, true);
+    this.creditsPanelElements.push(creditsIcon);
+    
+    // Subtle pulse for the icon
+    this.tweens.add({
+      targets: creditsIcon,
+      alpha: 0.6,
+      duration: 2000,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
+    
+    // 3. Current credits (main display)
+    const creditsText = this.add.text(panelX - panelWidth + 35, panelY + 8, `${credits}`, { 
+      fontSize: '20px', 
+      fill: '#ffffff', 
+      fontFamily: 'Courier New',
+      fontStyle: 'bold'
+    });
+    this.creditsPanelElements.push(creditsText);
+    this.creditsText = creditsText; // Keep reference for updates
+    
+    // 4. "CREDITS" label
+    const creditsLabel = this.add.text(panelX - panelWidth + 35, panelY + 30, 'CREDITS', { 
+      fontSize: '9px', 
+      fill: '#88aacc', 
+      fontFamily: 'Courier New'
+    });
+    this.creditsPanelElements.push(creditsLabel);
+    
+    // 5. Total earned indicator (smaller, below)
+    if (totalEarned > 0) {
+      const totalText = this.add.text(panelX - 12, panelY + panelHeight + 5, `Σ ${totalEarned}`, { 
+        fontSize: '10px', 
+        fill: '#667788', 
+        fontFamily: 'Courier New'
+      }).setOrigin(1, 0);
+      this.creditsPanelElements.push(totalText);
+    }
+    
+    // Store bounds for resize handling
+    this._creditsPanelBounds = { x: panelX - panelWidth, y: panelY, width: panelWidth, height: panelHeight };
   }
   
   // ========== PREMIUM BUTTON SYSTEM ==========
@@ -2111,117 +2386,211 @@ class MainMenuScene extends Phaser.Scene {
   
   showCreditsOverlay() {
     // Full-screen overlay with dark background
-    const overlay = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x000000, 0.92);
+    const overlay = this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x000000, 0.94);
     overlay.setDepth(100);
     overlay.setInteractive({ useHandCursor: true });
     
-    // Main panel container - centered
-    const panelWidth = 600;
-    const panelHeight = 480;
+    // Main panel container - centered with neon sci-fi styling
+    const panelWidth = 620;
+    const panelHeight = 520;
     const panel = this.add.container(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2);
     panel.setDepth(101);
     
-    // Background panel with border
-    const bg = this.add.rectangle(0, 0, panelWidth, panelHeight, 0x1a1a2a);
-    bg.setStrokeStyle(3, 0x4488ff);
+    // 1. Outer glow effect
+    const outerGlow = this.add.rectangle(0, 0, panelWidth + 12, panelHeight + 12, 0x4488ff, 0.15);
+    panel.add(outerGlow);
+    
+    // 2. Background panel with gradient feel
+    const bg = this.add.rectangle(0, 0, panelWidth, panelHeight, 0x12141c);
+    bg.setStrokeStyle(2, 0x4488ff);
     panel.add(bg);
     
-    // Title section with glow effect
-    const titleY = -panelHeight / 2 + 45;
-    const title = this.add.text(0, titleY, '★ CREDITS ★', { 
-      fontSize: '32px', 
+    // 3. Inner accent line
+    const innerLine = this.add.rectangle(0, 0, panelWidth - 16, panelHeight - 16, 0x000000, 0);
+    innerLine.setStrokeStyle(1, 0x2a3a5a, 0.5);
+    panel.add(innerLine);
+    
+    // Title section with enhanced glow effect
+    const titleY = -panelHeight / 2 + 40;
+    
+    // Title glow
+    const titleGlow = this.add.text(0, titleY, '★ CREDITS ★', { 
+      fontSize: '34px', 
       fill: '#4488ff', 
       fontFamily: 'Courier New', 
       fontStyle: 'bold' 
     }).setOrigin(0.5);
-    title.setShadow(0, 0, '#4488ff', 10, true, true);
+    titleGlow.setAlpha(0.3);
+    titleGlow.setShadow(0, 0, '#4488ff', 20, true, true);
+    panel.add(titleGlow);
+    
+    // Main title
+    const title = this.add.text(0, titleY, '★ CREDITS ★', { 
+      fontSize: '28px', 
+      fill: '#88ccff', 
+      fontFamily: 'Courier New', 
+      fontStyle: 'bold' 
+    }).setOrigin(0.5);
+    title.setShadow(0, 0, '#4488ff', 8, true, true);
     panel.add(title);
     
-    // Decorative line under title
-    const titleLine = this.add.rectangle(0, titleY + 28, 300, 2, 0x4488ff);
-    panel.add(titleLine);
+    // Decorative lines under title
+    const titleLine1 = this.add.rectangle(0, titleY + 25, 200, 2, 0x4488ff, 0.6);
+    const titleLine2 = this.add.rectangle(0, titleY + 25, 160, 1, 0x88ccff, 0.4);
+    panel.add(titleLine1);
+    panel.add(titleLine2);
     
-    // Credits sections with proper styling
+    // ========== CREDITS SECTIONS ==========
+    // Structured with clear grouping and consistent styling
+    
     const sections = [
-      { title: 'DEVELOPMENT', items: [
-        { label: 'Lead Developer', value: 'GhostShift Team' },
-        { label: 'Game Engine', value: 'Phaser 3' },
-        { label: 'Version', value: '0.7.0 (Phase 11)' }
-      ]},
-      { title: 'GAME FEATURES', items: [
-        { label: 'Total Levels', value: '6 Unique Maps' },
-        { label: 'Save System', value: 'Hardened v5' },
-        { label: 'Perk System', value: 'Speed, Stealth, Luck' }
-      ]},
-      { title: 'TECHNICAL', items: [
-        { label: 'Framework', value: 'Phaser.js' },
-        { label: 'Physics', value: 'Arcade Physics' },
-        { label: 'Audio', value: 'Web Audio API' }
-      ]}
+      { 
+        title: 'GAME DESIGN', 
+        color: '#66ffaa',
+        items: [
+          { label: 'Concept', value: 'GhostShift Team' },
+          { label: 'Level Design', value: '7 Unique Maps' },
+          { label: 'Mechanics', value: 'Stealth & Infiltration' }
+        ]
+      },
+      { 
+        title: 'DEVELOPMENT', 
+        color: '#66aaff',
+        items: [
+          { label: 'Engine', value: 'Phaser 3.90' },
+          { label: 'Physics', value: 'Arcade Physics' },
+          { label: 'Audio', value: 'Web Audio API' }
+        ]
+      },
+      { 
+        title: 'VISUAL & AUDIO', 
+        color: '#ffaa66',
+        items: [
+          { label: 'Art Style', value: 'Neon Sci-Fi' },
+          { label: 'UI Design', value: 'Cyberpunk Theme' },
+          { label: 'Sound FX', value: 'Synthesized Audio' }
+        ]
+      },
+      { 
+        title: 'SPECIAL THANKS', 
+        color: '#ff88aa',
+        items: [
+          { label: 'Playtesters', value: 'Community' },
+          { label: 'Framework', value: 'Phaser.js Team' },
+          { label: 'Inspiration', value: 'Classic Stealth Games' }
+        ]
+      }
     ];
     
-    // Calculate starting Y position for sections
-    const sectionStartY = titleY + 55;
-    const sectionHeight = 110;
-    const sectionGap = 15;
-    let currentY = sectionStartY;
+    // Two-column layout for sections
+    const col1X = -panelWidth / 2 + 30;
+    const col2X = 20;
+    const sectionStartY = titleY + 50;
+    const sectionHeight = 95;
     
     sections.forEach((section, sectionIndex) => {
-      // Section title
-      const sectionTitle = this.add.text(-panelWidth / 2 + 40, currentY, section.title, {
-        fontSize: '14px',
-        fill: '#ffaa00',
+      const isLeftCol = sectionIndex < 2;
+      const baseX = isLeftCol ? col1X : col2X;
+      const currentY = sectionStartY + (sectionIndex % 2) * sectionHeight;
+      
+      // Section header with colored accent
+      const sectionAccent = this.add.rectangle(baseX, currentY + 7, 3, 16, Phaser.Display.Color.HexStringToColor(section.color).color);
+      panel.add(sectionAccent);
+      
+      const sectionTitle = this.add.text(baseX + 10, currentY, section.title, {
+        fontSize: '12px',
+        fill: section.color,
         fontFamily: 'Courier New',
         fontStyle: 'bold'
       });
       panel.add(sectionTitle);
       
-      // Section items
-      let itemY = currentY + 25;
-      section.items.forEach((item, itemIndex) => {
-        const labelX = -panelWidth / 2 + 50;
-        const valueX = 80;
-        
-        // Label
-        panel.add(this.add.text(labelX + valueX, itemY, item.label + ':', {
-          fontSize: '13px',
-          fill: '#88aacc',
-          fontFamily: 'Courier New'
-        }).setOrigin(0, 0.5));
-        
-        // Value
-        panel.add(this.add.text(labelX + valueX + 120, itemY, item.value, {
-          fontSize: '13px',
-          fill: '#ffffff',
-          fontFamily: 'Courier New'
-        }).setOrigin(0, 0.5));
-        
-        itemY += 22;
-      });
+      // Horizontal line under section title
+      const sectionLine = this.add.rectangle(baseX + 80, currentY + 8, 120, 1, 0x2a3a4a, 0.5);
+      panel.add(sectionLine);
       
-      currentY += sectionHeight;
+      // Section items
+      let itemY = currentY + 22;
+      section.items.forEach((item) => {
+        // Label (muted)
+        const labelText = this.add.text(baseX + 10, itemY, item.label, {
+          fontSize: '11px',
+          fill: '#667788',
+          fontFamily: 'Courier New'
+        });
+        panel.add(labelText);
+        
+        // Separator
+        const separator = this.add.text(baseX + 10 + labelText.width + 4, itemY, ':', {
+          fontSize: '11px',
+          fill: '#445566',
+          fontFamily: 'Courier New'
+        });
+        panel.add(separator);
+        
+        // Value (brighter)
+        const valueText = this.add.text(baseX + 10 + labelText.width + 12, itemY, item.value, {
+          fontSize: '11px',
+          fill: '#aabbcc',
+          fontFamily: 'Courier New'
+        });
+        panel.add(valueText);
+        
+        itemY += 18;
+      });
     });
     
-    // Bottom section - thank you message
-    const thankYouY = panelHeight / 2 - 60;
-    const thankYou = this.add.text(0, thankYouY, 'Thanks for playing GhostShift!', {
-      fontSize: '14px',
+    // Version info at bottom center
+    const versionY = panelHeight / 2 - 90;
+    const versionText = this.add.text(0, versionY, 'v0.7.0  |  Phase 12', {
+      fontSize: '10px',
+      fill: '#445566',
+      fontFamily: 'Courier New'
+    }).setOrigin(0.5);
+    panel.add(versionText);
+    
+    // Decorative separator
+    const bottomLine = this.add.rectangle(0, versionY + 18, 300, 1, 0x2a3a4a, 0.4);
+    panel.add(bottomLine);
+    
+    // Thank you message
+    const thankYouY = versionY + 35;
+    const thankYou = this.add.text(0, thankYouY, '✦ Thanks for playing GhostShift! ✦', {
+      fontSize: '13px',
       fill: '#66ff88',
       fontFamily: 'Courier New',
       fontStyle: 'italic'
     }).setOrigin(0.5);
+    thankYou.setShadow(0, 0, '#66ff88', 4, true, true);
     panel.add(thankYou);
     
-    // Back button - styled consistently with other menu buttons
-    const backBtnY = panelHeight / 2 - 25;
-    const backBtnBg = this.add.rectangle(0, backBtnY, 200, 45, 0x2244aa);
-    backBtnBg.setStrokeStyle(2, 0x66aaff);
+    // Subtle pulse animation for thank you
+    this.tweens.add({
+      targets: thankYou,
+      alpha: 0.7,
+      duration: 2000,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
+    
+    // Back button - premium styled
+    const backBtnY = panelHeight / 2 - 30;
+    const backBtnWidth = 180;
+    const backBtnHeight = 42;
+    
+    // Button glow
+    const backBtnGlow = this.add.rectangle(0, backBtnY, backBtnWidth + 6, backBtnHeight + 6, 0x4488ff, 0.2);
+    panel.add(backBtnGlow);
+    
+    const backBtnBg = this.add.rectangle(0, backBtnY, backBtnWidth, backBtnHeight, 0x1a2a4a);
+    backBtnBg.setStrokeStyle(2, 0x4488ff);
     backBtnBg.setInteractive({ useHandCursor: true });
     panel.add(backBtnBg);
     
     const backBtnText = this.add.text(0, backBtnY, '⬅ BACK TO MENU', {
-      fontSize: '16px',
-      fill: '#ffffff',
+      fontSize: '14px',
+      fill: '#88ccff',
       fontFamily: 'Courier New',
       fontStyle: 'bold'
     }).setOrigin(0.5);
@@ -2229,28 +2598,23 @@ class MainMenuScene extends Phaser.Scene {
     
     // Button hover effects
     backBtnBg.on('pointerover', () => {
-      backBtnBg.setFillStyle(0x3366cc);
-      backBtnBg.setStrokeStyle(2, 0xffffff);
+      backBtnBg.setFillStyle(0x2a4a6a);
+      backBtnBg.setStrokeStyle(2, 0xaaddff);
+      backBtnGlow.setAlpha(0.35);
+      backBtnText.setFill('#ffffff');
     });
     backBtnBg.on('pointerout', () => {
-      backBtnBg.setFillStyle(0x2244aa);
-      backBtnBg.setStrokeStyle(2, 0x66aaff);
+      backBtnBg.setFillStyle(0x1a2a4a);
+      backBtnBg.setStrokeStyle(2, 0x4488ff);
+      backBtnGlow.setAlpha(0.2);
+      backBtnText.setFill('#88ccff');
     });
     backBtnBg.on('pointerdown', () => {
       sfx.click();
-      this.input.keyboard.off('keydown', closeHandler);
-      this.input.off('pointerdown', closeHandler);
+      this.input.keyboard.off('keydown', escHandler);
       overlay.destroy();
       panel.destroy();
     });
-    
-    // Close handler
-    const closeHandler = () => {
-      this.input.keyboard.off('keydown', closeHandler);
-      this.input.off('pointerdown', closeHandler);
-      overlay.destroy();
-      panel.destroy();
-    };
     
     // Keyboard support - ESC to close
     const escHandler = (e) => {
@@ -2270,6 +2634,15 @@ class MainMenuScene extends Phaser.Scene {
       overlay.destroy();
       panel.destroy();
     });
+    
+    // Fade in animation for the panel
+    panel.setAlpha(0);
+    this.tweens.add({
+      targets: panel,
+      alpha: 1,
+      duration: 200,
+      ease: 'Quad.easeOut'
+    });
   }
   
   // Phase 9: Handle window resize for fullscreen
@@ -2285,9 +2658,30 @@ class MainMenuScene extends Phaser.Scene {
       this.subtitleText.setPosition(centerX, 85);
     }
     
-    // Reposition credits (top right)
-    if (this.creditsText) {
-      this.creditsText.setPosition(width - 40, 20);
+    // Reposition credits panel (top right)
+    if (this._creditsPanelBounds) {
+      const newPanelX = width - 20;
+      const panelWidth = this._creditsPanelBounds.width;
+      const panelHeight = this._creditsPanelBounds.height;
+      
+      if (this.creditsPanelElements) {
+        this.creditsPanelElements.forEach((el, i) => {
+          if (el.setPosition) {
+            // Reposition based on element index
+            if (i === 0) el.setPosition(newPanelX - panelWidth / 2, this._creditsPanelBounds.y + panelHeight / 2);
+          }
+        });
+      }
+      
+      if (this.creditsText) {
+        this.creditsText.setPosition(newPanelX - panelWidth + 35, this._creditsPanelBounds.y + 8);
+      }
+    }
+    
+    // Reposition stars card (left side)
+    if (this._starsCardBounds) {
+      // Stars card stays on the left - minimal repositioning needed
+      // Only adjust if viewport is very narrow
     }
   }
   
@@ -5669,34 +6063,120 @@ class GameScene extends Phaser.Scene {
   }
 
   updateGuard() {
+    // Phase 15: Enhanced guard AI with state machine, wall clearance, and oscillation prevention
     // Smart guard AI with obstacle avoidance, wall sliding, and stuck recovery
     
-    const target = this.guardPatrolPoints[this.currentPatrolIndex];
+    // === STATE MACHINE ===
+    // Initialize state if not exists
+    if (!this._guardState) {
+      this._guardState = GUARD_AI_CONFIG.states.PATROL;
+      this._guardStateTimer = 0;
+      this._lastStateChange = this.time.now;
+      this._lastDirectionChange = 0;
+      this._positionHistory = [];
+      this._lastKnownPlayerPos = null;
+    }
+    
+    // Determine target based on state
+    let target;
+    let speedMultiplier = GUARD_AI_CONFIG.speedMultipliers.patrol;
+    
+    // Update state based on awareness level
+    const now = this.time.now;
+    const timeSinceStateChange = now - this._lastStateChange;
+    
+    // State transitions with hysteresis
+    if (this.guardAwareness >= 2 && timeSinceStateChange >= GUARD_AI_CONFIG.stateHysteresis) {
+      // Transition to CHASE if alerted and player visible
+      if (this._guardState !== GUARD_AI_CONFIG.states.CHASE) {
+        this._guardState = GUARD_AI_CONFIG.states.CHASE;
+        this._lastStateChange = now;
+        this._lastKnownPlayerPos = { x: this.player.x, y: this.player.y };
+      }
+      speedMultiplier = GUARD_AI_CONFIG.speedMultipliers.chase;
+    } else if (this.guardAwareness === 1 && timeSinceStateChange >= GUARD_AI_CONFIG.stateHysteresis) {
+      // Transition to ALERT if suspicious
+      if (this._guardState !== GUARD_AI_CONFIG.states.ALERT) {
+        this._guardState = GUARD_AI_CONFIG.states.ALERT;
+        this._lastStateChange = now;
+        this._guardStateTimer = GUARD_AI_CONFIG.alertDuration;
+      }
+      speedMultiplier = GUARD_AI_CONFIG.speedMultipliers.alert;
+    } else if (this._guardState === GUARD_AI_CONFIG.states.ALERT) {
+      // Decrement alert timer
+      this._guardStateTimer -= 16;  // Approximate frame time
+      if (this._guardStateTimer <= 0) {
+        this._guardState = GUARD_AI_CONFIG.states.PATROL;
+        this._lastStateChange = now;
+        this._lastKnownPlayerPos = null;
+      }
+      speedMultiplier = GUARD_AI_CONFIG.speedMultipliers.alert;
+    }
+    
+    // Set target based on state
+    if (this._guardState === GUARD_AI_CONFIG.states.CHASE && this._lastKnownPlayerPos) {
+      target = this._lastKnownPlayerPos;
+    } else if (this._guardState === GUARD_AI_CONFIG.states.ALERT && this._lastKnownPlayerPos) {
+      target = this._lastKnownPlayerPos;
+    } else {
+      // PATROL: use patrol points
+      target = this.guardPatrolPoints[this.currentPatrolIndex];
+    }
+    
     const dx = target.x - this.guard.x;
     const dy = target.y - this.guard.y;
     const sqDist = dx * dx + dy * dy;
     
-    // Check if reached waypoint
-    if (sqDist < 25) { 
-      this.currentPatrolIndex = (this.currentPatrolIndex + 1) % this.guardPatrolPoints.length;
+    // Check if reached waypoint (larger threshold for chase targets)
+    const waypointThreshold = this._guardState === GUARD_AI_CONFIG.states.CHASE ? 100 : 25;
+    if (sqDist < waypointThreshold) {
+      if (this._guardState === GUARD_AI_CONFIG.states.PATROL) {
+        this.currentPatrolIndex = (this.currentPatrolIndex + 1) % this.guardPatrolPoints.length;
+      } else if (this._guardState === GUARD_AI_CONFIG.states.ALERT || this._guardState === GUARD_AI_CONFIG.states.CHASE) {
+        // Reached last known player position - return to patrol if no player visible
+        if (this.guardAwareness < 2) {
+          this._guardState = GUARD_AI_CONFIG.states.PATROL;
+          this._lastStateChange = now;
+          this._lastKnownPlayerPos = null;
+        }
+      }
       // Reset stuck detection state on waypoint arrival
       this._guardStuckFrames = 0;
       this._guardLastValidPos = null;
+      this._positionHistory = [];
       return;
     }
     
     // Calculate desired direction to target
     const dist = Math.sqrt(sqDist);
-    let desiredVx = (dx / dist) * this.currentGuardSpeed;
-    let desiredVy = (dy / dist) * this.currentGuardSpeed;
+    const effectiveSpeed = this.currentGuardSpeed * speedMultiplier;
+    let desiredVx = (dx / dist) * effectiveSpeed;
+    let desiredVy = (dy / dist) * effectiveSpeed;
+    
+    // === WALL CLEARANCE ===
+    // Adjust movement to maintain distance from walls
+    const clearance = this._getWallClearanceForce(this.guard.x, this.guard.y);
+    desiredVx += clearance.x * effectiveSpeed * 0.3;
+    desiredVy += clearance.y * effectiveSpeed * 0.3;
     
     // === OBSTACLE AVOIDANCE SYSTEM ===
     const lookahead = GUARD_AI_CONFIG.lookaheadFactor * TILE_SIZE;
-    const checkX = this.guard.x + (desiredVx / this.currentGuardSpeed) * lookahead;
-    const checkY = this.guard.y + (desiredVy / this.currentGuardSpeed) * lookahead;
+    const checkX = this.guard.x + (desiredVx / effectiveSpeed) * lookahead;
+    const checkY = this.guard.y + (desiredVy / effectiveSpeed) * lookahead;
     
     // Check if lookahead point would collide with a wall
     let hasObstacleAhead = this._isWallAt(checkX, checkY);
+    
+    // === OSCILLATION DETECTION ===
+    // Track position history
+    this._positionHistory.push({ x: this.guard.x, y: this.guard.y, time: now });
+    if (this._positionHistory.length > GUARD_AI_CONFIG.positionHistoryLength) {
+      this._positionHistory.shift();
+    }
+    
+    // Check for oscillation (low position variance = oscillating in place)
+    const isOscillating = this._positionHistory.length >= GUARD_AI_CONFIG.positionHistoryLength && 
+                          this._calculatePositionVariance() < GUARD_AI_CONFIG.oscillationThreshold;
     
     // === STUCK DETECTION ===
     if (!this._guardLastValidPos) {
@@ -5719,24 +6199,38 @@ class GameScene extends Phaser.Scene {
     this._guardLastValidPos = { x: this.guard.x, y: this.guard.y };
     
     // === OBSTACLE AVOIDANCE & WALL SLIDING ===
-    if (hasObstacleAhead || (this._guardStuckFrames && this._guardStuckFrames > GUARD_AI_CONFIG.pathRecalcThreshold)) {
-      // Find best alternative direction
-      const alternativeDir = this._findAlternativeDirection(
-        this.guard.x, this.guard.y,
-        desiredVx, desiredVy,
-        this.currentGuardSpeed
-      );
+    if (hasObstacleAhead || isOscillating || (this._guardStuckFrames && this._guardStuckFrames > GUARD_AI_CONFIG.pathRecalcThreshold)) {
+      // Check direction change cooldown to prevent jitter
+      const canChangeDirection = (now - this._lastDirectionChange) > GUARD_AI_CONFIG.directionChangeCooldown;
       
-      if (alternativeDir) {
-        desiredVx = alternativeDir.vx;
-        desiredVy = alternativeDir.vy;
+      if (canChangeDirection) {
+        // Find best alternative direction
+        const alternativeDir = this._findAlternativeDirection(
+          this.guard.x, this.guard.y,
+          desiredVx, desiredVy,
+          effectiveSpeed
+        );
         
-        // If stuck, also try backing up slightly
-        if (this._guardStuckFrames > GUARD_AI_CONFIG.pathRecalcThreshold) {
-          const backupFactor = -GUARD_AI_CONFIG.stuckBackupDist / Math.max(dist, 1);
-          this.guard.x += dx * backupFactor;
-          this.guard.y += dy * backupFactor;
-          this._guardStuckFrames = 0;  // Reset after backup
+        if (alternativeDir) {
+          desiredVx = alternativeDir.vx;
+          desiredVy = alternativeDir.vy;
+          this._lastDirectionChange = now;
+          
+          // If stuck, also try backing up slightly
+          if (this._guardStuckFrames > GUARD_AI_CONFIG.pathRecalcThreshold) {
+            const backupFactor = -GUARD_AI_CONFIG.stuckBackupDist / Math.max(dist, 1);
+            this.guard.x += dx * backupFactor;
+            this.guard.y += dy * backupFactor;
+            this._guardStuckFrames = 0;  // Reset after backup
+          }
+          
+          // If oscillating, add random perturbation
+          if (isOscillating) {
+            const perturbAngle = (Math.random() - 0.5) * Math.PI * 0.5;
+            const angle = Math.atan2(desiredVy, desiredVx);
+            desiredVx = Math.cos(angle + perturbAngle) * effectiveSpeed;
+            desiredVy = Math.sin(angle + perturbAngle) * effectiveSpeed;
+          }
         }
       }
     }
@@ -5751,8 +6245,8 @@ class GameScene extends Phaser.Scene {
       // Re-normalize to maintain speed
       const newSpeed = Math.hypot(desiredVx, desiredVy);
       if (newSpeed > 0) {
-        desiredVx = (desiredVx / newSpeed) * this.currentGuardSpeed;
-        desiredVy = (desiredVy / newSpeed) * this.currentGuardSpeed;
+        desiredVx = (desiredVx / newSpeed) * effectiveSpeed;
+        desiredVy = (desiredVy / newSpeed) * effectiveSpeed;
       }
     }
     
@@ -5766,12 +6260,72 @@ class GameScene extends Phaser.Scene {
       // OPTIMIZATION: Only calculate pulse every 4th frame (reduces Math.sin calls by 75%)
       this._guardGlowFrame = (this._guardGlowFrame || 0) + 1;
       if (this._guardGlowFrame % 4 === 0) {
-        const pulse = 0.1 + Math.sin(this.time.now / 250) * 0.05;
+        // Faster pulse when in alert/chase state
+        const pulseSpeed = this._guardState === GUARD_AI_CONFIG.states.CHASE ? 100 : 
+                          (this._guardState === GUARD_AI_CONFIG.states.ALERT ? 150 : 250);
+        const pulse = 0.1 + Math.sin(this.time.now / pulseSpeed) * 0.05;
         this.guardGlow.setAlpha(pulse);
       }
     }
     
     this.updateVisionCone();
+  }
+  
+  // Calculate position variance for oscillation detection
+  _calculatePositionVariance() {
+    if (this._positionHistory.length < 2) return Infinity;
+    
+    let sumX = 0, sumY = 0;
+    for (const pos of this._positionHistory) {
+      sumX += pos.x;
+      sumY += pos.y;
+    }
+    const avgX = sumX / this._positionHistory.length;
+    const avgY = sumY / this._positionHistory.length;
+    
+    let variance = 0;
+    for (const pos of this._positionHistory) {
+      variance += (pos.x - avgX) ** 2 + (pos.y - avgY) ** 2;
+    }
+    return Math.sqrt(variance / this._positionHistory.length);
+  }
+  
+  // Get wall clearance force - pushes guard away from nearby walls
+  _getWallClearanceForce(x, y) {
+    const clearanceDist = GUARD_AI_CONFIG.wallClearanceDistance;
+    let forceX = 0, forceY = 0;
+    
+    // Check 4 directions for nearby walls
+    const directions = [
+      { dx: 1, dy: 0 },   // Right
+      { dx: -1, dy: 0 },  // Left
+      { dx: 0, dy: 1 },   // Down
+      { dx: 0, dy: -1 },  // Up
+      { dx: 0.707, dy: 0.707 },   // Diagonal
+      { dx: -0.707, dy: 0.707 },
+      { dx: 0.707, dy: -0.707 },
+      { dx: -0.707, dy: -0.707 }
+    ];
+    
+    for (const dir of directions) {
+      const checkX = x + dir.dx * clearanceDist;
+      const checkY = y + dir.dy * clearanceDist;
+      
+      if (this._isWallAt(checkX, checkY)) {
+        // Push away from wall
+        forceX -= dir.dx * 0.25;
+        forceY -= dir.dy * 0.25;
+      }
+    }
+    
+    // Normalize force
+    const forceMag = Math.hypot(forceX, forceY);
+    if (forceMag > 1) {
+      forceX /= forceMag;
+      forceY /= forceMag;
+    }
+    
+    return { x: forceX, y: forceY };
   }
   
   // Check if a point collides with any wall/obstacle
@@ -5816,7 +6370,7 @@ class GameScene extends Phaser.Scene {
     const desiredNx = desiredVx / desiredSpeed;
     const desiredNy = desiredVy / desiredSpeed;
     
-    // Generate candidate directions: forward, and 90-degree turns
+    // Generate candidate directions: forward, and various angles
     const candidates = [
       // Forward (toward target)
       { vx: desiredNx * speed, vy: desiredNy * speed, weight: weights.forward, name: 'forward' },
@@ -5824,6 +6378,9 @@ class GameScene extends Phaser.Scene {
       { vx: -desiredNy * speed, vy: desiredNx * speed, weight: weights.perpendicular, name: 'cw' },
       // Perpendicular counter-clockwise
       { vx: desiredNy * speed, vy: -desiredNx * speed, weight: weights.perpendicular, name: 'ccw' },
+      // 45 degree angles (for smoother corner navigation)
+      { vx: (desiredNx - desiredNy) * 0.707 * speed, vy: (desiredNy + desiredNx) * 0.707 * speed, weight: weights.perpendicular * 0.8, name: 'cw45' },
+      { vx: (desiredNx + desiredNy) * 0.707 * speed, vy: (desiredNy - desiredNx) * 0.707 * speed, weight: weights.perpendicular * 0.8, name: 'ccw45' },
       // Reverse (last resort)
       { vx: -desiredNx * speed, vy: -desiredNy * speed, weight: weights.reverse, name: 'reverse' }
     ];
@@ -5837,7 +6394,11 @@ class GameScene extends Phaser.Scene {
       const checkY = y + candidate.vy / speed * checkRadius;
       
       if (!this._isWallAt(checkX, checkY)) {
-        return { vx: candidate.vx, vy: candidate.vy };
+        // Additional clearance check - ensure the path has enough space
+        const clearanceCheck = this._hasPathClearance(x, y, checkX, checkY, 8);
+        if (clearanceCheck) {
+          return { vx: candidate.vx, vy: candidate.vy };
+        }
       }
     }
     
@@ -5860,6 +6421,31 @@ class GameScene extends Phaser.Scene {
     
     // Last resort: return null to let physics handle it
     return null;
+  }
+  
+  // Check if a path has clearance from walls
+  _hasPathClearance(x1, y1, x2, y2, clearance) {
+    const steps = 5;
+    for (let i = 0; i <= steps; i++) {
+      const t = i / steps;
+      const px = x1 + (x2 - x1) * t;
+      const py = y1 + (y2 - y1) * t;
+      
+      // Check perpendicular offsets for clearance
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const len = Math.hypot(dx, dy);
+      if (len === 0) continue;
+      
+      const nx = -dy / len;
+      const ny = dx / len;
+      
+      if (this._isWallAt(px + nx * clearance, py + ny * clearance) ||
+          this._isWallAt(px - nx * clearance, py - ny * clearance)) {
+        return false;
+      }
+    }
+    return true;
   }
 
   updateScannerDrone() {
@@ -6130,8 +6716,8 @@ class GameScene extends Phaser.Scene {
   }
 
   updateVisionCone() {
+    // Phase 15: Enhanced vision cone with wall occlusion using raycasting
     // OPTIMIZATION: Cache vision cone and only redraw when guard position/angle changes significantly
-    // This avoids redrawing every frame when guard is stationary
     const guard = this.guard;
     if (!guard || !this.visionGraphics) return;
     
@@ -6164,14 +6750,22 @@ class GameScene extends Phaser.Scene {
     const coneLength = this.currentVisionDistance;
     const halfAngle = this.currentVisionAngle / 2;
     const tipX = guard.x, tipY = guard.y;
-    const leftAngle = this.guardAngle - halfAngle, rightAngle = this.guardAngle + halfAngle;
-    const leftX = tipX + Math.cos(leftAngle) * coneLength;
-    const leftY = tipY + Math.sin(leftAngle) * coneLength;
-    const rightX = tipX + Math.cos(rightAngle) * coneLength;
-    const rightY = tipY + Math.sin(rightAngle) * coneLength;
+    
+    // Phase 15: Wall occlusion using raycasting
+    // Cast multiple rays across the vision cone and find where they hit walls
+    const numRays = GUARD_AI_CONFIG.visionRaySamples;
+    const occludedPoints = [];
+    
+    for (let i = 0; i <= numRays; i++) {
+      const angle = this.guardAngle - halfAngle + (halfAngle * 2 * i / numRays);
+      const hitDist = this._raycastVision(tipX, tipY, angle, coneLength);
+      occludedPoints.push({
+        x: tipX + Math.cos(angle) * hitDist,
+        y: tipY + Math.sin(angle) * hitDist
+      });
+    }
     
     // Pulse animation - visible but not distracting (0.12 to 0.25 range)
-    // Speed up pulse when player is in proximity warning zone (detection telegraphing)
     const pulseSpeed = this._proximityWarningActive ? 100 : 300;
     const pulsePhase = Math.floor(this.time.now / pulseSpeed) % 64;
     let pulseAlpha = 0.18 + Math.sin(pulsePhase * Math.PI / 32) * 0.07;
@@ -6181,24 +6775,46 @@ class GameScene extends Phaser.Scene {
       pulseAlpha = Math.min(0.5, pulseAlpha + this._proximityIntensity * 0.15);
     }
     
-    // Outer cone (faded warning area)
+    // Draw occluded vision cone as a polygon
     this.visionGraphics.fillStyle(0xff2200, pulseAlpha * 0.6);
     this.visionGraphics.beginPath();
     this.visionGraphics.moveTo(tipX, tipY);
-    this.visionGraphics.lineTo(leftX, leftY);
-    this.visionGraphics.lineTo(rightX, rightY);
+    occludedPoints.forEach(pt => {
+      this.visionGraphics.lineTo(pt.x, pt.y);
+    });
     this.visionGraphics.closePath();
     this.visionGraphics.fillPath();
     
     // Phase 13: Add edge markers for clearer danger zone
     const edgeAlpha = this._proximityWarningActive ? 0.8 : 0.4;
     this.visionGraphics.lineStyle(2, 0xff6644, edgeAlpha);
-    this.visionGraphics.lineBetween(tipX, tipY, leftX, leftY);
-    this.visionGraphics.lineBetween(tipX, tipY, rightX, rightY);
+    // Draw occluded edge lines
+    if (occludedPoints.length > 0) {
+      const firstPt = occludedPoints[0];
+      const lastPt = occludedPoints[occludedPoints.length - 1];
+      this.visionGraphics.lineBetween(tipX, tipY, firstPt.x, firstPt.y);
+      this.visionGraphics.lineBetween(tipX, tipY, lastPt.x, lastPt.y);
+    }
     
     // Inner cone (brighter danger zone) - also intensifies with proximity
     const innerAlpha = this._proximityWarningActive ? pulseAlpha * 1.5 : pulseAlpha * 1.0;
     this.visionGraphics.fillStyle(0xff4422, Math.min(1.0, innerAlpha));
+  }
+  
+  // Phase 15: Raycast to find where vision hits a wall
+  _raycastVision(startX, startY, angle, maxDist) {
+    const steps = 20;  // Number of samples along ray
+    for (let i = 1; i <= steps; i++) {
+      const dist = (maxDist * i) / steps;
+      const checkX = startX + Math.cos(angle) * dist;
+      const checkY = startY + Math.sin(angle) * dist;
+      
+      // Check if this point hits a wall
+      if (this._isWallAt(checkX, checkY)) {
+        return dist - 8;  // Return slightly before wall for visual clarity
+      }
+    }
+    return maxDist;  // No wall hit, return full distance
   }
 
   updateGhost() {
@@ -6247,7 +6863,7 @@ class GameScene extends Phaser.Scene {
       while (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
       while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
       if (Math.abs(angleDiff) < this.currentVisionAngle / 2) {
-        if (!this.isLineBlocked(this.guard.x, this.guard.y, this.player.x, this.player.x)) {
+        if (!this.isLineBlocked(this.guard.x, this.guard.y, this.player.x, this.player.y)) {
           this.startPreAlert(); // Phase 13: Use pre-alert for fairness
         }
       }
