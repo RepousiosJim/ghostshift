@@ -80,7 +80,7 @@ test('Main menu settings -> back -> controls navigation works', async ({ page })
   await page.waitForTimeout(500) // Wait for transition
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('SettingsScene'))
 
-  await clickGamePoint(page, 40, 20)
+  await clickGamePoint(page, 20, 15)
   await page.waitForTimeout(500)
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('MainMenuScene'))
 
@@ -235,7 +235,7 @@ test('Main menu controls -> back -> settings navigation works', async ({ page })
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('ControlsScene'))
 
   // Controls -> Back (to MainMenu)
-  await clickGamePoint(page, 40, 20)
+  await clickGamePoint(page, 20, 15)
   await page.waitForTimeout(500)
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('MainMenuScene'))
 
