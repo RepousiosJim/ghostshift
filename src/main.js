@@ -1,5 +1,5 @@
 import { LEVEL_LAYOUTS, validateLevelLayouts } from './levels.js';
-import { BackgroundComposer } from './background-composer.js';
+import { BackgroundComposer, BACKGROUND_IMAGE_PATHS } from './background-composer.js';
 
 // Dynamic import of Phaser for better loading performance
 // This allows the smaller game.js to load first, then Phaser lazy-loads
@@ -1502,6 +1502,15 @@ class BootScene extends Phaser.Scene {
     super({ key: 'BootScene' });
   }
 
+  preload() {
+    // Preload menu background SVGs to avoid missing texture artifacts
+    BACKGROUND_IMAGE_PATHS.forEach((path) => {
+      if (!this.textures.exists(path)) {
+        this.load.svg(path, path, { scale: 1 });
+      }
+    });
+  }
+
   create() {
     attachSceneGuard(this, 'BootScene');
     setRuntimePhase('boot:create', { sceneKey: this.scene.key });
@@ -1609,39 +1618,11 @@ class MainMenuScene extends Phaser.Scene {
   }
   
   createAnimatedBackground() {
-    // OPTIMIZATION: Cache static grid as render texture instead of redrawing every frame
+    // Background layer - grid removed per visual overhaul
     this.bgGraphics = this.add.graphics();
     this.bgGraphics.setDepth(-1);
     
-    // Create cached grid texture (static background)
-    this.gridGraphics = this.add.graphics();
-    this.gridGraphics.setDepth(-2);
-    
-    // Pre-render static grid to a render texture for better performance
-    this.gridOffset = 0;
-    
-    // Use a simpler animation approach - just offset the texture instead of redrawing
-    // Create base grid once as a texture
-    this._gridTexture = this.add.graphics();
-    this._gridTexture.lineStyle(1, 0x1a1a2a, 0.4);
-    for (let x = 0; x <= MAP_WIDTH; x++) {
-      this._gridTexture.lineBetween(x * 32, 0, x * 32, MAP_HEIGHT * TILE_SIZE);
-    }
-    for (let y = 0; y <= MAP_HEIGHT; y++) {
-      this._gridTexture.lineBetween(0, y * 32, MAP_WIDTH * TILE_SIZE, y * 32);
-    }
-    
-    // OPTIMIZATION: Slower animation (100ms instead of 50ms) - reduces GPU load by 50%
-    this._gridTimer = this.time.addEvent({
-      delay: 100,  // Reduced from 50ms - half the draw calls
-      callback: () => {
-        this.gridOffset = (this.gridOffset + 1) % 32;
-        this.drawAnimatedGrid();
-      },
-      loop: true
-    });
-    
-    // Floating particles
+    // Floating particles (grid removed)
     this.particles = [];
     for (let i = 0; i < 15; i++) {
       const particle = this.add.circle(
@@ -1672,29 +1653,6 @@ class MainMenuScene extends Phaser.Scene {
       },
       loop: true
     });
-  }
-  
-  drawAnimatedGrid() {
-    // OPTIMIZATION: Use tiling sprite for scrolling grid effect instead of redrawing lines
-    // This avoids expensive graphics.clear() + redraw operations every frame
-    this.gridGraphics.clear();
-    
-    // Draw grid with animated offset - but use fewer lines for performance
-    // Only draw every 2nd line when offset is active (creates illusion of movement)
-    const useAlternate = this.gridOffset % 2 === 0;
-    this.gridGraphics.lineStyle(1, 0x1a1a2a, useAlternate ? 0.5 : 0.25);
-    
-    // Vertical lines with offset
-    for (let x = 0; x <= MAP_WIDTH; x++) {
-      const offsetX = (x * 32 + this.gridOffset * 2) % 64;  // Slower movement
-      this.gridGraphics.lineBetween(x * 32 - offsetX/2, 0, x * 32 - offsetX/2, MAP_HEIGHT * TILE_SIZE);
-    }
-    
-    // Horizontal lines with offset
-    for (let y = 0; y <= MAP_HEIGHT; y++) {
-      const offsetY = (y * 32 + this.gridOffset * 2) % 64;  // Slower movement
-      this.gridGraphics.lineBetween(0, y * 32 - offsetY/2, MAP_WIDTH * TILE_SIZE, y * 32 - offsetY/2);
-    }
   }
   
   transitionTo(sceneKey, data = null) {
@@ -2625,19 +2583,9 @@ class LevelSelectScene extends Phaser.Scene {
     }
     scanlines.setDepth(-9);
     
-    // 3. Animated cyber grid - optimized timing
-    this.gridGraphics = this.add.graphics();
-    this.gridOffset = 0;
-    this._gridTimer = this.time.addEvent({
-      delay: 100,
-      callback: () => {
-        this.gridOffset = (this.gridOffset + 0.3) % 32;
-        this.drawCyberGrid();
-      },
-      loop: true
-    });
+    // Grid removed per visual overhaul - using BackgroundComposer for background
     
-    // 4. Floating light accents (subtle, not noisy)
+    // Floating light accents (subtle, not noisy)
     this.createLightAccents();
     
     // 5. Corner vignette for depth
@@ -2701,40 +2649,7 @@ class LevelSelectScene extends Phaser.Scene {
     });
   }
   
-  drawCyberGrid() {
-    if (!this.gridGraphics) return;
-    this.gridGraphics.clear();
-    
-    // Main grid lines - cyber blue with low opacity
-    this.gridGraphics.lineStyle(1, 0x1a2a3a, 0.35);
-    
-    const tileSize = 32;
-    const offsetX = this.gridOffset;
-    const offsetY = this.gridOffset * 0.5;
-    
-    // Vertical lines with subtle offset animation
-    for (let x = 0; x <= MAP_WIDTH + 1; x++) {
-      const drawX = x * tileSize - (offsetX % tileSize);
-      this.gridGraphics.lineBetween(drawX, 0, drawX, MAP_HEIGHT * TILE_SIZE);
-    }
-    
-    // Horizontal lines with slower offset
-    for (let y = 0; y <= MAP_HEIGHT + 1; y++) {
-      const drawY = y * tileSize - (offsetY % tileSize);
-      this.gridGraphics.lineBetween(0, drawY, MAP_WIDTH * TILE_SIZE, drawY);
-    }
-    
-    // Accent grid lines - brighter, every 4th for performance
-    this.gridGraphics.lineStyle(1, 0x2a4060, 0.12);
-    for (let x = 0; x <= MAP_WIDTH; x += 4) {
-      const drawX = x * tileSize - (offsetX % tileSize);
-      this.gridGraphics.lineBetween(drawX, 0, drawX, MAP_HEIGHT * TILE_SIZE);
-    }
-    for (let y = 0; y <= MAP_HEIGHT; y += 4) {
-      const drawY = y * tileSize - (offsetY % tileSize);
-      this.gridGraphics.lineBetween(0, drawY, MAP_WIDTH * TILE_SIZE, drawY);
-    }
-  }
+  // drawCyberGrid removed per visual overhaul
   
   transitionTo(sceneKey, data = null) {
     runSceneTransition(this, sceneKey, data);
@@ -2744,13 +2659,7 @@ class LevelSelectScene extends Phaser.Scene {
   
   // Phase 9: Handle window resize for fullscreen
   _handleResize() {
-    const { width } = this.scale;
-    const centerX = width / 2;
-    
-    // Update grid position if needed
-    if (this.gridGraphics) {
-      this.gridGraphics.setPosition(centerX, MAP_HEIGHT * TILE_SIZE / 2);
-    }
+    // Grid removed per visual overhaul
   }
   
   // Cleanup timers and listeners when scene is destroyed
@@ -2760,11 +2669,7 @@ class LevelSelectScene extends Phaser.Scene {
       this.backgroundComposer.destroy();
       this.backgroundComposer = null;
     }
-    // Legacy cleanup (if any)
-    if (this._gridTimer) {
-      this._gridTimer.remove();
-      this._gridTimer = null;
-    }
+    // Legacy cleanup (grid removed per visual overhaul)
     if (this._lightTimer) {
       this._lightTimer.remove();
       this._lightTimer = null;

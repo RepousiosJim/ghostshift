@@ -6,17 +6,22 @@
 // Note: saveManager is accessed via window.saveManager (set in main.js)
 
 // Background image paths (SVG format for scalability)
+const BASE_URL = (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.BASE_URL) ? import.meta.env.BASE_URL : '/';
+const withBase = (path) => `${BASE_URL}${path.replace(/^\//, '')}`;
+
 const BACKGROUND_IMAGES = {
   'default': null,
-  'hero': '/assets/backgrounds/main-menu.svg',
-  'tactical': '/assets/backgrounds/level-select.svg',
-  'quiet': '/assets/backgrounds/settings.svg',
-  'levelselect': '/assets/backgrounds/level-select.svg',
-  'settings': '/assets/backgrounds/settings.svg',
-  'controls': '/assets/backgrounds/controls.svg',
-  'results': '/assets/backgrounds/results.svg',
-  'victory': '/assets/backgrounds/victory.svg'
+  'hero': withBase('assets/backgrounds/main-menu.svg'),
+  'tactical': withBase('assets/backgrounds/level-select.svg'),
+  'quiet': withBase('assets/backgrounds/settings.svg'),
+  'levelselect': withBase('assets/backgrounds/level-select.svg'),
+  'settings': withBase('assets/backgrounds/settings.svg'),
+  'controls': withBase('assets/backgrounds/controls.svg'),
+  'results': withBase('assets/backgrounds/results.svg'),
+  'victory': withBase('assets/backgrounds/victory.svg')
 };
+
+export const BACKGROUND_IMAGE_PATHS = Object.values(BACKGROUND_IMAGES).filter(Boolean);
 
 // Background layer types
 const LAYER_DEPTHS = {
