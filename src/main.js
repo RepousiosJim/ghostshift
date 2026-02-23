@@ -2741,9 +2741,9 @@ class LevelSelectScene extends Phaser.Scene {
   // Scroll the view to show the focused card
   _scrollToFocusedCard() {
     const { width, height } = this.scale;
-    const cardHeight = 80;
-    const startY = 85;
-    const spacingY = 105;
+    const cardHeight = 60;
+    const startY = 82;
+    const spacingY = 70;
     
     const focusedCardY = startY + this.focusedLevelIndex * spacingY;
     const viewportHeight = height;
@@ -2863,9 +2863,9 @@ class LevelSelectScene extends Phaser.Scene {
     
     // Calculate if we need scrolling based on number of levels and viewport height
     const totalLevels = LEVEL_LAYOUTS.length;
-    const startY = 85;
-    const spacingY = 95;
-    const cardHeight = 80;
+    const startY = 82;
+    const spacingY = 70;
+    const cardHeight = 60;
     const totalContentHeight = startY + totalLevels * spacingY;
     const viewportHeight = height;
     
