@@ -25,13 +25,42 @@ const DEFAULT_LEVEL = {
 };
 
 // Helper function - no shift (coordinates already valid for 19x15 map)
+// Preserve extra properties (e.g., laser grid direction flags)
 function shiftBy6(point) {
-  return { x: point.x, y: point.y };
+  if (!point) return point;
+  return { ...point, x: point.x, y: point.y };
 }
 
 // Helper function - no shift
 function shiftArray6(arr) {
   return arr.map(shiftBy6);
+}
+
+function normalizeLaserGrid(grid) {
+  if (!grid || typeof grid !== 'object') return null;
+  if (!Number.isFinite(grid.x) || !Number.isFinite(grid.y)) return null;
+  if (grid.h || grid.v) return grid;
+  const direction = grid.direction ?? grid.dir ?? grid.orientation;
+  if (direction) {
+    const dir = String(direction).toLowerCase();
+    if (dir === 'h' || dir === 'horizontal') return { ...grid, h: true };
+    if (dir === 'v' || dir === 'vertical') return { ...grid, v: true };
+  }
+  return null;
+}
+
+function normalizeLaserGrids(laserGrids, levelName) {
+  const grids = Array.isArray(laserGrids) ? laserGrids : [];
+  const normalized = [];
+  grids.forEach((grid, idx) => {
+    const cleaned = normalizeLaserGrid(grid);
+    if (cleaned) {
+      normalized.push(cleaned);
+    } else {
+      console.warn(`[LevelValidation] ${levelName ?? 'Unknown'}: laserGrids[${idx}] missing direction or invalid; skipping.`);
+    }
+  });
+  return normalized;
 }
 
 // Level layouts - all coordinates shifted by +6 for expanded 22x18 maps
@@ -226,8 +255,8 @@ const LEVEL_LAYOUTS = RAW_LEVEL_LAYOUTS.map(raw => {
     cameras: raw.cameras || [],
     // Ensure motionSensors is an array
     motionSensors: raw.motionSensors || [],
-    // Ensure laserGrids is an array
-    laserGrids: raw.laserGrids || [],
+    // Ensure laserGrids is an array and normalize directions
+    laserGrids: normalizeLaserGrids(raw.laserGrids, raw.name),
     // Ensure guardPatrol is an array
     guardPatrol: raw.guardPatrol || [],
     // Ensure patrolDrones is an array

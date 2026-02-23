@@ -1375,7 +1375,15 @@ function validateLevelLayout(layout, index) {
     layout.laserGrids.forEach((grid, i) => {
       if (!_isPoint(grid)) {
         errors.push(`laserGrids[${i}] must be a point with x/y`);
-      } else if (!grid.h && !grid.v) {
+        return;
+      }
+      if (!grid.h && !grid.v) {
+        const direction = grid.direction ?? grid.dir ?? grid.orientation;
+        const dir = typeof direction === 'string' ? direction.toLowerCase() : null;
+        if (dir === 'h' || dir === 'horizontal') grid.h = true;
+        if (dir === 'v' || dir === 'vertical') grid.v = true;
+      }
+      if (!grid.h && !grid.v) {
         errors.push(`laserGrids[${i}] missing "h" or "v" direction`);
       }
     });
@@ -4043,8 +4051,19 @@ class GameScene extends Phaser.Scene {
   createLaserGrids() {
     this.laserGrids = [];
     if (!this.currentLayout.laserGrids) return;
-    this.currentLayout.laserGrids.forEach(pos => {
-      const isHorizontal = pos.h;
+    this.currentLayout.laserGrids.forEach((pos, idx) => {
+      if (!pos || !Number.isFinite(pos.x) || !Number.isFinite(pos.y)) return;
+      let isHorizontal = !!pos.h;
+      if (!isHorizontal && !pos.v) {
+        const direction = pos.direction ?? pos.dir ?? pos.orientation;
+        const dir = typeof direction === 'string' ? direction.toLowerCase() : null;
+        if (dir === 'h' || dir === 'horizontal') isHorizontal = true;
+        if (dir === 'v' || dir === 'vertical') isHorizontal = false;
+      }
+      if (!isHorizontal && !pos.v && !pos.h) {
+        console.warn(`[LevelValidation] laserGrids[${idx}] missing direction; skipping laser.`);
+        return;
+      }
       const laser = {
         x: pos.x * TILE_SIZE,
         y: pos.y * TILE_SIZE,
