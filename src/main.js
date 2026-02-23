@@ -4014,6 +4014,10 @@ class GameScene extends Phaser.Scene {
       this._hudAccents.destroy();
       this._hudAccents = null;
     }
+    if (this._hudBackground) {
+      this._hudBackground.destroy();
+      this._hudBackground = null;
+    }
     // Clean up frame recording timer
     if (this._frameTimer) {
       this._frameTimer.remove();
@@ -4313,6 +4317,8 @@ class GameScene extends Phaser.Scene {
     const hudX = 10;
     const hudWidth = 260;
     let y = 10;
+    const startY = y;
+    const hudTexts = [];
 
     const addLine = (text, style = {}, spacing = 4) => {
       const mergedStyle = {
@@ -4324,6 +4330,7 @@ class GameScene extends Phaser.Scene {
         ...style
       };
       const line = this.add.text(hudX, y, text, mergedStyle);
+      hudTexts.push(line);
       y += line.height + spacing;
       return line;
     };
@@ -4360,6 +4367,12 @@ class GameScene extends Phaser.Scene {
     this.statusText = addLine('Find the Key Card!', { fontSize: '11px', fill: '#666666' }, 2);
     const perks = gameSave?.perks || { speed: 1, luck: 1, stealth: 1 };
     this.perksText = addLine(`Perks: S${safeNumber(perks.speed, 1)}/L${safeNumber(perks.luck, 1)}/St${safeNumber(perks.stealth, 1)}`, { fontSize: '10px', fill: '#666666' }, 6);
+
+    const hudHeight = y - startY + 4;
+    this._hudBackground = this.add.rectangle(hudX - 6, startY - 6, hudWidth + 12, hudHeight, 0x0a0a12, 0.35).setOrigin(0, 0);
+    this._hudBackground.setDepth(0);
+    if (this._hudAccents) this._hudAccents.setDepth(1);
+    hudTexts.forEach((line) => line.setDepth(2));
 
     // Phase 4: Add difficulty indicator - Phase 6: improved color coding
     const diffColor = this.levelDifficulty === 1 ? '#44ff88' : (this.levelDifficulty === 2 ? '#ffaa00' : '#ff4444');
