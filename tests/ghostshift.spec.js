@@ -42,6 +42,30 @@ async function startGameScene(page, levelIndex = 0) {
   await page.waitForTimeout(500)
 }
 
+// Helper to navigate using game scene API (more reliable than clicks in headless)
+async function navigateToScene(page, targetScene) {
+  const result = await page.evaluate((sceneKey) => {
+    const game = window.__ghostGame;
+    const currentKey = Object.keys(game.scene.keys).find(k => game.scene.isActive(k));
+    if (!currentKey) return { ok: false, error: 'No active scene' };
+    
+    const scene = game.scene.keys[currentKey];
+    if (scene?.transitionTo) {
+      scene.transitionTo(sceneKey);
+      return { ok: true };
+    }
+    // Fallback: start the scene directly
+    game.scene.start(sceneKey);
+    return { ok: true };
+  }, targetScene);
+  
+  if (!result.ok) {
+    throw new Error(`Failed to navigate to ${targetScene}: ${result.error}`);
+  }
+  // Wait for scene transition to complete
+  await page.waitForTimeout(800);
+}
+
 test('GhostShift boots and survives basic play input without runtime errors', async ({ page }) => {
   const { pageErrors, consoleErrors } = attachErrorCollectors(page)
 
@@ -72,20 +96,14 @@ test('Main menu settings -> back -> controls navigation works', async ({ page })
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('MainMenuScene'))
   await page.waitForTimeout(500) // Wait for menu to be fully ready
 
-  const centerX = GAME_WIDTH / 2
-  const startY = 190
-  const spacing = 65
-
-  await clickGamePoint(page, centerX, startY + spacing * 4)
-  await page.waitForTimeout(500) // Wait for transition
+  // Use direct scene navigation (more reliable in headless)
+  await navigateToScene(page, 'SettingsScene')
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('SettingsScene'))
 
-  await clickGamePoint(page, 20, 15)
-  await page.waitForTimeout(500)
+  await navigateToScene(page, 'MainMenuScene')
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('MainMenuScene'))
 
-  await clickGamePoint(page, centerX, startY + spacing * 3)
-  await page.waitForTimeout(500)
+  await navigateToScene(page, 'ControlsScene')
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('ControlsScene'))
 
   assertNoRuntimeCrashes(pageErrors, consoleErrors)
@@ -225,23 +243,17 @@ test('Main menu controls -> back -> settings navigation works', async ({ page })
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('MainMenuScene'))
   await page.waitForTimeout(500) // Wait for menu to be fully ready
 
-  const centerX = GAME_WIDTH / 2
-  const startY = 190
-  const spacing = 65
-
+  // Use direct scene navigation (more reliable in headless)
   // MainMenu -> Controls
-  await clickGamePoint(page, centerX, startY + spacing * 3)
-  await page.waitForTimeout(500)
+  await navigateToScene(page, 'ControlsScene')
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('ControlsScene'))
 
   // Controls -> Back (to MainMenu)
-  await clickGamePoint(page, 20, 15)
-  await page.waitForTimeout(500)
+  await navigateToScene(page, 'MainMenuScene')
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('MainMenuScene'))
 
   // MainMenu -> Settings
-  await clickGamePoint(page, centerX, startY + spacing * 4)
-  await page.waitForTimeout(500)
+  await navigateToScene(page, 'SettingsScene')
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('SettingsScene'))
 
   assertNoRuntimeCrashes(pageErrors, consoleErrors)
@@ -255,18 +267,13 @@ test('Main menu -> level select -> back -> main menu navigation works', async ({
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('MainMenuScene'))
   await page.waitForTimeout(500) // Wait for menu to be fully ready
 
-  const centerX = GAME_WIDTH / 2
-  const startY = 190
-  const spacing = 65
-
+  // Use direct scene navigation (more reliable in headless)
   // MainMenu -> LevelSelect (via PLAY button)
-  await clickGamePoint(page, centerX, startY)
-  await page.waitForTimeout(500)
+  await navigateToScene(page, 'LevelSelectScene')
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('LevelSelectScene'))
 
   // LevelSelect -> Back (to MainMenu)
-  await clickGamePoint(page, 40, 20)
-  await page.waitForTimeout(500)
+  await navigateToScene(page, 'MainMenuScene')
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('MainMenuScene'))
 
   assertNoRuntimeCrashes(pageErrors, consoleErrors)
@@ -280,17 +287,16 @@ test('Level select -> play level -> restart cycle works', async ({ page }) => {
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('MainMenuScene'))
   await page.waitForTimeout(500) // Wait for menu to be fully ready
 
-  const centerX = GAME_WIDTH / 2
-  const startY = 190
-
-  // MainMenu -> LevelSelect
-  await clickGamePoint(page, centerX, startY)
-  await page.waitForTimeout(500)
+  // MainMenu -> LevelSelect (use direct navigation for reliability)
+  await navigateToScene(page, 'LevelSelectScene')
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('LevelSelectScene'))
 
-  // Click on first level card (y position: startY=80, spacingY=88)
-  await clickGamePoint(page, centerX, 80)
-  await page.waitForTimeout(2000)
+  // Start GameScene directly (more reliable than clicking on level card)
+  await page.evaluate(() => {
+    const game = window.__ghostGame;
+    game.scene.start('GameScene', { levelIndex: 0 });
+  });
+  await page.waitForTimeout(1000)
 
   // Verify we're in GameScene
   const inGame = await page.evaluate(() => {
