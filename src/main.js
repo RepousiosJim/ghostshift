@@ -2206,151 +2206,281 @@ class LevelSelectScene extends Phaser.Scene {
       ease: 'Quad.easeOut'
     });
     
-    // ========== PREMIUM LEVEL CARDS ==========
-    const startY = 80, spacingY = 75;
+    // ========== PREMIUM LEVEL CARDS V2 ==========
+    // Enhanced level selector with improved hierarchy and UX
+    const startY = 80, spacingY = 88; // Increased spacing for more content
+    const cardWidth = 440;
+    const cardHeight = 75; // Taller cards for more content
+    const centerX = MAP_WIDTH * TILE_SIZE / 2;
+    
+    // Track selected level for keyboard navigation
+    this.selectedLevelIndex = null;
+    
+    // Track which level was last played for "selected" state
+    const lastPlayedLevel = saveManager.getLastPlayed() ? 
+      saveManager.data.unlockedLevels[saveManager.data.unlockedLevels.length - 1] : 0;
+    
     LEVEL_LAYOUTS.forEach((level, index) => {
       const isUnlocked = saveManager.isLevelUnlocked(index);
       const bestTime = saveManager.getBestTime(index);
       const mastery = saveManager.getMastery(index);
       const stars = mastery?.stars || 0;
-      const y = startY + index * spacingY;
-      const cardWidth = 420;
-      const cardHeight = 60;
-      const centerX = MAP_WIDTH * TILE_SIZE / 2;
+      const isLastPlayed = lastPlayedLevel === index;
+      const isSelected = this.selectedLevelIndex === index;
       
-      // ===== CARD HIERARCHY =====
-      // Outer glow for unlocked levels
+      const y = startY + index * spacingY;
+      
+      // ===== CARD HIERARCHY V2 =====
+      
+      // 1. OUTER GLOW - Different colors for different states
       if (isUnlocked) {
-        const outerGlow = this.add.rectangle(centerX, y, cardWidth + 8, cardHeight + 8, 0x4488ff, 0.08);
-        this.tweens.add({
-          targets: outerGlow,
-          alpha: 0.15,
-          duration: 2000,
-          yoyo: true,
-          repeat: -1,
-          ease: 'Sine.easeInOut'
-        });
+        // Playable: cyan/blue glow, locked: dim gray, selected: bright gold
+        const glowColor = isSelected ? 0xffdd00 : (isLastPlayed ? 0x44ffaa : 0x4488ff);
+        const glowAlpha = isSelected ? 0.18 : 0.1;
+        const outerGlow = this.add.rectangle(centerX, y, cardWidth + 10, cardHeight + 10, glowColor, glowAlpha);
+        if (isSelected) {
+          // Selected state gets pulsing animation
+          this.tweens.add({
+            targets: outerGlow,
+            alpha: 0.25,
+            duration: 600,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+          });
+        } else {
+          this.tweens.add({
+            targets: outerGlow,
+            alpha: 0.15,
+            duration: 2000,
+            yoyo: true,
+            repeat: -1,
+            ease: 'Sine.easeInOut'
+          });
+        }
+      } else {
+        // Locked: subtle dark glow
+        const outerGlow = this.add.rectangle(centerX, y, cardWidth + 10, cardHeight + 10, 0x222230, 0.15);
       }
       
-      // Main card background - premium dark with subtle gradient feel
-      const cardBg = this.add.rectangle(centerX, y, cardWidth, cardHeight, isUnlocked ? 0x141a24 : 0x0a0c10);
-      cardBg.setStrokeStyle(isUnlocked ? 2 : 1, isUnlocked ? 0x3a5a8a : 0x252530);
+      // 2. MAIN CARD BACKGROUND - Premium dark with gradient feel
+      // Different backgrounds: unlocked=premium dark, locked=dim, selected=highlighted
+      let cardBgColor, cardStrokeColor, cardStrokeWidth;
+      if (isSelected) {
+        cardBgColor = 0x1a2840;
+        cardStrokeColor = 0xffdd00;
+        cardStrokeWidth = 2;
+      } else if (isUnlocked) {
+        cardBgColor = 0x141a24;
+        cardStrokeColor = isLastPlayed ? 0x44ffaa : 0x3a5a8a;
+        cardStrokeWidth = isLastPlayed ? 2 : 1;
+      } else {
+        cardBgColor = 0x0a0c10;
+        cardStrokeColor = 0x252530;
+        cardStrokeWidth = 1;
+      }
+      
+      const cardBg = this.add.rectangle(centerX, y, cardWidth, cardHeight, cardBgColor);
+      cardBg.setStrokeStyle(cardStrokeWidth, cardStrokeColor);
       cardBg.setInteractive({ useHandCursor: isUnlocked });
       cardBg.setDepth(1);
       
-      // Left accent bar - shows progression status
-      const accentBar = this.add.rectangle(centerX - cardWidth/2 + 4, y, 6, cardHeight - 16, isUnlocked ? (stars >= 5 ? 0xffdd00 : (stars >= 3 ? 0x88ccff : 0x44ff88)) : 0x333340);
-      accentBar.setDepth(2);
+      // ===== LEFT SECTION: Level Index Badge =====
+      const badgeX = centerX - cardWidth/2 + 35;
+      const badgeRadius = 20;
       
-      // Level number badge - circular with glow for unlocked
-      const badgeRadius = 18;
-      const badgeX = centerX - cardWidth/2 + 40;
-      const badgeBg = this.add.circle(badgeX, y, badgeRadius, isUnlocked ? 0x1a2a3a : 0x0a0c10);
-      badgeBg.setStrokeStyle(2, isUnlocked ? 0x4488ff : 0x333340);
+      // Badge background - circular with glow for unlocked
+      const badgeBg = this.add.circle(badgeX, y - 8, badgeRadius, isUnlocked ? (isSelected ? 0x2a3a50 : 0x1a2a3a) : 0x0a0c10);
+      badgeBg.setStrokeStyle(isSelected ? 3 : 2, isUnlocked ? (isSelected ? 0xffdd00 : (isLastPlayed ? 0x44ffaa : 0x4488ff)) : 0x333340);
       badgeBg.setDepth(2);
       
-      const levelNum = this.add.text(badgeX, y, String(index + 1), { 
-        fontSize: '18px', 
-        fill: isUnlocked ? '#66aaff' : '#444448', 
+      // Level number
+      const levelNum = this.add.text(badgeX, y - 8, String(index + 1), { 
+        fontSize: '20px', 
+        fill: isUnlocked ? (isSelected ? '#ffdd00' : '#66aaff') : '#444448', 
         fontFamily: 'Courier New', 
         fontStyle: 'bold' 
       }).setOrigin(0.5).setDepth(3);
       
+      // ===== CENTER SECTION: Level Name + Objective Hint =====
+      const contentX = centerX - cardWidth/2 + 75;
+      
       // Level name - prominent, clear
-      const nameX = centerX - cardWidth/2 + 80;
-      this.add.text(nameX, y - 12, level.name, { 
-        fontSize: '15px', 
-        fill: isUnlocked ? '#ffffff' : '#444448', 
+      this.add.text(contentX, y - 18, level.name, { 
+        fontSize: '16px', 
+        fill: isUnlocked ? (isSelected ? '#ffdd00' : '#ffffff') : '#444448', 
         fontFamily: 'Courier New',
         fontStyle: 'bold'
       }).setOrigin(0, 0.5).setDepth(3);
       
-      // Stats row - Best time and stars
-      const statsY = y + 12;
-      const bestTimeStr = bestTime ? this.formatTime(bestTime) : '--:--';
-      const bestTimeLabel = this.add.text(nameX, statsY, 'Best: ' + bestTimeStr, { 
-        fontSize: '11px', 
-        fill: isUnlocked ? (bestTime ? '#88aacc' : '#556677') : '#333338', 
-        fontFamily: 'Courier New' 
-      }).setOrigin(0, 0.5).setDepth(3);
-      
-      // Stars display - colored by performance
+      // Objective hint - short description of what to do
+      let objectiveHint = '';
       if (isUnlocked) {
-        const starsX = nameX + 110;
-        const starColors = ['#333340', '#cd7f32', '#c0c0c0', '#c0c0c0', '#ffdd00', '#ffdd00'];
-        let starStr = '';
-        for (let s = 0; s < 5; s++) {
-          starStr += s < stars ? '★' : '☆';
-        }
-        this.add.text(starsX, statsY, starStr, { 
-          fontSize: '11px', 
-          fill: starColors[stars] || '#333340', 
-          fontFamily: 'Courier New',
-          fontStyle: 'bold'
-        }).setOrigin(0, 0.5).setDepth(3);
+        // Generate hint based on level layout
+        objectiveHint = 'Hack terminal → Get data core → Escape';
+      } else if (index > 0) {
+        objectiveHint = 'Complete previous level to unlock';
+      } else {
+        objectiveHint = 'Starting level';
       }
       
-      // Difficulty indicator
-      const diffLabel = level.difficulty === 1 ? 'EASY' : (level.difficulty === 2 ? 'MED' : 'HARD');
+      this.add.text(contentX, y + 2, objectiveHint, { 
+        fontSize: '10px', 
+        fill: isUnlocked ? '#668899' : '#333338', 
+        fontFamily: 'Courier New',
+        fontStyle: 'italic'
+      }).setOrigin(0, 0.5).setDepth(3);
+      
+      // ===== RIGHT TOP: Difficulty Pill =====
+      const diffX = centerX + cardWidth/2 - 135;
+      const diffLabel = level.difficulty === 1 ? 'EASY' : (level.difficulty === 2 ? 'MEDIUM' : 'HARD');
       const diffColor = level.difficulty === 1 ? '#44ff88' : (level.difficulty === 2 ? '#ffaa00' : '#ff4444');
-      this.add.text(centerX + cardWidth/2 - 130, y - 12, diffLabel, { 
+      
+      // Difficulty pill background
+      const diffPill = this.add.rectangle(diffX, y - 18, 65, 18, isUnlocked ? 0x1a2030 : 0x0a0c10);
+      diffPill.setStrokeStyle(1, isUnlocked ? diffColor : 0x333340);
+      diffPill.setDepth(2);
+      
+      this.add.text(diffX, y - 18, diffLabel, { 
         fontSize: '10px', 
         fill: isUnlocked ? diffColor : '#333338', 
         fontFamily: 'Courier New',
         fontStyle: 'bold'
-      }).setOrigin(0.5, 0.5).setDepth(3);
-      
-      // CTA Button - Play/Locked
-      const ctaX = centerX + cardWidth/2 - 45;
-      const ctaBg = this.add.rectangle(ctaX, y, 80, 28, isUnlocked ? 0x1a4a2a : 0x151518);
-      ctaBg.setStrokeStyle(isUnlocked ? 2 : 1, isUnlocked ? 0x44ff88 : 0x333340);
-      ctaBg.setDepth(2);
-      
-      const ctaText = this.add.text(ctaX, y, isUnlocked ? '▶ PLAY' : '🔒 LOCK', { 
-        fontSize: '12px', 
-        fill: isUnlocked ? '#44ff88' : '#444448', 
-        fontFamily: 'Courier New',
-        fontStyle: 'bold'
       }).setOrigin(0.5).setDepth(3);
       
-      // Lock hint for locked levels
+      // ===== RIGHT BOTTOM: Action Button =====
+      const ctaX = centerX + cardWidth/2 - 55;
+      const ctaY = y + 5;
+      
+      if (isUnlocked) {
+        // PLAY button
+        const ctaBg = this.add.rectangle(ctaX, ctaY, 85, 26, isSelected ? 0x2a5a3a : 0x1a4a2a);
+        ctaBg.setStrokeStyle(isSelected ? 3 : 2, isSelected ? 0xffdd00 : 0x44ff88);
+        ctaBg.setDepth(2);
+        ctaBg.setInteractive({ useHandCursor: true });
+        
+        const ctaText = this.add.text(ctaX, ctaY, isSelected ? '▶ SELECTED' : '▶ PLAY', { 
+          fontSize: '12px', 
+          fill: isSelected ? '#ffdd00' : '#44ff88', 
+          fontFamily: 'Courier New',
+          fontStyle: 'bold'
+        }).setOrigin(0.5).setDepth(3);
+        
+        // Store CTA references for hover
+        cardBg.ctaBg = ctaBg;
+        cardBg.ctaText = ctaText;
+        cardBg.isUnlocked = isUnlocked;
+        cardBg.isSelected = isSelected;
+        cardBg.isLastPlayed = isLastPlayed;
+        cardBg.badgeBg = badgeBg;
+      } else {
+        // LOCKED button
+        const ctaBg = this.add.rectangle(ctaX, ctaY, 85, 26, 0x151518);
+        ctaBg.setStrokeStyle(1, 0x333340);
+        ctaBg.setDepth(2);
+        
+        const ctaText = this.add.text(ctaX, ctaY, '🔒 LOCKED', { 
+          fontSize: '11px', 
+          fill: '#444448', 
+          fontFamily: 'Courier New',
+          fontStyle: 'bold'
+        }).setOrigin(0.5).setDepth(3);
+      }
+      
+      // ===== FOOTER: Best Time + Stars/Medals =====
+      const footerY = y + 18;
+      const footerLeftX = contentX;
+      
+      // Best time display
+      const bestTimeStr = bestTime ? this.formatTime(bestTime) : (isUnlocked ? 'No record' : '---');
+      const bestTimeColor = bestTime ? '#88aacc' : (isUnlocked ? '#556677' : '#333338');
+      this.add.text(footerLeftX, footerY, '⏱ ' + bestTimeStr, { 
+        fontSize: '11px', 
+        fill: bestTimeColor, 
+        fontFamily: 'Courier New' 
+      }).setOrigin(0, 0.5).setDepth(3);
+      
+      // Stars/Medals display
+      if (isUnlocked) {
+        const starsX = footerLeftX + 120;
+        const starColors = ['#333340', '#cd7f32', '#c0c0c0', '#88ccff', '#66aaff', '#ffdd00'];
+        let starStr = '';
+        for (let s = 0; s < 5; s++) {
+          starStr += s < stars ? '★' : '☆';
+        }
+        
+        // Medal background
+        const medalBg = this.add.rectangle(starsX + 35, footerY, 75, 16, 0x1a2030);
+        medalBg.setStrokeStyle(1, starColors[stars] === '#ffdd00' ? 0xffdd00 : 0x334455);
+        medalBg.setDepth(2);
+        
+        this.add.text(starsX + 35, footerY, starStr, { 
+          fontSize: '12px', 
+          fill: starColors[Math.min(stars, 5)], 
+          fontFamily: 'Courier New',
+          fontStyle: 'bold'
+        }).setOrigin(0.5, 0.5).setDepth(3);
+      }
+      
+      // ===== LOCKED STATE: Explicit Unlock Rule =====
       if (!isUnlocked && index > 0) {
+        const unlockRuleY = y + 18;
+        const unlockX = centerX + cardWidth/2 - 100;
+        
+        // Clear unlock hint text
         const prevLevelName = LEVEL_LAYOUTS[index - 1]?.name || `Level ${index}`;
-        this.add.text(ctaX, y + 22, 'Beat ' + prevLevelName.substring(0, 8) + (prevLevelName.length > 8 ? '..' : ''), { 
+        const unlockText = 'Unlock: Beat "' + prevLevelName + '"';
+        
+        const unlockBg = this.add.rectangle(unlockX + 55, unlockRuleY, 110, 16, 0x1a1520);
+        unlockBg.setStrokeStyle(1, 0x4a3a2a);
+        unlockBg.setDepth(2);
+        
+        this.add.text(unlockX + 55, unlockRuleY, unlockText, { 
           fontSize: '9px', 
-          fill: '#3a3a44', 
+          fill: '#aa6644', 
           fontFamily: 'Courier New',
           fontStyle: 'italic'
-        }).setOrigin(0.5).setDepth(3);
+        }).setOrigin(0.5, 0.5).setDepth(3);
       }
       
       // ===== INTERACTION =====
       if (isUnlocked) {
-        // Card hover - entire card
+        // Card hover effects
         cardBg.on('pointerover', () => { 
-          cardBg.setFillStyle(0x1e2838);
-          cardBg.setStrokeStyle(2, 0x66aaff);
-          badgeBg.setStrokeStyle(2, 0x88ccff);
-          ctaBg.setFillStyle(0x2a5a3a);
-          ctaBg.setStrokeStyle(2, 0x66ffaa);
+          cardBg.setFillStyle(isSelected ? 0x2a3850 : (isLastPlayed ? 0x1e3030 : 0x1e2838));
+          cardBg.setStrokeStyle(2, isSelected ? 0xffdd00 : (isLastPlayed ? 0x66ffaa : 0x66aaff));
+          badgeBg.setStrokeStyle(3, isSelected ? 0xffdd00 : (isLastPlayed ? 0x66ffaa : 0x88ccff));
+          if (cardBg.ctaBg) {
+            cardBg.ctaBg.setFillStyle(isSelected ? 0x3a6a4a : 0x2a5a3a);
+            cardBg.ctaBg.setStrokeStyle(3, isSelected ? 0xffdd00 : 0x66ffaa);
+          }
           sfx.menuHover(); 
         });
         
         cardBg.on('pointerout', () => { 
-          cardBg.setFillStyle(0x141a24).setStrokeStyle(2, 0x3a5a8a);
-          badgeBg.setStrokeStyle(2, 0x4488ff);
-          ctaBg.setFillStyle(0x1a4a2a).setStrokeStyle(2, 0x44ff88);
+          cardBg.setFillStyle(isSelected ? 0x1a2840 : (isLastPlayed ? 0x142428 : 0x141a24))
+            .setStrokeStyle(isSelected ? 2 : (isLastPlayed ? 2 : 1), isSelected ? 0xffdd00 : (isLastPlayed ? 0x44ffaa : 0x3a5a8a));
+          badgeBg.setStrokeStyle(isSelected ? 3 : 2, isSelected ? 0xffdd00 : (isLastPlayed ? 0x44ffaa : 0x4488ff));
+          if (cardBg.ctaBg) {
+            cardBg.ctaBg.setFillStyle(isSelected ? 0x2a5a3a : 0x1a4a2a)
+              .setStrokeStyle(isSelected ? 3 : 2, isSelected ? 0xffdd00 : 0x44ff88);
+          }
         });
         
         cardBg.on('pointerdown', () => {
+          // Update selection
+          this.selectedLevelIndex = index;
+          
+          // Play press animation
           this.tweens.add({
-            targets: [cardBg, badgeBg, ctaBg],
+            targets: [cardBg, badgeBg],
             scaleX: 0.97,
             scaleY: 0.97,
             duration: 60,
             yoyo: true,
             onComplete: () => {
               cardBg.setScale(1);
+              badgeBg.setScale(1);
               sfx.select();
               this.transitionTo('GameScene', { levelIndex: index });
             }
@@ -2358,30 +2488,32 @@ class LevelSelectScene extends Phaser.Scene {
         });
         
         // CTA button specific interactions
-        ctaBg.setInteractive({ useHandCursor: true });
-        ctaBg.on('pointerover', () => {
-          ctaBg.setFillStyle(0x2a5a3a);
-          ctaBg.setStrokeStyle(2, 0x66ffaa);
-          sfx.menuHover();
-        });
-        ctaBg.on('pointerout', () => {
-          ctaBg.setFillStyle(0x1a4a2a);
-          ctaBg.setStrokeStyle(2, 0x44ff88);
-        });
-        ctaBg.on('pointerdown', () => {
-          this.tweens.add({
-            targets: ctaBg,
-            scaleX: 0.9,
-            scaleY: 0.9,
-            duration: 50,
-            yoyo: true,
-            onComplete: () => {
-              ctaBg.setScale(1);
-              sfx.select();
-              this.transitionTo('GameScene', { levelIndex: index });
-            }
+        if (cardBg.ctaBg) {
+          cardBg.ctaBg.on('pointerover', () => {
+            cardBg.ctaBg.setFillStyle(isSelected ? 0x3a6a4a : 0x2a5a3a);
+            cardBg.ctaBg.setStrokeStyle(3, isSelected ? 0xffdd00 : 0x66ffaa);
+            sfx.menuHover();
           });
-        });
+          cardBg.ctaBg.on('pointerout', () => {
+            cardBg.ctaBg.setFillStyle(isSelected ? 0x2a5a3a : 0x1a4a2a)
+              .setStrokeStyle(isSelected ? 3 : 2, isSelected ? 0xffdd00 : 0x44ff88);
+          });
+          cardBg.ctaBg.on('pointerdown', () => {
+            this.selectedLevelIndex = index;
+            this.tweens.add({
+              targets: cardBg.ctaBg,
+              scaleX: 0.9,
+              scaleY: 0.9,
+              duration: 50,
+              yoyo: true,
+              onComplete: () => {
+                cardBg.ctaBg.setScale(1);
+                sfx.select();
+                this.transitionTo('GameScene', { levelIndex: index });
+              }
+            });
+          });
+        }
       }
     });
     this.input.keyboard.once('keydown', () => sfx.init());
@@ -3805,6 +3937,9 @@ class GameScene extends Phaser.Scene {
     this.scannerAngle = 0; this.applySpeedBoost = false; this.applyStealth = false;
     this.hasWon = false;
     this._restarted = false;
+
+    const totalRuns = Number.isFinite(saveManager.data?.totalRuns) ? saveManager.data.totalRuns : 0;
+    this.runCount = this.continueRun ? totalRuns : totalRuns + 1;
     
     // Enable performance instrumentation for this scene
     perfManager.setEnabled(true);
@@ -3847,6 +3982,7 @@ class GameScene extends Phaser.Scene {
     this.alarmRemaining = this.alarmTimer;
     this.createMap();
     this.createEntities();
+    this.runCount = (saveManager.data.totalRuns || 0) + 1;
     this.createUI();
     this.createPauseMenu();
     // Phase 11: Add level start briefing for onboarding - shows tips for first-time players
@@ -4170,27 +4306,62 @@ class GameScene extends Phaser.Scene {
   createUI() {
     // Lightweight HUD backdrop accents - subtle cyber-heist tech frame
     this._createHUDBackdropAccents();
-    
-    this.timerText = this.add.text(10, 10, '00:00.00', { fontSize: '20px', fill: '#00ffaa', fontFamily: 'Courier New' });
-    this.creditsText = this.add.text(10, 35, 'Credits: ' + saveManager.data.credits, { fontSize: '12px', fill: '#ffaa00', fontFamily: 'Courier New' });
-    this.runText = this.add.text(10, 55, 'Run: ' + this.runCount, { fontSize: '12px', fill: '#888888', fontFamily: 'Courier New' });
-    this.levelText = this.add.text(10, 70, 'Level: ' + this.currentLayout.name, { fontSize: '12px', fill: '#8888ff', fontFamily: 'Courier New' });
-    this.objectiveText = this.add.text(10, 90, '[O] Key Card', { fontSize: '12px', fill: '#00aaff', fontFamily: 'Courier New' });
-    this.objectiveText2 = this.add.text(10, 105, '[O] Hack Terminal', { fontSize: '12px', fill: '#00ff88', fontFamily: 'Courier New' });
-    this.objectiveText3 = this.add.text(10, 120, '[O] Data Core', { fontSize: '12px', fill: '#ffaa00', fontFamily: 'Courier New' });
+
+    const safeNumber = (value, fallback = 0) => (Number.isFinite(value) ? value : fallback);
+    const levelName = this.currentLayout?.name || `Level ${safeNumber(this.currentLevelIndex, 0) + 1}`;
+    const credits = safeNumber(saveManager.data?.credits, 0);
+    const runCount = safeNumber(this.runCount, safeNumber(saveManager.data?.totalRuns, 0) + 1);
+    const hudX = 10;
+    const hudWidth = 260;
+    let y = 10;
+
+    const addLine = (text, style = {}, spacing = 4) => {
+      const mergedStyle = {
+        fontFamily: 'Courier New',
+        fontSize: style.fontSize || '12px',
+        fill: style.fill || '#ffffff',
+        fontStyle: style.fontStyle,
+        wordWrap: { width: hudWidth, useAdvancedWrap: true },
+        ...style
+      };
+      const line = this.add.text(hudX, y, text, mergedStyle);
+      y += line.height + spacing;
+      return line;
+    };
+
+    this.timerText = addLine('00:00.00', { fontSize: '20px', fill: '#00ffaa' }, 6);
+    this.creditsText = addLine(`Credits: ${credits}`, { fontSize: '12px', fill: '#ffaa00' }, 4);
+    this.runText = addLine(`Run: ${runCount}`, { fontSize: '12px', fill: '#888888' }, 2);
+    this.levelText = addLine(`Level: ${levelName}`, { fontSize: '12px', fill: '#8888ff' }, 6);
+
+    this.objectiveText = addLine('[O] Key Card', { fontSize: '12px', fill: '#00aaff' }, 2);
+    this.objectiveText2 = addLine('[O] Hack Terminal', { fontSize: '12px', fill: '#00ff88' }, 2);
+    this.objectiveText3 = addLine('[O] Data Core', { fontSize: '12px', fill: '#ffaa00' }, 2);
+
     // Phase 11: Relay Terminal objective (only shown if level has one)
-    let nextObjY = 135;
     if (this.hasRelayTerminal) {
-      this.objectiveTextRelay = this.add.text(10, nextObjY, '[O] Relay Terminal', { fontSize: '12px', fill: '#66ffaa', fontFamily: 'Courier New' });
-      nextObjY += 15;
+      this.objectiveTextRelay = addLine('[O] Relay Terminal', { fontSize: '12px', fill: '#66ffaa' }, 2);
     } else {
       this.objectiveTextRelay = null;
     }
-    // Phase 4: Additional objectives
-    this.objectiveText4 = this.add.text(10, nextObjY, '[O] Security Code', { fontSize: '12px', fill: '#00ffff', fontFamily: 'Courier New' });
-    this.objectiveText5 = this.add.text(10, nextObjY + 15, '[O] Power Cell', { fontSize: '12px', fill: '#ff00ff', fontFamily: 'Courier New' });
-    this.statusText = this.add.text(10, nextObjY + 35, 'Find the Key Card!', { fontSize: '11px', fill: '#666666', fontFamily: 'Courier New' });
-    this.perksText = this.add.text(10, nextObjY + 50, 'Perks: S' + gameSave.perks.speed + '/L' + gameSave.perks.luck + '/St' + gameSave.perks.stealth, { fontSize: '10px', fill: '#666666', fontFamily: 'Courier New' });
+
+    // Phase 4: Additional objectives (only shown if present in layout)
+    if (this.currentLayout?.securityCode) {
+      this.objectiveText4 = addLine('[O] Security Code', { fontSize: '12px', fill: '#00ffff' }, 2);
+    } else {
+      this.objectiveText4 = null;
+    }
+
+    if (this.currentLayout?.powerCell) {
+      this.objectiveText5 = addLine('[O] Power Cell', { fontSize: '12px', fill: '#ff00ff' }, 4);
+    } else {
+      this.objectiveText5 = null;
+    }
+
+    this.statusText = addLine('Find the Key Card!', { fontSize: '11px', fill: '#666666' }, 2);
+    const perks = gameSave?.perks || { speed: 1, luck: 1, stealth: 1 };
+    this.perksText = addLine(`Perks: S${safeNumber(perks.speed, 1)}/L${safeNumber(perks.luck, 1)}/St${safeNumber(perks.stealth, 1)}`, { fontSize: '10px', fill: '#666666' }, 6);
+
     // Phase 4: Add difficulty indicator - Phase 6: improved color coding
     const diffColor = this.levelDifficulty === 1 ? '#44ff88' : (this.levelDifficulty === 2 ? '#ffaa00' : '#ff4444');
     const diffLabel = this.levelDifficulty === 1 ? 'EASY' : (this.levelDifficulty === 2 ? 'MEDIUM' : 'HARD');
@@ -4201,6 +4372,7 @@ class GameScene extends Phaser.Scene {
     } else {
       this.alarmText = null;
     }
+
     this.add.text(10, MAP_HEIGHT * TILE_SIZE - 25, 'ARROWS/WASD: Move | R: Restart | ESC: Pause', { fontSize: '10px', fill: '#444455', fontFamily: 'Courier New' });
   }
   
@@ -4218,8 +4390,9 @@ class GameScene extends Phaser.Scene {
     hudCorner.lineBetween(cornerX, cornerY, cornerX, cornerY + cornerSize);
     
     // Bottom edge of HUD panel (subtle line)
+    const hudHeight = this.hasRelayTerminal ? 215 : 200;
     hudCorner.lineStyle(1, 0x223344, 0.25);
-    hudCorner.lineBetween(cornerX, cornerY + 155, cornerX + 180, cornerY + 155);
+    hudCorner.lineBetween(cornerX, cornerY + hudHeight, cornerX + 180, cornerY + hudHeight);
     
     // Top-right corner bracket for difficulty display
     hudCorner.lineStyle(2, 0x334455, 0.3);
