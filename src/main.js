@@ -231,6 +231,98 @@ function runSceneTransition(scene, sceneKey, data = null, duration = 200) {
   }, 'transition:fade-in', { to: sceneKey });
 }
 
+function createBackButton(scene, {
+  x = 24,
+  y = 14,
+  width = 126,
+  height = 34,
+  label = 'BACK',
+  onBack,
+  bindEsc = false,
+  depth = 20
+} = {}) {
+  const triggerBack = () => {
+    if (scene._backButtonLocked) return;
+    scene._backButtonLocked = true;
+    sfx.click();
+    if (typeof onBack === 'function') onBack();
+    safeDelayedCall(scene, 180, 'back-button:unlock', () => {
+      scene._backButtonLocked = false;
+    });
+  };
+
+  const outer = scene.add.rectangle(x + width / 2, y + height / 2, width + 6, height + 6, 0x22354e, 0.2).setDepth(depth);
+  const bg = scene.add.rectangle(x + width / 2, y + height / 2, width, height, 0x1a2b40, 0.95).setDepth(depth + 1);
+  bg.setStrokeStyle(2, 0x5f89c4);
+
+  const icon = scene.add.text(x + 16, y + height / 2, '←', {
+    fontSize: '16px',
+    fill: '#c6dcff',
+    fontFamily: 'Courier New',
+    fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(depth + 2);
+
+  const text = scene.add.text(x + width / 2 + 8, y + height / 2, label, {
+    fontSize: '13px',
+    fill: '#c6dcff',
+    fontFamily: 'Courier New',
+    fontStyle: 'bold'
+  }).setOrigin(0.5).setDepth(depth + 2);
+
+  const hit = scene.add.rectangle(x + width / 2, y + height / 2, width + 24, height + 16, 0x000000, 0)
+    .setInteractive({ useHandCursor: true })
+    .setDepth(depth + 3);
+
+  const setState = (state = 'idle') => {
+    if (state === 'hover') {
+      bg.setFillStyle(0x254062, 1);
+      bg.setStrokeStyle(2, 0xa6c7ff);
+      outer.setAlpha(0.3);
+      icon.setFill('#ffffff');
+      text.setFill('#ffffff');
+      return;
+    }
+    if (state === 'down') {
+      bg.setFillStyle(0x17273b, 1);
+      bg.setStrokeStyle(2, 0x7ea7e0);
+      outer.setAlpha(0.2);
+      return;
+    }
+    bg.setFillStyle(0x1a2b40, 0.95);
+    bg.setStrokeStyle(2, 0x5f89c4);
+    outer.setAlpha(0.2);
+    icon.setFill('#c6dcff');
+    text.setFill('#c6dcff');
+  };
+
+  hit.on('pointerover', () => {
+    setState('hover');
+    sfx.menuHover();
+  });
+  hit.on('pointerout', () => setState('idle'));
+  hit.on('pointerdown', () => {
+    setState('down');
+    safeTween(scene, {
+      targets: [bg, outer, icon, text],
+      scaleX: 0.97,
+      scaleY: 0.97,
+      duration: 45,
+      yoyo: true,
+      onComplete: () => {
+        [bg, outer, icon, text].forEach(node => node.setScale(1));
+        triggerBack();
+      }
+    }, 'back-button:press');
+  });
+
+  if (bindEsc) {
+    scene._backButtonEscHandler = () => triggerBack();
+    scene.input.keyboard.on('keydown-ESC', scene._backButtonEscHandler);
+  }
+
+  return { bg, outer, text, icon, hit, triggerBack };
+}
+
 // ==================== OPTIMIZED RENDER SYSTEM ====================
 // Render caching system to reduce per-frame graphics redraws
 class RenderCache {
@@ -2208,11 +2300,11 @@ class LevelSelectScene extends Phaser.Scene {
     // Title
     this.add.text(MAP_WIDTH * TILE_SIZE / 2, 30, 'SELECT LEVEL', { fontSize: '28px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
     
-    // Back button
-    const backBtn = this.add.text(20, 15, '< BACK', { fontSize: '14px', fill: '#888888', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
-    backBtn.on('pointerover', () => backBtn.setFill('#ffffff'));
-    backBtn.on('pointerout', () => backBtn.setFill('#888888'));
-    backBtn.on('pointerdown', () => this.transitionTo('MainMenuScene'));
+    // Back button (shared component)
+    createBackButton(this, {
+      onBack: () => this.transitionTo('MainMenuScene'),
+      bindEsc: true
+    });
     
     // PROGRESION POLISH: Add progress indicator showing levels completed
     const totalLevels = LEVEL_LAYOUTS.length;
@@ -2251,9 +2343,10 @@ class LevelSelectScene extends Phaser.Scene {
     
     // ========== PREMIUM LEVEL CARDS V2 ==========
     // Enhanced level selector with improved hierarchy and UX
-    const startY = 80, spacingY = 88; // Increased spacing for more content
+    // Increased spacing for better visual separation and future scalability
+    const startY = 85, spacingY = 95;
     const cardWidth = 440;
-    const cardHeight = 75; // Taller cards for more content
+    const cardHeight = 80;
     const centerX = MAP_WIDTH * TILE_SIZE / 2;
     
     // Track selected level for keyboard navigation
@@ -2466,20 +2559,21 @@ class LevelSelectScene extends Phaser.Scene {
       }
       
       // ===== LOCKED STATE: Explicit Unlock Rule =====
+      // Moved to right side near LOCKED button to avoid collision with footer
       if (!isUnlocked && index > 0) {
-        const unlockRuleY = y + 18;
-        const unlockX = centerX + cardWidth/2 - 100;
+        const unlockRuleY = y + 28; // Moved below the LOCKED button instead of colliding with footer
+        const unlockX = centerX + cardWidth/2 - 55;
         
         // Clear unlock hint text
         const prevLevelName = LEVEL_LAYOUTS[index - 1]?.name || `Level ${index}`;
-        const unlockText = 'Unlock: Beat "' + prevLevelName + '"';
+        const unlockText = 'Beat: ' + prevLevelName;
         
-        const unlockBg = this.add.rectangle(unlockX + 55, unlockRuleY, 110, 16, 0x1a1520);
+        const unlockBg = this.add.rectangle(unlockX, unlockRuleY, 90, 14, 0x1a1520);
         unlockBg.setStrokeStyle(1, 0x4a3a2a);
         unlockBg.setDepth(2);
         
-        this.add.text(unlockX + 55, unlockRuleY, unlockText, { 
-          fontSize: '9px', 
+        this.add.text(unlockX, unlockRuleY, unlockText, { 
+          fontSize: '8px', 
           fill: '#aa6644', 
           fontFamily: 'Courier New',
           fontStyle: 'italic'
@@ -2677,6 +2771,10 @@ class LevelSelectScene extends Phaser.Scene {
     if (this._resizeListener) {
       fullscreenManager.off(this._resizeListener);
     }
+    if (this._backButtonEscHandler) {
+      this.input.keyboard.off('keydown-ESC', this._backButtonEscHandler);
+      this._backButtonEscHandler = null;
+    }
     super.shutdown();
   }
 }
@@ -2697,45 +2795,50 @@ class SettingsScene extends Phaser.Scene {
     // Premium background using BackgroundComposer (settings variant for calm, premium feel)
     this.backgroundComposer = new BackgroundComposer(this, { variant: 'settings' });
     
+    const screenWidth = this.scale.width || (MAP_WIDTH * TILE_SIZE);
+    const centerX = screenWidth / 2;
+    const contentLeft = 26;
+    const contentRight = screenWidth - 26;
+
     // Title
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2, 30, 'SETTINGS', { fontSize: '28px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    this.add.text(centerX, 30, 'SETTINGS', { fontSize: '28px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
     
-    // Back button
-    const backBtn = this.add.text(20, 15, '< BACK', { fontSize: '14px', fill: '#888888', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
-    backBtn.on('pointerover', () => backBtn.setFill('#ffffff'));
-    backBtn.on('pointerout', () => backBtn.setFill('#888888'));
-    backBtn.on('pointerdown', () => this.transitionTo('MainMenuScene'));
+    // Back button (shared component)
+    createBackButton(this, {
+      onBack: () => this.transitionTo('MainMenuScene'),
+      bindEsc: true
+    });
     
     // ==================== SECTION HEADERS ====================
     const sectionHeaderStyle = { fontSize: '12px', fontFamily: 'Courier New', fontStyle: 'bold' };
     const sectionY = 70;
     
     // AUDIO Section
-    this.add.text(40, sectionY, '▸ AUDIO', { fontSize: '13px', fill: '#6699cc', fontFamily: 'Courier New', fontStyle: 'bold' });
-    this.add.line(0, 0, 40, sectionY + 18, MAP_WIDTH * TILE_SIZE - 40, sectionY + 18, 0x334455).setOrigin(0);
+    this.add.text(contentLeft, sectionY, '▸ AUDIO', { fontSize: '13px', fill: '#6699cc', fontFamily: 'Courier New', fontStyle: 'bold' });
+    this.add.line(0, 0, contentLeft, sectionY + 18, contentRight, sectionY + 18, 0x334455).setOrigin(0);
     
     // GRAPHICS Section
     const graphicsY = 180;
-    this.add.text(40, graphicsY, '▸ GRAPHICS', { fontSize: '13px', fill: '#6699cc', fontFamily: 'Courier New', fontStyle: 'bold' });
-    this.add.line(0, 0, 40, graphicsY + 18, MAP_WIDTH * TILE_SIZE - 40, graphicsY + 18, 0x334455).setOrigin(0);
+    this.add.text(contentLeft, graphicsY, '▸ GRAPHICS', { fontSize: '13px', fill: '#6699cc', fontFamily: 'Courier New', fontStyle: 'bold' });
+    this.add.line(0, 0, contentLeft, graphicsY + 18, contentRight, graphicsY + 18, 0x334455).setOrigin(0);
     
     // GAME Section
     const gameY = 350;
-    this.add.text(40, gameY, '▸ GAME', { fontSize: '13px', fill: '#6699cc', fontFamily: 'Courier New', fontStyle: 'bold' });
-    this.add.line(0, 0, 40, gameY + 18, MAP_WIDTH * TILE_SIZE - 40, gameY + 18, 0x334455).setOrigin(0);
+    this.add.text(contentLeft, gameY, '▸ GAME', { fontSize: '13px', fill: '#6699cc', fontFamily: 'Courier New', fontStyle: 'bold' });
+    this.add.line(0, 0, contentLeft, gameY + 18, contentRight, gameY + 18, 0x334455).setOrigin(0);
     
     // ==================== AUDIO SETTINGS ====================
     const audioStartY = sectionY + 35;
     const rowHeight = 45;
-    const rightAlignX = MAP_WIDTH * TILE_SIZE - 50;
+    const rightAlignX = contentRight - 12;
+    const toggleWidth = 70;
+    const toggleHeight = 28;
     
     // ========== PREMIUM TOGGLE BUTTONS ==========
     // Audio Enabled toggle with premium styling
     this.add.text(40, audioStartY, 'Sound Effects', { fontSize: '15px', fill: '#ffffff', fontFamily: 'Courier New' });
     
     // Toggle background with premium look
-    const toggleWidth = 70;
-    const toggleHeight = 28;
     const toggleX = rightAlignX - 10;
     const toggleY = audioStartY + 2;
     
@@ -2795,12 +2898,12 @@ class SettingsScene extends Phaser.Scene {
     const volY = audioStartY + rowHeight;
     this.add.text(40, volY, 'Master Volume', { fontSize: '15px', fill: '#ffffff', fontFamily: 'Courier New' });
     
-    // Volume percentage display
+    // Volume percentage display - aligned consistently with other right-column values
     const volPercent = Math.round(sfx.volume * 100);
-    const volPercentText = this.add.text(rightAlignX + 30, volY + 2, volPercent + '%', { fontSize: '14px', fill: '#88ccff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(1, 0);
+    const volPercentText = this.add.text(rightAlignX, volY + 2, volPercent + '%', { fontSize: '14px', fill: '#88ccff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(1, 0);
     
-    // Mute button
-    const muteBtn = this.add.text(rightAlignX + 65, volY + 2, sfx.volume === 0 || !sfx.isEnabled ? '🔇' : '🔊', { fontSize: '16px' }).setInteractive({ useHandCursor: true });
+    // Mute button - positioned after percentage with consistent spacing
+    const muteBtn = this.add.text(rightAlignX + 38, volY + 2, sfx.volume === 0 || !sfx.isEnabled ? '🔇' : '🔊', { fontSize: '16px' }).setInteractive({ useHandCursor: true });
     muteBtn.on('pointerover', () => muteBtn.setAlpha(0.7));
     muteBtn.on('pointerout', () => muteBtn.setAlpha(1));
     muteBtn.on('pointerdown', () => {
@@ -2819,15 +2922,18 @@ class SettingsScene extends Phaser.Scene {
     });
     
     // ========== PREMIUM SLIDER SYSTEM ==========
-    const sliderX = 180;
-    const sliderWidth = 280;
+    // Responsive slider positioning - scale with viewport
+    const sliderStartX = 180;
+    const availableSliderWidth = rightAlignX - sliderStartX - 50; // Leave margin on right
+    const sliderWidth = Math.max(200, Math.min(280, availableSliderWidth));
+    const sliderX = sliderStartX + 20; // Start after label with consistent padding
     const sliderY = volY + 18;
     
-    // 1. Slider track background with premium styling
+    // 1. Slider track background with premium styling - center on sliderX + sliderWidth/2
     const volBarBg = this.add.rectangle(sliderX + sliderWidth / 2, sliderY, sliderWidth, 10, 0x1a1a2a);
     volBarBg.setStrokeStyle(1, 0x333344);
     
-    // 2. Track inner shadow effect
+    // 2. Track inner shadow effect - center on sliderX + sliderWidth/2
     const trackShadow = this.add.rectangle(sliderX + sliderWidth / 2, sliderY + 2, sliderWidth - 4, 3, 0x000000, 0.2);
     
     // 3. Slider fill with gradient-like appearance
@@ -2879,7 +2985,7 @@ class SettingsScene extends Phaser.Scene {
       audioToggle.setFill(sfx.isEnabled ? '#44ff88' : '#ff4444');
     };
     
-    // Volume slider click/drag
+    // Volume slider click/drag - use responsive sliderX and sliderWidth
     volBarBg.setInteractive({ useHandCursor: true });
     volBarBg.on('pointerdown', (pointer) => {
       const newVol = Math.max(0, Math.min(1, (pointer.x - sliderX) / sliderWidth));
@@ -2899,6 +3005,10 @@ class SettingsScene extends Phaser.Scene {
         sfx.select();
       });
     });
+    
+    // Volume buttons - adjust position based on actual slider width
+    volDown.x = sliderX - 25;
+    volUp.x = sliderX + sliderWidth + 10;
     
     volDown.on('pointerdown', () => { sfx.setMasterVolume(Math.max(0, sfx.volume - 0.1)); updateVolDisplay(); sfx.select(); });
     volUp.on('pointerdown', () => { sfx.setMasterVolume(Math.min(1, sfx.volume + 0.1)); updateVolDisplay(); sfx.select(); });
@@ -3086,6 +3196,10 @@ class SettingsScene extends Phaser.Scene {
     if (this._resizeListener) {
       fullscreenManager.off(this._resizeListener);
     }
+    if (this._backButtonEscHandler) {
+      this.input.keyboard.off('keydown-ESC', this._backButtonEscHandler);
+      this._backButtonEscHandler = null;
+    }
     super.shutdown();
   }
   
@@ -3124,21 +3238,11 @@ class ControlsScene extends Phaser.Scene {
     // Title
     this.add.text(MAP_WIDTH * TILE_SIZE / 2, 30, '🎮 CONTROLS', { fontSize: '28px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
     
-    // Back button
-    const backBtn = this.add.text(20, 15, '< BACK', { fontSize: '14px', fill: '#888888', fontFamily: 'Courier New' }).setInteractive({ useHandCursor: true });
-    backBtn.on('pointerover', () => backBtn.setFill('#ffffff'));
-    backBtn.on('pointerout', () => backBtn.setFill('#888888'));
-    backBtn.on('pointerdown', () => {
-      sfx.click();
-      this.transitionTo('MainMenuScene');
+    // Back button (shared component)
+    createBackButton(this, {
+      onBack: () => this.transitionTo('MainMenuScene'),
+      bindEsc: true
     });
-    
-    // Keyboard shortcut for back
-    this._escKeyHandler = () => {
-      sfx.click();
-      this.transitionTo('MainMenuScene');
-    };
-    this.input.keyboard.on('keydown-ESC', this._escKeyHandler);
     
     // Main panel (centered + responsive)
     const centerX = MAP_WIDTH * TILE_SIZE / 2;
@@ -3311,9 +3415,9 @@ class ControlsScene extends Phaser.Scene {
     if (this._resizeListener) {
       fullscreenManager.off(this._resizeListener);
     }
-    if (this._escKeyHandler) {
-      this.input.keyboard.off('keydown-ESC', this._escKeyHandler);
-      this._escKeyHandler = null;
+    if (this._backButtonEscHandler) {
+      this.input.keyboard.off('keydown-ESC', this._backButtonEscHandler);
+      this._backButtonEscHandler = null;
     }
     super.shutdown();
   }
