@@ -1,16 +1,41 @@
 /**
  * Tile Module Index - Exports for GhostShift tile navigation system
  * 
+ * ## P0 STABILIZATION STATUS
+ * ========================
+ * Feature Flag: USE_TILE_AI = false (LEGACY MODE ACTIVE)
+ * 
+ * Decision Rationale:
+ * - Legacy continuous movement system is STABLE and WELL-TESTED
+ * - Legacy includes robust anti-stuck mechanisms (Phase 16):
+ *   - Time-window stuck detection
+ *   - Flip-flop oscillation prevention
+ *   - Temporary waypoint creation
+ *   - Narrow corridor handling
+ * - Tile system remains available for future enablement
+ * 
+ * To enable tile-based navigation:
+ * 1. Set USE_TILE_AI = true below
+ * 2. Run: npm run verify:p0
+ * 3. Run: npm run test:e2e
+ * 4. Verify no regressions in guard behavior
+ * 
+ * Rollback: Set USE_TILE_AI = false
+ * 
+ * ## Architecture
  * Phase A/B: Foundation for tile-locked navigation.
  * 
  * Usage:
  * ```javascript
- * import { createTileSystem, USE_TILE_AI } from './tile/index.js';
+ * import { createTileSystem, USE_TILE_AI, setTileAIEnabled } from './tile/index.js';
  * 
  * if (USE_TILE_AI) {
  *   const tileSystem = createTileSystem(levelLayout);
  *   // Use tileSystem.pathfinder, tileSystem.agentManager, etc.
  * }
+ * 
+ * // Runtime toggle (for debugging)
+ * setTileAIEnabled(true); // or false
  * ```
  * 
  * @module tile/index
@@ -20,9 +45,44 @@
 
 /**
  * Feature flag to enable tile-based AI navigation
- * When false, uses legacy continuous movement system
+ * 
+ * VALUES:
+ * - false: Use legacy continuous movement (RECOMMENDED for stability)
+ * - true: Use tile-based A* pathfinding (EXPERIMENTAL)
+ * 
+ * @type {boolean}
  */
-export const USE_TILE_AI = false; // Default: off, enable after testing
+let _USE_TILE_AI = false;
+
+/**
+ * Get current tile AI state
+ * @returns {boolean}
+ */
+export function isTileAIEnabled() {
+  // Also check window for runtime override
+  if (typeof window !== 'undefined' && window.GHOSTSHIFT_FORCE_TILE_AI !== undefined) {
+    return window.GHOSTSHIFT_FORCE_TILE_AI;
+  }
+  return _USE_TILE_AI;
+}
+
+/**
+ * Set tile AI state (runtime toggle for debugging)
+ * WARNING: Only use during development/debugging
+ * @param {boolean} enabled
+ */
+export function setTileAIEnabled(enabled) {
+  _USE_TILE_AI = enabled;
+  if (typeof window !== 'undefined') {
+    window.GHOSTSHIFT_USE_TILE_AI = enabled;
+  }
+  console.log(`[TileSystem] AI mode set to: ${enabled ? 'TILE-BASED' : 'LEGACY'}`);
+}
+
+// Export getter as pseudo-constant for backward compatibility
+export const USE_TILE_AI = new Proxy({}, {
+  get: () => isTileAIEnabled()
+});
 
 /**
  * Debug mode for tile system
@@ -142,19 +202,12 @@ export function convertPatrolToTile(worldPoints) {
   });
 }
 
-/**
- * Check if tile system should be used based on feature flag
- * @returns {boolean}
- */
-export function isTileAIEnabled() {
-  return USE_TILE_AI;
-}
-
 // ==================== DEFAULT EXPORT ====================
 export default {
   USE_TILE_AI,
   TILE_DEBUG,
   createTileSystem,
   convertPatrolToTile,
-  isTileAIEnabled
+  isTileAIEnabled,
+  setTileAIEnabled
 };

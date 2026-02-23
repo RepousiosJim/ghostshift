@@ -1,11 +1,16 @@
 /**
  * GameScene Tile Integration - Integrates tile navigation with GameScene
  * 
+ * ## P0 STABILIZATION STATUS
+ * ========================
+ * This module provides optional tile-based AI integration.
+ * Currently DISABLED (legacy mode active) for maximum stability.
+ * 
  * Phase B: Integration layer between tile system and GameScene.
  * This module provides:
  * - Tile system initialization for a level
- * - Guard AI that uses tile-based pathfinding
- * - Legacy fallback when USE_TILE_AI is false
+ * - Guard AI that uses tile-based pathfinding (when enabled)
+ * - Legacy fallback when USE_TILE_AI is false (DEFAULT)
  * 
  * @module tile/GameSceneIntegration
  */
@@ -22,13 +27,37 @@ import { Pathfinder } from './Pathfinder.js';
 import { TileMovementManager } from './TileMovement.js';
 
 // ==================== FEATURE FLAGS ====================
-// Define locally to avoid circular import from index.js
+// Import from index.js for consistency
 
 /**
  * Feature flag to enable tile-based AI navigation
- * When false, uses legacy continuous movement system
+ * P0 STABILIZATION: Default is false (legacy mode)
+ * 
+ * @type {boolean}
  */
-export const USE_TILE_AI = false; // Default: off, enable after testing
+let _USE_TILE_AI = false;
+
+/**
+ * Check if tile AI is enabled
+ * @returns {boolean}
+ */
+function isTileAIEnabled() {
+  // Check window for runtime override
+  if (typeof window !== 'undefined') {
+    if (window.GHOSTSHIFT_FORCE_TILE_AI !== undefined) {
+      return window.GHOSTSHIFT_FORCE_TILE_AI;
+    }
+    if (window.GHOSTSHIFT_USE_TILE_AI !== undefined) {
+      return window.GHOSTSHIFT_USE_TILE_AI;
+    }
+  }
+  return _USE_TILE_AI;
+}
+
+// Proxy for backward compatibility
+export const USE_TILE_AI = new Proxy({}, {
+  get: () => isTileAIEnabled()
+});
 
 /**
  * Debug mode for tile system
