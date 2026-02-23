@@ -1,14 +1,28 @@
 // ==================== BACKGROUND COMPOSER ====================
 // Premium cyber-heist background system for GhostShift menus
 // Provides layered visual design with scene-specific variants
-// Grid pattern removed for cleaner, modern look
+// Now supports both image-based backgrounds and procedural elements
 
 // Note: saveManager is accessed via window.saveManager (set in main.js)
+
+// Background image paths (SVG format for scalability)
+const BACKGROUND_IMAGES = {
+  'default': null,
+  'hero': '/assets/backgrounds/main-menu.svg',
+  'tactical': '/assets/backgrounds/level-select.svg',
+  'quiet': '/assets/backgrounds/settings.svg',
+  'levelselect': '/assets/backgrounds/level-select.svg',
+  'settings': '/assets/backgrounds/settings.svg',
+  'controls': '/assets/backgrounds/controls.svg',
+  'results': '/assets/backgrounds/results.svg',
+  'victory': '/assets/backgrounds/victory.svg'
+};
 
 // Background layer types
 const LAYER_DEPTHS = {
   BASE: -10,
   GRADIENT: -9,
+  BACKGROUND_IMAGE: -8,
   SCANLINES: -8,
   ARCHITECTURAL: -7,
   GRID: -6,
@@ -81,6 +95,50 @@ export class BackgroundComposer {
   }
   
   create() {
+    // First, try to load image-based background
+    const imagePath = BACKGROUND_IMAGES[this.variant] || BACKGROUND_IMAGES['default'];
+    
+    if (imagePath) {
+      this._createImageBackground(imagePath);
+    } else {
+      // Fallback to procedural-only backgrounds
+      this._createProceduralBackground();
+    }
+    
+    // Start animations (particles, fog, light accents)
+    this._startAnimations();
+  }
+  
+  // ========== IMAGE-BASED BACKGROUND ==========
+  
+  _createImageBackground(imagePath) {
+    // Load the background image
+    const bgImage = this.scene.add.image(this.width / 2, this.height / 2, imagePath);
+    bgImage.setOrigin(0.5, 0.5);
+    bgImage.setDisplaySize(this.width, this.height);
+    bgImage.setDepth(LAYER_DEPTHS.BACKGROUND_IMAGE);
+    
+    this.cachedLayers.set('backgroundImage', bgImage);
+    
+    // Add subtle overlay to ensure UI readability
+    const overlay = this.scene.add.rectangle(
+      this.width / 2, 
+      this.height / 2, 
+      this.width, 
+      this.height, 
+      0x000000, 
+      0.15
+    );
+    overlay.setDepth(LAYER_DEPTHS.BACKGROUND_IMAGE + 0.1);
+    this.cachedLayers.set('imageOverlay', overlay);
+    
+    // Add variant-specific accent elements on top of image
+    this._createVariantAccents();
+  }
+  
+  // ========== PROCEDURAL FALLBACK (if no image) ==========
+  
+  _createProceduralBackground() {
     // Create layers based on variant
     switch (this.variant) {
       case 'hero':
@@ -110,9 +168,57 @@ export class BackgroundComposer {
       default:
         this._createStandardVariant();
     }
+  }
+  
+  // ========== VARIANT-SPECIFIC ACCENTS (for image backgrounds) ==========
+  
+  _createVariantAccents() {
+    // Add subtle animated accents on top of static image backgrounds
+    // This keeps the background interesting while the image provides the base
     
-    // Start animations
-    this._startAnimations();
+    switch (this.variant) {
+      case 'hero':
+      case 'main-menu':
+        // Main menu: particles, subtle fog
+        this._createFogLayer();
+        this._createParticles();
+        this._createLightAccents();
+        break;
+        
+      case 'levelselect':
+      case 'tactical':
+        // Level select: data particles only (cleaner)
+        this._createDataParticles();
+        break;
+        
+      case 'settings':
+      case 'quiet':
+        // Settings: very subtle ambient
+        this._createAmbientParticles();
+        break;
+        
+      case 'controls':
+        // Controls: subtle dots
+        this._createAmbientParticles();
+        break;
+        
+      case 'results':
+        // Results: result-specific particles
+        this._createResultParticles();
+        this._createLightAccents();
+        break;
+        
+      case 'victory':
+        // Victory: celebration particles and golden accents
+        this._createVictoryParticles();
+        this._createGoldenAccents();
+        break;
+        
+      default:
+        // Default: light accents and particles
+        this._createParticles();
+        this._createLightAccents();
+    }
   }
   
   // ========== BASE LAYERS ==========
@@ -824,7 +930,7 @@ export class BackgroundComposer {
     });
     this.animationTimers = [];
     
-    // Destroy cached layers
+    // Destroy cached layers (including background image)
     this.cachedLayers.forEach(layer => {
       if (layer) layer.destroy();
     });

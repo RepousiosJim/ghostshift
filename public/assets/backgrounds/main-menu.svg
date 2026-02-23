@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1280" height="864" viewBox="0 0 1280 864" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Deep gradient background -->
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#0c0c16;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#080810;stop-opacity:1" />
+    </linearGradient>
+    <!-- Subtle blue glow -->
+    <radialGradient id="glow1" cx="10%" cy="15%" r="50%">
+      <stop offset="0%" style="stop-color:#1a3a5a;stop-opacity:0.3" />
+      <stop offset="100%" style="stop-color:#0c0c16;stop-opacity:0" />
+    </radialGradient>
+    <!-- Corner accent -->
+    <radialGradient id="glow2" cx="90%" cy="80%" r="40%">
+      <stop offset="0%" style="stop-color:#1a2a4a;stop-opacity:0.25" />
+      <stop offset="100%" style="stop-color:#0c0c16;stop-opacity:0" />
+    </radialGradient>
+  </defs>
+  
+  <!-- Base gradient -->
+  <rect width="1280" height="864" fill="url(#bgGrad)"/>
+  
+  <!-- Ambient light spots -->
+  <ellipse cx="128" cy="130" rx="300" ry="200" fill="url(#glow1)"/>
+  <ellipse cx="1150" cy="700" rx="350" ry="250" fill="url(#glow2)"/>
+  
+  <!-- Scanlines (subtle) -->
+  <g opacity="0.04">
+    <line x1="0" y1="0" x2="1280" y2="0" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="72" x2="1280" y2="72" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="144" x2="1280" y2="144" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="216" x2="1280" y2="216" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="288" x2="1280" y2="288" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="360" x2="1280" y2="360" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="432" x2="1280" y2="432" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="504" x2="1280" y2="504" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="576" x2="1280" y2="576" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="648" x2="1280" y2="648" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="720" x2="1280" y2="720" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="792" x2="1280" y2="792" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="864" x2="1280" y2="864" stroke="#000" stroke-width="1"/>
+  </g>
+  
+  <!-- Architectural silhouettes (bottom) -->
+  <g fill="#1a1a2a" opacity="0.6">
+    <rect x="0" y="780" width="180" height="84"/>
+    <rect x="160" y="750" width="100" height="114"/>
+    <rect x="240" y="770" width="140" height="94"/>
+    <rect x="360" y="730" width="80" height="134"/>
+    <rect x="420" y="755" width="120" height="109"/>
+    <rect x="520" y="740" width="100" height="124"/>
+    <rect x="600" y="765" width="140" height="99"/>
+    <rect x="720" y="750" width="80" height="114"/>
+    <rect x="800" y="770" width="100" height="94"/>
+    <rect x="880" y="780" width="120" height="84"/>
+    <rect x="980" y="740" width="80" height="124"/>
+    <rect x="1040" y="760" width="100" height="104"/>
+    <rect x="1140" y="775" width="140" height="89"/>
+  </g>
+  
+  <!-- Window lights (accent) -->
+  <g fill="#252535" opacity="0.5">
+    <rect x="175" y="760" width="8" height="12"/>
+    <rect x="195" y="785" width="8" height="12"/>
+    <rect x="175" y="810" width="8" height="12"/>
+    <rect x="270" y="785" width="8" height="12"/>
+    <rect x="295" y="810" width="8" height="12"/>
+    <rect x="380" y="760" width="8" height="12"/>
+    <rect x="405" y="790" width="8" height="12"/>
+    <rect x="440" y="775" width="8" height="12"/>
+    <rect x="540" y="760" width="8" height="12"/>
+    <rect x="565" y="795" width="8" height="12"/>
+    <rect x="620" y="780" width="8" height="12"/>
+    <rect x="650" y="810" width="8" height="12"/>
+    <rect x="740" y="770" width="8" height="12"/>
+    <rect x="770" y="800" width="8" height="12"/>
+    <rect x="900" y="785" width="8" height="12"/>
+    <rect x="930" y="810" width="8" height="12"/>
+    <rect x="1000" y="760" width="8" height="12"/>
+    <rect x="1060" y="790" width="8" height="12"/>
+  </g>
+  
+  <!-- Vignette corners -->
+  <rect width="1280" height="60" fill="#000" opacity="0.3"/>
+  <rect y="804" width="1280" height="60" fill="#000" opacity="0.3"/>
+  <rect width="60" height="864" fill="#000" opacity="0.3"/>
+  <rect x="1220" width="60" height="864" fill="#000" opacity="0.3"/>
+</svg>

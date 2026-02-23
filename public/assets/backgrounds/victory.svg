@@ -1,0 +1,98 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1280" height="864" viewBox="0 0 1280 864" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#0c0c16;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#0a0a12;stop-opacity:1" />
+    </linearGradient>
+    <!-- Golden center glow -->
+    <radialGradient id="glowGold" cx="50%" cy="15%" r="50%">
+      <stop offset="0%" style="stop-color:#3a3020;stop-opacity:0.25" />
+      <stop offset="100%" style="stop-color:#0c0c16;stop-opacity:0" />
+    </radialGradient>
+    <!-- Corner golden accents -->
+    <radialGradient id="glowCorner1" cx="5%" cy="10%" r="30%">
+      <stop offset="0%" style="stop-color:#2a2515;stop-opacity:0.3" />
+      <stop offset="100%" style="stop-color:#0c0c16;stop-opacity:0" />
+    </radialGradient>
+    <radialGradient id="glowCorner2" cx="95%" cy="10%" r="30%">
+      <stop offset="0%" style="stop-color:#2a2515;stop-opacity:0.3" />
+      <stop offset="100%" style="stop-color:#0c0c16;stop-opacity:0" />
+    </radialGradient>
+  </defs>
+  
+  <rect width="1280" height="864" fill="url(#bgGrad)"/>
+  
+  <!-- Golden radial glow from top center -->
+  <ellipse cx="640" cy="130" rx="600" ry="400" fill="url(#glowGold)"/>
+  
+  <!-- Corner golden accents -->
+  <ellipse cx="60" cy="90" rx="200" ry="150" fill="url(#glowCorner1)"/>
+  <ellipse cx="1220" cy="90" rx="200" ry="150" fill="url(#glowCorner2)"/>
+  
+  <!-- Celebration rays -->
+  <g stroke="#ffd700" stroke-width="2" opacity="0.08">
+    <line x1="640" y1="130" x2="100" y2="400"/>
+    <line x1="640" y1="130" x2="200" y2="500"/>
+    <line x1="640" y1="130" x2="350" y2="600"/>
+    <line x1="640" y1="130" x2="500" y2="650"/>
+    <line x1="640" y1="130" x2="640" y2="700"/>
+    <line x1="640" y1="130" x2="780" y2="650"/>
+    <line x1="640" y1="130" x2="930" y2="600"/>
+    <line x1="640" y1="130" x2="1080" y2="500"/>
+    <line x1="640" y1="130" x2="1180" y2="400"/>
+  </g>
+  
+  <!-- Horizontal celebration lines -->
+  <g stroke="#ffd700" stroke-width="1" opacity="0.12">
+    <line x1="100" y1="180" x2="450" y2="180"/>
+    <line x1="830" y1="180" x2="1180" y2="180"/>
+    <line x1="80" y1="260" x2="380" y2="260"/>
+    <line x1="900" y1="260" x2="1200" y2="260"/>
+    <line x1="120" y1="340" x2="420" y2="340"/>
+    <line x1="860" y1="340" x2="1160" y2="340"/>
+    <line x1="100" y1="500" x2="500" y2="500"/>
+    <line x1="780" y1="500" x2="1180" y2="500"/>
+    <line x1="80" y1="580" x2="480" y2="580"/>
+    <line x1="800" y1="580" x2="1200" y2="580"/>
+  </g>
+  
+  <!-- Golden corner brackets -->
+  <g stroke="#ffd700" stroke-width="2" opacity="0.3" fill="none">
+    <path d="M 40 50 L 40 30 L 60 30"/>
+    <path d="M 1240 50 L 1240 30 L 1220 30"/>
+    <path d="M 40 814 L 40 834 L 60 834"/>
+    <path d="M 1240 814 L 1240 834 L 1220 834"/>
+  </g>
+  
+  <!-- Subtle scanlines -->
+  <g opacity="0.025">
+    <line x1="0" y1="0" x2="1280" y2="0" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="54" x2="1280" y2="54" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="108" x2="1280" y2="108" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="162" x2="1280" y2="162" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="216" x2="1280" y2="216" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="270" x2="1280" y2="270" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="324" x2="1280" y2="324" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="378" x2="1280" y2="378" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="432" x2="1280" y2="432" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="486" x2="1280" y2="486" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="540" x2="1280" y2="540" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="594" x2="1280" y2="594" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="648" x2="1280" y2="648" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="702" x2="1280" y2="702" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="756" x2="1280" y2="756" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="810" x2="1280" y2="810" stroke="#000" stroke-width="1"/>
+  </g>
+  
+  <!-- Minimal bottom edge -->
+  <g fill="#1a1a2a" opacity="0.35">
+    <rect x="0" y="825" width="1280" height="39"/>
+  </g>
+  
+  <!-- Vignette -->
+  <rect width="1280" height="40" fill="#000" opacity="0.35"/>
+  <rect y="824" width="1280" height="40" fill="#000" opacity="0.35"/>
+  <rect width="40" height="864" fill="#000" opacity="0.35"/>
+  <rect x="1240" width="40" height="864" fill="#000" opacity="0.35"/>
+</svg>

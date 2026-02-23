@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1280" height="864" viewBox="0 0 1280 864" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" style="stop-color:#0c0c16;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#080810;stop-opacity:1" />
+    </linearGradient>
+    <radialGradient id="glow1" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" style="stop-color:#1a2a3a;stop-opacity:0.15" />
+      <stop offset="100%" style="stop-color:#0c0c16;stop-opacity:0" />
+    </radialGradient>
+  </defs>
+  
+  <rect width="1280" height="864" fill="url(#bgGrad)"/>
+  <ellipse cx="640" cy="432" rx="400" ry="300" fill="url(#glow1)"/>
+  
+  <!-- Terminal readout lines -->
+  <g stroke="#334455" stroke-width="1" opacity="0.18">
+    <line x1="50" y1="260" x2="1230" y2="260"/>
+    <line x1="50" y1="360" x2="1230" y2="360"/>
+    <line x1="50" y1="460" x2="1230" y2="460"/>
+    <line x1="50" y1="560" x2="1230" y2="560"/>
+  </g>
+  
+  <!-- Corner brackets -->
+  <g stroke="#4488aa" stroke-width="2" opacity="0.35" fill="none">
+    <!-- Top-left -->
+    <path d="M 40 60 L 40 40 L 60 40"/>
+    <!-- Top-right -->
+    <path d="M 1240 60 L 1240 40 L 1220 40"/>
+    <!-- Bottom-left -->
+    <path d="M 40 804 L 40 824 L 60 824"/>
+    <!-- Bottom-right -->
+    <path d="M 1240 804 L 1240 824 L 1220 824"/>
+  </g>
+  
+  <!-- Subtle scanlines -->
+  <g opacity="0.025">
+    <line x1="0" y1="0" x2="1280" y2="0" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="54" x2="1280" y2="54" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="108" x2="1280" y2="108" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="162" x2="1280" y2="162" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="216" x2="1280" y2="216" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="270" x2="1280" y2="270" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="324" x2="1280" y2="324" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="378" x2="1280" y2="378" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="432" x2="1280" y2="432" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="486" x2="1280" y2="486" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="540" x2="1280" y2="540" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="594" x2="1280" y2="594" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="648" x2="1280" y2="648" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="702" x2="1280" y2="702" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="756" x2="1280" y2="756" stroke="#000" stroke-width="1"/>
+    <line x1="0" y1="810" x2="1280" y2="810" stroke="#000" stroke-width="1"/>
+  </g>
+  
+  <!-- Minimal bottom edge -->
+  <g fill="#1a1a2a" opacity="0.35">
+    <rect x="0" y="825" width="1280" height="39"/>
+  </g>
+  
+  <!-- Vignette -->
+  <rect width="1280" height="40" fill="#000" opacity="0.35"/>
+  <rect y="824" width="1280" height="40" fill="#000" opacity="0.35"/>
+  <rect width="40" height="864" fill="#000" opacity="0.35"/>
+  <rect x="1240" width="40" height="864" fill="#000" opacity="0.35"/>
+</svg>
