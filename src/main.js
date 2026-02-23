@@ -3114,7 +3114,7 @@ class ControlsScene extends Phaser.Scene {
     });
     
     // Version info
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE - 20, 'GhostShift v0.6.0 - Controls', { fontSize: '11px', fill: '#444455', fontFamily: 'Courier New' }).setOrigin(0.5);
+    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE - 20, 'GhostShift v0.7.0 - Phase 11 - Controls', { fontSize: '11px', fill: '#444455', fontFamily: 'Courier New' }).setOrigin(0.5);
     
     this.input.keyboard.once('keydown', () => sfx.init());
     this.input.on('pointerdown', () => sfx.init(), this);
@@ -3430,7 +3430,7 @@ class ResultsScene extends Phaser.Scene {
     // Buttons - consistent sizing with MainMenuScene
     const buttonY = 230;
     const buttonWidth = 180;
-    const buttonHeight = 48;  // Increased from 40 to match MainMenuScene (52)
+    const buttonHeight = 52;  // Match MainMenuScene button height
     const spacing = 55;
     
     // Retry button
@@ -4976,11 +4976,15 @@ class GameScene extends Phaser.Scene {
       this.guard.body.setVelocity((dx / dist) * this.currentGuardSpeed, (dy / dist) * this.currentGuardSpeed); 
     }
     
-    // Update guard glow position
+    // Update guard glow position (every frame) but pulse only every 4th frame
     if (this.guardGlow) {
       this.guardGlow.setPosition(this.guard.x, this.guard.y);
-      const pulse = 0.1 + Math.sin(this.time.now / 250) * 0.05;
-      this.guardGlow.setAlpha(pulse);
+      // OPTIMIZATION: Only calculate pulse every 4th frame (reduces Math.sin calls by 75%)
+      this._guardGlowFrame = (this._guardGlowFrame || 0) + 1;
+      if (this._guardGlowFrame % 4 === 0) {
+        const pulse = 0.1 + Math.sin(this.time.now / 250) * 0.05;
+        this.guardGlow.setAlpha(pulse);
+      }
     }
     
     this.updateVisionCone();
@@ -5093,9 +5097,13 @@ class GameScene extends Phaser.Scene {
   }
   
   updateLaserGrids() {
+    // OPTIMIZATION: Only redraw laser grids every 2nd frame - reduces draw calls by 50%
+    this._laserFrameCount = (this._laserFrameCount || 0) + 1;
+    if (this._laserFrameCount % 2 !== 0) return;
+    
     this.laserGrids.forEach(grid => {
       grid.graphics.clear();
-      // Pulsing effect
+      // Pulsing effect - use cached time for consistent pulse
       const alpha = 0.3 + Math.sin(this.time.now / 200) * 0.2;
       grid.graphics.fillStyle(0xff0000, alpha);
       const halfW = grid.horizontal ? TILE_SIZE * 1.5 : TILE_SIZE / 4;
@@ -5105,10 +5113,13 @@ class GameScene extends Phaser.Scene {
   }
   
   updateExitGlow() {
-    // Pulse the exit zone glow when unlocked
+    // Pulse the exit zone glow when unlocked - only update every 3rd frame
     if (this.exitZoneGlow && this.hasDataCore) {
-      const pulse = 0.15 + Math.sin(this.time.now / 300) * 0.1;
-      this.exitZoneGlow.setAlpha(pulse);
+      this._exitGlowFrame = (this._exitGlowFrame || 0) + 1;
+      if (this._exitGlowFrame % 3 === 0) {
+        const pulse = 0.15 + Math.sin(this.time.now / 300) * 0.1;
+        this.exitZoneGlow.setAlpha(pulse);
+      }
     }
   }
   
