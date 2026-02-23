@@ -1264,6 +1264,43 @@ function getMotionSensorCooldownForLevel(difficulty) {
   return Math.max(50, MOTION_SENSOR_COOLDOWN_BASE - (difficulty - 1) * 15);
 }
 
+// ==================== GUARD AI CONFIGURATION ====================
+// Tunable parameters for smarter guard movement
+const GUARD_AI_CONFIG = {
+  // Lookahead distance for obstacle detection (in pixels, relative to TILE_SIZE)
+  lookaheadFactor: 1.5,  // 1.5x tile size ahead
+  
+  // Wall sliding: fraction of velocity to preserve when sliding along walls
+  wallSlideFactor: 0.85,
+  
+  // Minimum dot product to consider "moving toward" target (prevents oscillation)
+  // Lower = more strict alignment needed
+  alignmentThreshold: 0.3,
+  
+  // Stuck detection: time in ms before considering guard stuck
+  stuckTimeout: 800,
+  
+  // Stuck recovery: distance to back up when stuck (pixels)
+  stuckBackupDist: 20,
+  
+  // Corner avoidance: check radius for finding path around corners
+  cornerCheckRadius: 36,  // ~0.75 * TILE_SIZE
+  
+  // Path recalculation: force recalculation when blocked for this many frames
+  pathRecalcThreshold: 15,
+  
+  // Smoothing: interpolation factor for direction changes (0-1, higher = smoother)
+  directionSmoothing: 0.2,
+  
+  // Alternative direction weights for obstacle avoidance
+  // Higher = more likely to choose that direction
+  avoidWeights: {
+    forward: 1.0,    // Try to keep going toward target
+    perpendicular: 0.6,  // 90 degree turns
+    reverse: 0.1    // Turning around (last resort)
+  }
+};
+
 // ==================== AUDIO SYSTEM ====================
 class SFXManager {
   constructor() { 
@@ -5632,18 +5669,96 @@ class GameScene extends Phaser.Scene {
   }
 
   updateGuard() {
+    // Smart guard AI with obstacle avoidance, wall sliding, and stuck recovery
+    
     const target = this.guardPatrolPoints[this.currentPatrolIndex];
-    const dx = target.x - this.guard.x, dy = target.y - this.guard.y;
-    // Use squared distance check (5^2 = 25) to avoid sqrt for waypoint detection
+    const dx = target.x - this.guard.x;
+    const dy = target.y - this.guard.y;
     const sqDist = dx * dx + dy * dy;
+    
+    // Check if reached waypoint
     if (sqDist < 25) { 
-      this.currentPatrolIndex = (this.currentPatrolIndex + 1) % this.guardPatrolPoints.length; 
-    } else { 
-      this.guardAngle = Math.atan2(dy, dx); 
-      // Only compute sqrt when actually needed for velocity
-      const dist = Math.sqrt(sqDist); 
-      this.guard.body.setVelocity((dx / dist) * this.currentGuardSpeed, (dy / dist) * this.currentGuardSpeed); 
+      this.currentPatrolIndex = (this.currentPatrolIndex + 1) % this.guardPatrolPoints.length;
+      // Reset stuck detection state on waypoint arrival
+      this._guardStuckFrames = 0;
+      this._guardLastValidPos = null;
+      return;
     }
+    
+    // Calculate desired direction to target
+    const dist = Math.sqrt(sqDist);
+    let desiredVx = (dx / dist) * this.currentGuardSpeed;
+    let desiredVy = (dy / dist) * this.currentGuardSpeed;
+    
+    // === OBSTACLE AVOIDANCE SYSTEM ===
+    const lookahead = GUARD_AI_CONFIG.lookaheadFactor * TILE_SIZE;
+    const checkX = this.guard.x + (desiredVx / this.currentGuardSpeed) * lookahead;
+    const checkY = this.guard.y + (desiredVy / this.currentGuardSpeed) * lookahead;
+    
+    // Check if lookahead point would collide with a wall
+    let hasObstacleAhead = this._isWallAt(checkX, checkY);
+    
+    // === STUCK DETECTION ===
+    if (!this._guardLastValidPos) {
+      this._guardLastValidPos = { x: this.guard.x, y: this.guard.y };
+      this._guardStuckFrames = 0;
+    }
+    
+    const movedSinceLastFrame = Math.hypot(
+      this.guard.x - this._guardLastValidPos.x,
+      this.guard.y - this._guardLastValidPos.y
+    );
+    
+    // Track consecutive frames where guard isn't moving much
+    if (movedSinceLastFrame < 2) {
+      this._guardStuckFrames = (this._guardStuckFrames || 0) + 1;
+    } else {
+      this._guardStuckFrames = 0;
+    }
+    
+    this._guardLastValidPos = { x: this.guard.x, y: this.guard.y };
+    
+    // === OBSTACLE AVOIDANCE & WALL SLIDING ===
+    if (hasObstacleAhead || (this._guardStuckFrames && this._guardStuckFrames > GUARD_AI_CONFIG.pathRecalcThreshold)) {
+      // Find best alternative direction
+      const alternativeDir = this._findAlternativeDirection(
+        this.guard.x, this.guard.y,
+        desiredVx, desiredVy,
+        this.currentGuardSpeed
+      );
+      
+      if (alternativeDir) {
+        desiredVx = alternativeDir.vx;
+        desiredVy = alternativeDir.vy;
+        
+        // If stuck, also try backing up slightly
+        if (this._guardStuckFrames > GUARD_AI_CONFIG.pathRecalcThreshold) {
+          const backupFactor = -GUARD_AI_CONFIG.stuckBackupDist / Math.max(dist, 1);
+          this.guard.x += dx * backupFactor;
+          this.guard.y += dy * backupFactor;
+          this._guardStuckFrames = 0;  // Reset after backup
+        }
+      }
+    }
+    
+    // === DIRECTION SMOOTHING (prevents jitter) ===
+    const currentVel = this.guard.body.velocity;
+    if (currentVel.x !== 0 || currentVel.y !== 0) {
+      const smooth = GUARD_AI_CONFIG.directionSmoothing;
+      desiredVx = currentVel.x * (1 - smooth) + desiredVx * smooth;
+      desiredVy = currentVel.y * (1 - smooth) + desiredVy * smooth;
+      
+      // Re-normalize to maintain speed
+      const newSpeed = Math.hypot(desiredVx, desiredVy);
+      if (newSpeed > 0) {
+        desiredVx = (desiredVx / newSpeed) * this.currentGuardSpeed;
+        desiredVy = (desiredVy / newSpeed) * this.currentGuardSpeed;
+      }
+    }
+    
+    // Apply velocity
+    this.guard.body.setVelocity(desiredVx, desiredVy);
+    this.guardAngle = Math.atan2(desiredVy, desiredVx);
     
     // Update guard glow position (every frame) but pulse only every 4th frame
     if (this.guardGlow) {
@@ -5657,6 +5772,94 @@ class GameScene extends Phaser.Scene {
     }
     
     this.updateVisionCone();
+  }
+  
+  // Check if a point collides with any wall/obstacle
+  _isWallAt(x, y) {
+    // Check against all obstacles in current level
+    const obs = this.currentLayout?.obstacles;
+    if (!obs) return false;
+    
+    const halfTile = TILE_SIZE / 2 - 2;  // Slightly smaller for forgiveness
+    
+    for (let i = 0; i < obs.length; i++) {
+      const o = obs[i];
+      const ox = o.x * TILE_SIZE + TILE_SIZE / 2;
+      const oy = o.y * TILE_SIZE + TILE_SIZE / 2;
+      
+      // AABB collision check
+      if (x > ox - halfTile && x < ox + halfTile &&
+          y > oy - halfTile && y < oy + halfTile) {
+        return true;
+      }
+    }
+    
+    // Also check world boundaries
+    const mapW = MAP_WIDTH * TILE_SIZE;
+    const mapH = MAP_HEIGHT * TILE_SIZE;
+    if (x < TILE_SIZE / 2 || x > mapW - TILE_SIZE / 2 ||
+        y < TILE_SIZE / 2 || y > mapH - TILE_SIZE / 2) {
+      return true;
+    }
+    
+    return false;
+  }
+  
+  // Find alternative direction when blocked, using corner navigation
+  _findAlternativeDirection(x, y, desiredVx, desiredVy, speed) {
+    const weights = GUARD_AI_CONFIG.avoidWeights;
+    const checkRadius = GUARD_AI_CONFIG.cornerCheckRadius;
+    
+    // Normalize desired direction
+    const desiredSpeed = Math.hypot(desiredVx, desiredVy);
+    if (desiredSpeed === 0) return null;
+    const desiredNx = desiredVx / desiredSpeed;
+    const desiredNy = desiredVy / desiredSpeed;
+    
+    // Generate candidate directions: forward, and 90-degree turns
+    const candidates = [
+      // Forward (toward target)
+      { vx: desiredNx * speed, vy: desiredNy * speed, weight: weights.forward, name: 'forward' },
+      // Perpendicular clockwise
+      { vx: -desiredNy * speed, vy: desiredNx * speed, weight: weights.perpendicular, name: 'cw' },
+      // Perpendicular counter-clockwise
+      { vx: desiredNy * speed, vy: -desiredNx * speed, weight: weights.perpendicular, name: 'ccw' },
+      // Reverse (last resort)
+      { vx: -desiredNx * speed, vy: -desiredNy * speed, weight: weights.reverse, name: 'reverse' }
+    ];
+    
+    // Sort by weight (higher is better) and check for validity
+    candidates.sort((a, b) => b.weight - a.weight);
+    
+    for (const candidate of candidates) {
+      // Check if this direction would result in collision
+      const checkX = x + candidate.vx / speed * checkRadius;
+      const checkY = y + candidate.vy / speed * checkRadius;
+      
+      if (!this._isWallAt(checkX, checkY)) {
+        return { vx: candidate.vx, vy: candidate.vy };
+      }
+    }
+    
+    // If all directions blocked, try a small random perturbation
+    const angle = Math.atan2(desiredVy, desiredVx);
+    for (let offset = 15; offset <= 90; offset += 15) {
+      for (const sign of [1, -1]) {
+        const testAngle = angle + (offset * sign) * Math.PI / 180;
+        const testVx = Math.cos(testAngle) * speed;
+        const testVy = Math.sin(testAngle) * speed;
+        
+        const testX = x + testVx / speed * checkRadius * 0.5;
+        const testY = y + testVy / speed * checkRadius * 0.5;
+        
+        if (!this._isWallAt(testX, testY)) {
+          return { vx: testVx, vy: testVy };
+        }
+      }
+    }
+    
+    // Last resort: return null to let physics handle it
+    return null;
   }
 
   updateScannerDrone() {
@@ -5857,25 +6060,71 @@ class GameScene extends Phaser.Scene {
   }
   
   updatePatrolDrones() {
+    // Smart patrol drone AI with obstacle avoidance
     this.patrolDrones.forEach(drone => {
       const target = drone.patrolPoints[drone.patrolIndex];
       const dx = target.x - drone.sprite.x;
       const dy = target.y - drone.sprite.y;
-      // Use squared distance check for waypoint detection
       const sqDist = dx * dx + dy * dy;
       
       if (sqDist < 25) {
         drone.patrolIndex = (drone.patrolIndex + 1) % drone.patrolPoints.length;
+        drone.stuckFrames = 0;  // Reset stuck counter on waypoint
       } else {
         const speed = drone.speed;
-        // Only compute sqrt when actually moving
-        const dist = Math.sqrt(sqDist);
-        drone.sprite.body.setVelocity((dx / dist) * speed, (dy / dist) * speed);
+        let desiredVx = (dx / Math.sqrt(sqDist)) * speed;
+        let desiredVy = (dy / Math.sqrt(sqDist)) * speed;
+        
+        // Initialize stuck tracking for this drone
+        if (!drone.lastValidPos) {
+          drone.lastValidPos = { x: drone.sprite.x, y: drone.sprite.y };
+          drone.stuckFrames = 0;
+        }
+        
+        // Check if stuck
+        const moved = Math.hypot(
+          drone.sprite.x - drone.lastValidPos.x,
+          drone.sprite.y - drone.lastValidPos.y
+        );
+        
+        if (moved < 2) {
+          drone.stuckFrames = (drone.stuckFrames || 0) + 1;
+        } else {
+          drone.stuckFrames = 0;
+        }
+        
+        drone.lastValidPos = { x: drone.sprite.x, y: drone.sprite.y };
+        
+        // Obstacle avoidance for drones
+        const lookahead = TILE_SIZE;
+        const checkX = drone.sprite.x + (desiredVx / speed) * lookahead;
+        const checkY = drone.sprite.y + (desiredVy / speed) * lookahead;
+        
+        if (this._isWallAt(checkX, checkY) || (drone.stuckFrames && drone.stuckFrames > 10)) {
+          // Find alternative direction
+          const altDir = this._findAlternativeDirection(
+            drone.sprite.x, drone.sprite.y,
+            desiredVx, desiredVy, speed
+          );
+          
+          if (altDir) {
+            desiredVx = altDir.vx;
+            desiredVy = altDir.vy;
+          }
+          
+          // Clear stuck state after trying alternative
+          if (drone.stuckFrames > 10) {
+            drone.stuckFrames = 0;
+          }
+        }
+        
+        drone.sprite.body.setVelocity(desiredVx, desiredVy);
       }
       
       // Rotate towards movement direction - only if moving
-      if (sqDist >= 25) {
-        drone.sprite.rotation = Math.atan2(dy, dx);
+      const vel = drone.sprite.body.velocity;
+      if (vel.x !== 0 || vel.y !== 0) {
+        drone.sprite.rotation = Math.atan2(vel.y, vel.x);
       }
     });
   }
