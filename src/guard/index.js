@@ -31,8 +31,11 @@
  * @module guard/index
  */
 
-// Main orchestrator
-export { GuardAI, GUARD_STATES, GUARD_AI_CONFIG } from './GuardAI.js';
+// Import main orchestrator for re-export and factory function
+import { GuardAI, GUARD_STATES, GUARD_AI_CONFIG } from './GuardAI.js';
+
+// Re-export main orchestrator
+export { GuardAI, GUARD_STATES, GUARD_AI_CONFIG };
 
 // State machine
 export { 

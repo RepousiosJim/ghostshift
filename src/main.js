@@ -1,5 +1,7 @@
 import { LEVEL_LAYOUTS, validateLevelLayouts } from './levels.js';
 import { BackgroundComposer, BACKGROUND_IMAGE_PATHS } from './background-composer.js';
+// Phase P1: Modular Guard AI - optional runtime integration
+import { GuardAI, GUARD_STATES, GUARD_AI_CONFIG as MODULAR_GUARD_CONFIG } from './guard/index.js';
 
 // Dynamic import of Phaser for better loading performance
 // This allows the smaller game.js to load first, then Phaser lazy-loads
@@ -1410,6 +1412,18 @@ const GUARD_AI_CONFIG = {
   // Extra clearance push force in narrow corridors (0-1)
   narrowCorridorPushForce: 0.5
 };
+
+// ==================== MODULAR GUARD AI FEATURE FLAG ====================
+// Phase P1: Runtime toggle for modular guard AI system
+// Set to true to use the new modular GuardAI components, false for legacy inline AI
+// Default: false (legacy) for maximum stability during rollout
+const USE_MODULAR_GUARD_AI = typeof window !== 'undefined' && (
+  window.GHOSTSHIFT_MODULAR_GUARD_AI === true ||
+  window.location?.search?.includes('modularGuard=1')
+);
+
+// Debug flag for modular guard AI diagnostics
+const DEBUG_MODULAR_GUARD = typeof window !== 'undefined' && window.DEBUG_MODULAR_GUARD === true;
 
 // ==================== AUDIO SYSTEM ====================
 class SFXManager {
@@ -5223,6 +5237,28 @@ class GameScene extends Phaser.Scene {
     this.guard.body.setCollideWorldBounds(true);
     this.guardPatrolPoints = this.currentLayout.guardPatrol.map(p => ({ x: p.x * TILE_SIZE, y: p.y * TILE_SIZE }));
 
+    // Phase P1: Modular Guard AI initialization
+    this._modularGuardAI = null;
+    if (USE_MODULAR_GUARD_AI) {
+      try {
+        this._modularGuardAI = new GuardAI({ ...GUARD_AI_CONFIG, debug: DEBUG_MODULAR_GUARD });
+        // Initialize with scene context
+        this._modularGuardAI.initialize(
+          this.guardPatrolPoints,
+          (x, y) => this._isWallAt(x, y),
+          (x, y, radius, points) => this._generateSearchPatternPoints(x, y, radius, points),
+          this.time.now,
+          TILE_SIZE
+        );
+        if (DEBUG_MODULAR_GUARD) {
+          console.log('[ModularGuardAI] Initialized successfully for level', this.currentLevelIndex);
+        }
+      } catch (e) {
+        console.error('[ModularGuardAI] Initialization failed, falling back to legacy AI:', e);
+        this._modularGuardAI = null;
+      }
+    }
+
     // Phase 13: Guard awareness indicator - shows guard's current awareness state
     this.guardAwarenessIndicator = this.add.graphics();
     this.guardAwarenessIndicator.setDepth(50); // Above guard
@@ -6131,11 +6167,94 @@ class GameScene extends Phaser.Scene {
   }
 
   updateGuard() {
+    // Phase P1: Try modular guard AI first if enabled
+    if (this._modularGuardAI && this._modularGuardAI.isInitialized) {
+      try {
+        const result = this._updateGuardModular();
+        if (result) return;  // Modular AI handled this frame
+      } catch (e) {
+        console.error('[ModularGuardAI] Update failed, falling back to legacy:', e);
+        this._modularGuardAI = null;  // Disable for future frames
+      }
+    }
+    
     // Phase 16: Enhanced guard AI with robust anti-stuck system for chokepoints/corners
     // Features: time-window stuck detection, escape vectors with cooldowns, 
     //           temporary waypoint nudging, flip-flop prevention, narrow corridor handling
     //           Full state machine: Patrol -> Investigate -> Chase -> Search -> Patrol
+    this._updateGuardLegacy();
+  }
+  
+  // Phase P1: Modular guard AI update - delegates to GuardAI orchestrator
+  _updateGuardModular() {
+    const ai = this._modularGuardAI;
+    if (!ai || !this.guard || !this.player) return false;
     
+    const playerVisible = this._isPlayerVisibleToGuard();
+    const result = ai.update(
+      this.guard.x,
+      this.guard.y,
+      this.guard.body.velocity.x,
+      this.guard.body.velocity.y,
+      this.guardAwareness,
+      playerVisible,
+      { x: this.player.x, y: this.player.y },
+      this.currentGuardSpeed,
+      this.time.now
+    );
+    
+    // Handle backup position from stuck recovery
+    if (result.backupPosition) {
+      this.guard.x = result.backupPosition.x;
+      this.guard.y = result.backupPosition.y;
+    }
+    
+    // Handle waypoint reached
+    if (result.waypointReached) {
+      this._handleModularWaypointReached(result.state, playerVisible);
+      return true;
+    }
+    
+    // Apply velocity
+    this.guard.body.setVelocity(result.vx, result.vy);
+    this.guardAngle = result.angle;
+    
+    // Update state for UI/glow effects
+    this._guardState = result.state;
+    
+    // Update guard glow position
+    if (this.guardGlow) {
+      this.guardGlow.setPosition(this.guard.x, this.guard.y);
+      this._guardGlowFrame = (this._guardGlowFrame || 0) + 1;
+      if (this._guardGlowFrame % 4 === 0) {
+        const pulseSpeed = result.state === 'chase' ? 100 :
+                          result.state === 'search' ? 120 :
+                          result.state === 'investigate' ? 150 : 250;
+        const pulse = 0.1 + Math.sin(this.time.now / pulseSpeed) * 0.05;
+        this.guardGlow.setAlpha(pulse);
+      }
+    }
+    
+    this.updateVisionCone();
+    return true;
+  }
+  
+  // Phase P1: Handle waypoint reached for modular AI
+  _handleModularWaypointReached(state, playerVisible) {
+    // Reset stuck detection state on waypoint arrival
+    if (this._modularGuardAI) {
+      this._modularGuardAI.stuckDetector.reset(this.time.now);
+    }
+    
+    // Update patrol index if in patrol state
+    if (state === GUARD_STATES.PATROL) {
+      this.currentPatrolIndex = this._modularGuardAI?.currentPatrolIndex ?? 
+                               ((this.currentPatrolIndex + 1) % this.guardPatrolPoints.length);
+    }
+  }
+  
+  // Phase 16: Legacy guard AI - the original inline implementation
+  _updateGuardLegacy() {
     // === STATE MACHINE ===
     // Initialize state if not exists
     if (!this._guardState) {
@@ -6697,29 +6816,32 @@ class GameScene extends Phaser.Scene {
     }
     
     const center = this._lastKnownPlayerPos;
-    const numPoints = GUARD_AI_CONFIG.searchPatternPoints || 4;
-    const radius = GUARD_AI_CONFIG.searchPatternRadius || 80;
+    this._searchPoints = this._generateSearchPatternPoints(center.x, center.y);
+    this._currentSearchIndex = 0;
+  }
+  
+  // Phase P1: Helper method for modular GuardAI - generates search pattern points
+  _generateSearchPatternPoints(centerX, centerY, radius = GUARD_AI_CONFIG.searchPatternRadius || 80, numPoints = GUARD_AI_CONFIG.searchPatternPoints || 4) {
+    const points = [];
     
-    this._searchPoints = [];
-    
-    // Start with the last known position
-    this._searchPoints.push({ x: center.x, y: center.y });
+    // Start with the center position
+    points.push({ x: centerX, y: centerY });
     
     // Add points in a spiral pattern around the center
     for (let i = 0; i < numPoints; i++) {
       const angle = (i / numPoints) * Math.PI * 2;
       const dist = radius * (0.5 + (i % 2) * 0.5);  // Alternate between inner and outer radius
       
-      const px = center.x + Math.cos(angle) * dist;
-      const py = center.y + Math.sin(angle) * dist;
+      const px = centerX + Math.cos(angle) * dist;
+      const py = centerY + Math.sin(angle) * dist;
       
       // Only add if not blocked by wall
       if (!this._isWallAt(px, py)) {
-        this._searchPoints.push({ x: px, y: py });
+        points.push({ x: px, y: py });
       }
     }
     
-    this._currentSearchIndex = 0;
+    return points;
   }
   
   // Phase 16: Initialize search state variables
