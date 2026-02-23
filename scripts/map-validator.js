@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * GhostShift Map Tiling Validator
- * Validates map layouts against tiled movement conventions
+ * GhostShift Map Tiling Validator v2.0
+ * Validates and auto-fixes map layouts against tiled movement conventions
  * 
  * Layer Conventions:
  * - Floor layer: All tiles not in obstacles array (walkable by default)
@@ -14,6 +14,8 @@
  * 2. Patrol waypoints must be on walkable tiles
  * 3. Objectives must be reachable from player start
  * 4. No isolated/unreachable nav islands
+ * 5. Minimum clearance radius around objectives
+ * 6. Auto-fix invalid placements with deterministic rules
  */
 
 import fs from 'fs';
@@ -28,39 +30,62 @@ const MAP_WIDTH = 22;
 const MAP_HEIGHT = 18;
 const TILE_SIZE = 48;
 
-// Validation result tracking
-class ValidationResult {
-  constructor() {
+// Configuration
+const CONFIG = {
+  // Minimum clearance radius (in tiles) around critical objectives
+  clearanceRadius: 1,
+  
+  // Critical objectives that require clearance
+  clearanceRequired: ['dataCore', 'keyCard', 'hackTerminal', 'exitZone'],
+  
+  // Entities that must be on walkable tiles
+  mustBeWalkable: [
+    'playerStart', 'exitZone', 'dataCore', 'keyCard', 'hackTerminal',
+    'relayTerminal', 'securityCode', 'powerCell'
+  ],
+  
+  // Entities that should be walkable (warning if not)
+  shouldBeWalkable: ['cameras'],
+  
+  // Array entities with position checks
+  arrayEntities: {
+    cameras: { required: false, walkable: 'warn' },
+    motionSensors: { required: false, walkable: 'error' },
+    laserGrids: { required: false, walkable: 'error' },
+    guardPatrol: { required: true, walkable: 'error' },
+    patrolDrones: { required: false, walkable: 'error', hasPatrol: true }
+  }
+};
+
+// Audit result tracking
+class AuditResult {
+  constructor(levelName, levelIndex) {
+    this.levelName = levelName;
+    this.levelIndex = levelIndex;
     this.errors = [];
     this.warnings = [];
+    this.fixes = [];
     this.infos = [];  // Renamed to avoid conflict with method
+    this.navGridStats = null;
+    this.reachability = {};
   }
   
   error(msg) { this.errors.push(msg); }
   warn(msg) { this.warnings.push(msg); }
+  fix(msg) { this.fixes.push(msg); }
   info(msg) { this.infos.push(msg); }
   
   get valid() { return this.errors.length === 0; }
   get hasWarnings() { return this.warnings.length > 0; }
-  
-  summary() {
-    return {
-      valid: this.valid,
-      errorCount: this.errors.length,
-      warningCount: this.warnings.length,
-      infoCount: this.infos.length
-    };
-  }
+  get hasFixes() { return this.fixes.length > 0; }
 }
 
 /**
  * Build a 2D navigation grid from obstacles
- * Returns a 2D array where true = walkable, false = blocked
  */
 export function buildNavGrid(level) {
   const grid = Array(MAP_HEIGHT).fill(null).map(() => Array(MAP_WIDTH).fill(true));
   
-  // Mark obstacles as blocked
   if (level.obstacles && Array.isArray(level.obstacles)) {
     for (const obs of level.obstacles) {
       if (obs && Number.isFinite(obs.x) && Number.isFinite(obs.y)) {
@@ -87,37 +112,98 @@ export function isWalkable(grid, x, y) {
 }
 
 /**
- * Validate that a point is on a walkable tile
+ * Check clearance around a position
  */
-function validateWalkablePosition(result, grid, point, fieldName, levelName) {
-  if (!point) {
-    result.warn(`[${levelName}] ${fieldName}: missing position`);
-    return false;
-  }
+function hasClearance(grid, x, y, radius = CONFIG.clearanceRadius) {
+  const tx = Math.floor(x);
+  const ty = Math.floor(y);
   
-  if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) {
-    result.error(`[${levelName}] ${fieldName}: invalid coordinates (${point.x}, ${point.y})`);
-    return false;
+  for (let dy = -radius; dy <= radius; dy++) {
+    for (let dx = -radius; dx <= radius; dx++) {
+      if (dx === 0 && dy === 0) continue; // Skip center
+      const checkX = tx + dx;
+      const checkY = ty + dy;
+      if (!isWalkable(grid, checkX, checkY)) {
+        return false;
+      }
+    }
   }
-  
-  // Check bounds
-  if (point.x < 0 || point.x >= MAP_WIDTH || point.y < 0 || point.y >= MAP_HEIGHT) {
-    result.error(`[${levelName}] ${fieldName}: out of bounds (${point.x}, ${point.y}), max (${MAP_WIDTH-1}, ${MAP_HEIGHT-1})`);
-    return false;
-  }
-  
-  // Check walkable
-  if (!isWalkable(grid, point.x, point.y)) {
-    result.error(`[${levelName}] ${fieldName}: placed on blocked tile (${point.x}, ${point.y})`);
-    return false;
-  }
-  
   return true;
 }
 
 /**
+ * Find nearest walkable tile using spiral search
+ */
+function findNearestWalkable(grid, x, y, maxRadius = 5) {
+  const tx = Math.floor(x);
+  const ty = Math.floor(y);
+  
+  // Check if current position is valid
+  if (isWalkable(grid, tx, ty)) {
+    return { x: tx, y: ty, distance: 0 };
+  }
+  
+  // Spiral search
+  for (let radius = 1; radius <= maxRadius; radius++) {
+    // Top and bottom edges
+    for (let dx = -radius; dx <= radius; dx++) {
+      // Top
+      if (isWalkable(grid, tx + dx, ty - radius)) {
+        return { x: tx + dx, y: ty - radius, distance: radius };
+      }
+      // Bottom
+      if (isWalkable(grid, tx + dx, ty + radius)) {
+        return { x: tx + dx, y: ty + radius, distance: radius };
+      }
+    }
+    // Left and right edges (excluding corners already checked)
+    for (let dy = -radius + 1; dy <= radius - 1; dy++) {
+      // Left
+      if (isWalkable(grid, tx - radius, ty + dy)) {
+        return { x: tx - radius, y: ty + dy, distance: radius };
+      }
+      // Right
+      if (isWalkable(grid, tx + radius, ty + dy)) {
+        return { x: tx + radius, y: ty + dy, distance: radius };
+      }
+    }
+  }
+  
+  return null; // No valid tile found
+}
+
+/**
+ * Find nearest walkable tile with clearance
+ */
+function findNearestWithClearance(grid, x, y, radius = CONFIG.clearanceRadius, maxSearch = 8) {
+  const tx = Math.floor(x);
+  const ty = Math.floor(y);
+  
+  // Check if current position is valid with clearance
+  if (isWalkable(grid, tx, ty) && hasClearance(grid, tx, ty, radius)) {
+    return { x: tx, y: ty, distance: 0 };
+  }
+  
+  // Spiral search for position with clearance
+  for (let r = 1; r <= maxSearch; r++) {
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (Math.abs(dx) !== r && Math.abs(dy) !== r) continue; // Only check perimeter
+        const checkX = tx + dx;
+        const checkY = ty + dy;
+        if (isWalkable(grid, checkX, checkY) && hasClearance(grid, checkX, checkY, radius)) {
+          return { x: checkX, y: checkY, distance: r };
+        }
+      }
+    }
+  }
+  
+  // Fallback to any walkable tile
+  return findNearestWalkable(grid, x, y, maxSearch);
+}
+
+/**
  * Find connected components using flood fill
- * Returns array of regions, each region is array of {x,y} tiles
  */
 export function findConnectedComponents(grid) {
   const visited = Array(MAP_HEIGHT).fill(null).map(() => Array(MAP_WIDTH).fill(false));
@@ -132,12 +218,11 @@ export function findConnectedComponents(grid) {
       
       if (x < 0 || x >= MAP_WIDTH || y < 0 || y >= MAP_HEIGHT) continue;
       if (visited[y][x]) continue;
-      if (!grid[y][x]) continue; // blocked
+      if (!grid[y][x]) continue;
       
       visited[y][x] = true;
       region.push({x, y});
       
-      // 4-directional (cardinal only for tile-based movement)
       stack.push({x: x + 1, y});
       stack.push({x: x - 1, y});
       stack.push({x, y: y + 1});
@@ -158,28 +243,8 @@ export function findConnectedComponents(grid) {
     }
   }
   
-  // Sort by size descending
   regions.sort((a, b) => b.length - a.length);
-  
   return regions;
-}
-
-/**
- * Check if a point is in a region
- */
-function pointInRegion(point, region) {
-  const tx = Math.floor(point.x);
-  const ty = Math.floor(point.y);
-  return region.some(t => t.x === tx && t.y === ty);
-}
-
-/**
- * Find which region contains a point
- */
-function findRegionForPoint(point, regions) {
-  const tx = Math.floor(point.x);
-  const ty = Math.floor(point.y);
-  return regions.findIndex(region => region.some(t => t.x === tx && t.y === ty));
 }
 
 /**
@@ -205,10 +270,8 @@ export function hasPath(grid, from, to) {
     if (x === endTx && y === endTy) return true;
     
     const neighbors = [
-      {x: x + 1, y},
-      {x: x - 1, y},
-      {x, y: y + 1},
-      {x, y: y - 1}
+      {x: x + 1, y}, {x: x - 1, y},
+      {x, y: y + 1}, {x, y: y - 1}
     ];
     
     for (const n of neighbors) {
@@ -225,219 +288,319 @@ export function hasPath(grid, from, to) {
 }
 
 /**
- * Validate a single level layout
+ * Find which region contains a point
  */
-export function validateLevel(level, index) {
-  const result = new ValidationResult();
-  const levelName = level.name || `Level ${index + 1}`;
+function findRegionForPoint(point, regions) {
+  const tx = Math.floor(point.x);
+  const ty = Math.floor(point.y);
+  return regions.findIndex(region => region.some(t => t.x === tx && t.y === ty));
+}
+
+/**
+ * Validate and optionally fix a single position
+ */
+function validatePosition(audit, grid, level, fieldName, entity, autoFix = false) {
+  if (!entity) return { valid: true, fixed: false };
   
-  result.info(`\n=== Validating: ${levelName} ===`);
+  const originalX = entity.x;
+  const originalY = entity.y;
+  
+  // Check bounds
+  if (!Number.isFinite(originalX) || !Number.isFinite(originalY)) {
+    audit.error(`[${fieldName}]: invalid coordinates (${originalX}, ${originalY})`);
+    return { valid: false, fixed: false };
+  }
+  
+  if (originalX < 0 || originalX >= MAP_WIDTH || originalY < 0 || originalY >= MAP_HEIGHT) {
+    audit.error(`[${fieldName}]: out of bounds (${originalX}, ${originalY})`);
+    
+    if (autoFix) {
+      const nearest = findNearestWalkable(grid, originalX, originalY);
+      if (nearest) {
+        entity.x = nearest.x;
+        entity.y = nearest.y;
+        audit.fix(`[${fieldName}]: moved from (${originalX}, ${originalY}) to (${nearest.x}, ${nearest.y})`);
+        return { valid: true, fixed: true };
+      }
+    }
+    return { valid: false, fixed: false };
+  }
+  
+  // Check walkable
+  if (!isWalkable(grid, originalX, originalY)) {
+    const isCritical = CONFIG.mustBeWalkable.includes(fieldName);
+    
+    if (isCritical) {
+      audit.error(`[${fieldName}]: placed on blocked tile (${originalX}, ${originalY})`);
+    } else {
+      audit.warn(`[${fieldName}]: placed on blocked tile (${originalX}, ${originalY}) - may be intentional`);
+      return { valid: true, fixed: false };
+    }
+    
+    if (autoFix) {
+      const nearest = findNearestWalkable(grid, originalX, originalY);
+      if (nearest) {
+        entity.x = nearest.x;
+        entity.y = nearest.y;
+        audit.fix(`[${fieldName}]: moved from (${originalX}, ${originalY}) to (${nearest.x}, ${nearest.y})`);
+        
+        // Re-check if on blocked tile after fix
+        if (!isWalkable(grid, entity.x, entity.y)) {
+          audit.error(`[${fieldName}]: auto-fix failed, still on blocked tile`);
+          return { valid: false, fixed: true };
+        }
+        return { valid: true, fixed: true };
+      }
+    }
+    return { valid: false, fixed: false };
+  }
+  
+  // Check clearance for critical objectives
+  if (CONFIG.clearanceRequired.includes(fieldName) && !hasClearance(grid, originalX, originalY)) {
+    audit.warn(`[${fieldName}]: insufficient clearance radius (${CONFIG.clearanceRadius} tiles) at (${originalX}, ${originalY})`);
+    
+    if (autoFix) {
+      const nearest = findNearestWithClearance(grid, originalX, originalY);
+      if (nearest && (nearest.x !== originalX || nearest.y !== originalY)) {
+        entity.x = nearest.x;
+        entity.y = nearest.y;
+        audit.fix(`[${fieldName}]: relocated for clearance from (${originalX}, ${originalY}) to (${nearest.x}, ${nearest.y})`);
+        return { valid: true, fixed: true };
+      }
+    }
+  }
+  
+  return { valid: true, fixed: false };
+}
+
+/**
+ * Audit a single level
+ */
+export function auditLevel(level, index, autoFix = false) {
+  const audit = new AuditResult(level.name || `Level ${index + 1}`, index);
+  
+  audit.info(`\n${'═'.repeat(60)}`);
+  audit.info(`AUDIT: ${audit.levelName}`);
+  audit.info(`${'═'.repeat(60)}`);
   
   // Build navigation grid
   const grid = buildNavGrid(level);
   const walkableCount = grid.flat().filter(Boolean).length;
   const totalTiles = MAP_WIDTH * MAP_HEIGHT;
-  result.info(`Nav grid: ${walkableCount}/${totalTiles} walkable tiles (${((walkableCount/totalTiles)*100).toFixed(1)}%)`);
+  
+  audit.navGridStats = {
+    walkable: walkableCount,
+    total: totalTiles,
+    percentage: ((walkableCount / totalTiles) * 100).toFixed(1)
+  };
+  
+  audit.info(`Nav grid: ${walkableCount}/${totalTiles} walkable (${audit.navGridStats.percentage}%)`);
   
   // Check for isolated regions
   const regions = findConnectedComponents(grid);
-  result.info(`Connected regions: ${regions.length}`);
+  audit.info(`Connected regions: ${regions.length}`);
   
   if (regions.length > 1) {
-    // Find main region (largest)
     const mainRegion = regions[0];
-    result.warn(`[${levelName}] ${regions.length - 1} isolated nav island(s) detected`);
-    result.info(`  Main region: ${mainRegion.length} tiles`);
-    for (let i = 1; i < regions.length; i++) {
-      result.info(`  Isolated island ${i}: ${regions[i].length} tiles at (${regions[i][0].x}, ${regions[i][0].y})`);
+    audit.warn(`${regions.length - 1} isolated nav island(s) detected`);
+    audit.info(`  Main region: ${mainRegion.length} tiles`);
+    for (let i = 1; i < Math.min(regions.length, 4); i++) {
+      audit.info(`  Island ${i}: ${regions[i].length} tiles at (${regions[i][0].x}, ${regions[i][0].y})`);
     }
   }
   
-  // Validate player spawn
-  validateWalkablePosition(result, grid, level.playerStart, 'playerStart', levelName);
+  // Validate single entities
+  for (const field of CONFIG.mustBeWalkable) {
+    if (level[field]) {
+      validatePosition(audit, grid, level, field, level[field], autoFix);
+    }
+  }
   
-  // Validate exit zone
-  validateWalkablePosition(result, grid, level.exitZone, 'exitZone', levelName);
-  
-  // Validate objectives
-  if (level.dataCore) validateWalkablePosition(result, grid, level.dataCore, 'dataCore', levelName);
-  if (level.keyCard) validateWalkablePosition(result, grid, level.keyCard, 'keyCard', levelName);
-  if (level.hackTerminal) validateWalkablePosition(result, grid, level.hackTerminal, 'hackTerminal', levelName);
-  if (level.relayTerminal) validateWalkablePosition(result, grid, level.relayTerminal, 'relayTerminal', levelName);
-  if (level.securityCode) validateWalkablePosition(result, grid, level.securityCode, 'securityCode', levelName);
-  if (level.powerCell) validateWalkablePosition(result, grid, level.powerCell, 'powerCell', levelName);
-  
-  // Validate cameras (can be on walls, but warn)
-  if (level.cameras && Array.isArray(level.cameras)) {
-    level.cameras.forEach((cam, i) => {
-      if (!isWalkable(grid, cam.x, cam.y)) {
-        result.warn(`[${levelName}] cameras[${i}]: placed on blocked tile (${cam.x}, ${cam.y}) - may be intentional`);
+  // Validate array entities
+  for (const [field, config] of Object.entries(CONFIG.arrayEntities)) {
+    if (!level[field] || !Array.isArray(level[field])) {
+      if (config.required) {
+        audit.error(`[${field}]: required field is missing or not an array`);
       }
-    });
-  }
-  
-  // Validate motion sensors (should be on walkable tiles)
-  if (level.motionSensors && Array.isArray(level.motionSensors)) {
-    level.motionSensors.forEach((ms, i) => {
-      validateWalkablePosition(result, grid, ms, `motionSensors[${i}]`, levelName);
-    });
-  }
-  
-  // Validate laser grids (should be on walkable tiles for the beam to cross)
-  if (level.laserGrids && Array.isArray(level.laserGrids)) {
-    level.laserGrids.forEach((lg, i) => {
-      validateWalkablePosition(result, grid, lg, `laserGrids[${i}]`, levelName);
-    });
-  }
-  
-  // Validate patrol drones and their waypoints
-  if (level.patrolDrones && Array.isArray(level.patrolDrones)) {
-    level.patrolDrones.forEach((drone, i) => {
-      // Drone spawn position
-      validateWalkablePosition(result, grid, drone, `patrolDrones[${i}]`, levelName);
+      continue;
+    }
+    
+    level[field].forEach((entity, i) => {
+      const fieldName = `${field}[${i}]`;
       
-      // Patrol waypoints
-      if (drone.patrol && Array.isArray(drone.patrol)) {
-        drone.patrol.forEach((pt, j) => {
-          validateWalkablePosition(result, grid, pt, `patrolDrones[${i}].patrol[${j}]`, levelName);
-        });
-      } else {
-        result.warn(`[${levelName}] patrolDrones[${i}]: missing or empty patrol waypoints`);
+      // Check entity position
+      if (config.walkable === 'error') {
+        validatePosition(audit, grid, level, fieldName, entity, autoFix);
+      } else if (config.walkable === 'warn') {
+        if (!isWalkable(grid, entity.x, entity.y)) {
+          audit.warn(`[${fieldName}]: placed on blocked tile (${entity.x}, ${entity.y}) - may be intentional`);
+        }
       }
-    });
-  }
-  
-  // Validate guard patrol waypoints
-  if (level.guardPatrol && Array.isArray(level.guardPatrol)) {
-    level.guardPatrol.forEach((pt, i) => {
-      validateWalkablePosition(result, grid, pt, `guardPatrol[${i}]`, levelName);
-    });
-  }
-  
-  // Reachability checks (only if player start is valid)
-  if (level.playerStart && isWalkable(grid, level.playerStart.x, level.playerStart.y)) {
-    const playerRegion = findRegionForPoint(level.playerStart, regions);
-    
-    // Check exit reachability
-    if (level.exitZone && isWalkable(grid, level.exitZone.x, level.exitZone.y)) {
-      const exitRegion = findRegionForPoint(level.exitZone, regions);
-      if (playerRegion !== exitRegion) {
-        result.error(`[${levelName}] exitZone is NOT reachable from playerStart (different nav regions)`);
-      } else if (!hasPath(grid, level.playerStart, level.exitZone)) {
-        result.error(`[${levelName}] exitZone is NOT reachable from playerStart (no path found)`);
-      } else {
-        result.info(`[${levelName}] exitZone: reachable from playerStart ✓`);
-      }
-    }
-    
-    // Check key objectives reachability
-    const objectives = [
-      {name: 'dataCore', pos: level.dataCore},
-      {name: 'keyCard', pos: level.keyCard},
-      {name: 'hackTerminal', pos: level.hackTerminal}
-    ];
-    
-    objectives.forEach(({name, pos}) => {
-      if (pos && isWalkable(grid, pos.x, pos.y)) {
-        if (!hasPath(grid, level.playerStart, pos)) {
-          result.warn(`[${levelName}] ${name}: may not be reachable from playerStart`);
+      
+      // Check patrol waypoints
+      if (config.hasPatrol && entity.patrol) {
+        if (!Array.isArray(entity.patrol) || entity.patrol.length === 0) {
+          audit.error(`[${fieldName}].patrol: must be a non-empty array`);
         } else {
-          result.info(`[${levelName}] ${name}: reachable from playerStart ✓`);
+          entity.patrol.forEach((pt, j) => {
+            validatePosition(audit, grid, level, `${fieldName}.patrol[${j}]`, pt, autoFix);
+          });
         }
       }
     });
   }
   
-  return result;
+  // Reachability checks
+  if (level.playerStart && isWalkable(grid, level.playerStart.x, level.playerStart.y)) {
+    audit.reachability.playerStart = { valid: true };
+    
+    // Check exit reachability
+    if (level.exitZone && isWalkable(grid, level.exitZone.x, level.exitZone.y)) {
+      if (hasPath(grid, level.playerStart, level.exitZone)) {
+        audit.reachability.exitZone = { valid: true };
+        audit.info(`[reachability] exitZone: reachable from playerStart ✓`);
+      } else {
+        audit.reachability.exitZone = { valid: false };
+        audit.error(`[reachability] exitZone: NOT reachable from playerStart`);
+      }
+    }
+    
+    // Check objective reachability
+    for (const objField of ['dataCore', 'keyCard', 'hackTerminal']) {
+      const pos = level[objField];
+      if (pos && isWalkable(grid, pos.x, pos.y)) {
+        if (hasPath(grid, level.playerStart, pos)) {
+          audit.reachability[objField] = { valid: true };
+          audit.info(`[reachability] ${objField}: reachable from playerStart ✓`);
+        } else {
+          audit.reachability[objField] = { valid: false };
+          audit.warn(`[reachability] ${objField}: may not be reachable from playerStart`);
+        }
+      }
+    }
+  } else {
+    audit.error(`[reachability] Cannot check - playerStart is not on valid tile`);
+  }
+  
+  return audit;
 }
 
 /**
- * Main validation entry point
+ * Generate audit report
  */
-export function validateAllLevels(levels) {
-  console.log('╔══════════════════════════════════════════════════════════════╗');
-  console.log('║         GhostShift Map Tiling Validator v1.0                ║');
-  console.log('╚══════════════════════════════════════════════════════════════╝');
-  console.log(`\nMap dimensions: ${MAP_WIDTH}x${MAP_HEIGHT} (${MAP_WIDTH * MAP_HEIGHT} tiles)`);
-  console.log(`Tile size: ${TILE_SIZE}px`);
-  console.log(`Levels to validate: ${levels.length}\n`);
+function generateAuditReport(audits, options = {}) {
+  const lines = [];
   
-  const allResults = [];
+  lines.push('╔' + '═'.repeat(70) + '╗');
+  lines.push('║' + 'GHOSTSHIFT MAP TILING AUDIT REPORT v2.0'.padEnd(70) + '║');
+  lines.push('╚' + '═'.repeat(70) + '╝');
+  lines.push('');
+  lines.push(`Map dimensions: ${MAP_WIDTH}x${MAP_HEIGHT} (${MAP_WIDTH * MAP_HEIGHT} tiles)`);
+  lines.push(`Tile size: ${TILE_SIZE}px`);
+  lines.push(`Clearance radius: ${CONFIG.clearanceRadius} tiles`);
+  lines.push(`Auto-fix: ${options.autoFix ? 'ENABLED' : 'DISABLED'}`);
+  lines.push(`Levels audited: ${audits.length}`);
+  lines.push('');
+  
   let totalErrors = 0;
   let totalWarnings = 0;
+  let totalFixes = 0;
   
-  levels.forEach((level, index) => {
-    const result = validateLevel(level, index);
-    allResults.push({level, index, result});
-    totalErrors += result.errors.length;
-    totalWarnings += result.warnings.length;
-  });
-  
-  // Print detailed results
-  allResults.forEach(({level, result}) => {
+  for (const audit of audits) {
     // Print info
-    result.infos.forEach(msg => console.log(msg));
+    for (const msg of audit.infos) {
+      lines.push(msg);
+    }
     
     // Print warnings
-    result.warnings.forEach(msg => console.log(`  ⚠️  ${msg}`));
+    for (const msg of audit.warnings) {
+      lines.push(`  ⚠️  ${msg}`);
+    }
     
     // Print errors
-    result.errors.forEach(msg => console.log(`  ❌ ${msg}`));
+    for (const msg of audit.errors) {
+      lines.push(`  ❌ ${msg}`);
+    }
+    
+    // Print fixes
+    for (const msg of audit.fixes) {
+      lines.push(`  🔧 ${msg}`);
+    }
     
     // Level summary
-    const status = result.valid ? '✓ PASS' : '✗ FAIL';
-    const warnStr = result.hasWarnings ? ` (${result.warnings.length} warnings)` : '';
-    console.log(`  Status: ${status}${warnStr}\n`);
-  });
+    const status = audit.valid ? '✓ PASS' : '✗ FAIL';
+    const warnStr = audit.hasWarnings ? ` (${audit.warnings.length} warnings)` : '';
+    const fixStr = audit.hasFixes ? ` [${audit.fixes.length} fixes applied]` : '';
+    lines.push(`  Status: ${status}${warnStr}${fixStr}`);
+    lines.push('');
+    
+    totalErrors += audit.errors.length;
+    totalWarnings += audit.warnings.length;
+    totalFixes += audit.fixes.length;
+  }
   
   // Final summary
-  console.log('══════════════════════════════════════════════════════════════');
-  console.log('VALIDATION SUMMARY');
-  console.log('══════════════════════════════════════════════════════════════');
-  console.log(`Total levels: ${levels.length}`);
-  console.log(`Passed: ${allResults.filter(r => r.result.valid).length}`);
-  console.log(`Failed: ${allResults.filter(r => !r.result.valid).length}`);
-  console.log(`Total errors: ${totalErrors}`);
-  console.log(`Total warnings: ${totalWarnings}`);
-  console.log('');
+  lines.push('═'.repeat(72));
+  lines.push('AUDIT SUMMARY');
+  lines.push('═'.repeat(72));
+  lines.push(`Total levels: ${audits.length}`);
+  lines.push(`Passed: ${audits.filter(a => a.valid).length}`);
+  lines.push(`Failed: ${audits.filter(a => !a.valid).length}`);
+  lines.push(`Total errors: ${totalErrors}`);
+  lines.push(`Total warnings: ${totalWarnings}`);
+  lines.push(`Total fixes applied: ${totalFixes}`);
+  lines.push('');
   
   if (totalErrors === 0) {
-    console.log('✅ ALL MAPS VALID - No blocking issues found');
+    lines.push('✅ ALL MAPS VALID - No blocking issues found');
     if (totalWarnings > 0) {
-      console.log(`⚠️  ${totalWarnings} warnings should be reviewed`);
+      lines.push(`⚠️  ${totalWarnings} warnings should be reviewed`);
     }
-    return { success: true, errors: totalErrors, warnings: totalWarnings };
+    if (totalFixes > 0) {
+      lines.push(`🔧 ${totalFixes} auto-fixes were applied - review changes`);
+    }
   } else {
-    console.log('❌ VALIDATION FAILED - Fix errors before shipping');
-    return { success: false, errors: totalErrors, warnings: totalWarnings };
+    lines.push('❌ AUDIT FAILED - Fix errors before shipping');
   }
+  
+  return {
+    report: lines.join('\n'),
+    success: totalErrors === 0,
+    errors: totalErrors,
+    warnings: totalWarnings,
+    fixes: totalFixes,
+    audits
+  };
 }
 
 /**
- * Export nav grid for external use
+ * Main audit entry point
  */
-export function exportNavGrid(level) {
-  return buildNavGrid(level);
+export function auditAllLevels(levels, options = {}) {
+  const audits = [];
+  
+  for (let i = 0; i < levels.length; i++) {
+    const audit = auditLevel(levels[i], i, options.autoFix);
+    audits.push(audit);
+  }
+  
+  return generateAuditReport(audits, options);
 }
 
 /**
- * Get tile neighbors (4-directional)
+ * Export for CLI
  */
-export function getNeighbors(x, y) {
-  return [
-    {x: x + 1, y, dir: 'E'},
-    {x: x - 1, y, dir: 'W'},
-    {x, y: y + 1, dir: 'S'},
-    {x, y: y - 1, dir: 'N'}
-  ].filter(n => n.x >= 0 && n.x < MAP_WIDTH && n.y >= 0 && n.y < MAP_HEIGHT);
-}
+export { CONFIG, MAP_WIDTH, MAP_HEIGHT, TILE_SIZE };
 
 // CLI execution
 const isMainModule = import.meta.url === `file://${process.argv[1]}` || 
                      process.argv[1].endsWith('map-validator.js');
 
 if (isMainModule) {
-  // Load levels from levels.js
+  const args = process.argv.slice(2);
+  const autoFix = args.includes('--fix') || args.includes('--auto-fix');
+  const outputPath = args.find(a => a.startsWith('--output='))?.split('=')[1];
+  
   const levelsPath = path.join(__dirname, '..', 'src', 'levels.js');
   
   try {
@@ -448,7 +611,38 @@ if (isMainModule) {
       process.exit(1);
     }
     
-    const result = validateAllLevels(LEVEL_LAYOUTS);
+    const result = auditAllLevels(LEVEL_LAYOUTS, { autoFix });
+    console.log(result.report);
+    
+    // If auto-fix was enabled and fixes were applied, write back
+    if (autoFix && result.fixes > 0) {
+      console.log('\n📝 Auto-fix was enabled. To persist changes, update src/levels.js');
+      console.log('   Review the fixes above and apply manually or use --write flag');
+    }
+    
+    // Write output file if specified
+    if (outputPath) {
+      const reportData = {
+        timestamp: new Date().toISOString(),
+        success: result.success,
+        errors: result.errors,
+        warnings: result.warnings,
+        fixes: result.fixes,
+        levels: result.audits.map(a => ({
+          name: a.levelName,
+          index: a.levelIndex,
+          valid: a.valid,
+          errors: a.errors,
+          warnings: a.warnings,
+          fixes: a.fixes,
+          navGridStats: a.navGridStats,
+          reachability: a.reachability
+        }))
+      };
+      fs.writeFileSync(outputPath, JSON.stringify(reportData, null, 2));
+      console.log(`\n📄 Report written to: ${outputPath}`);
+    }
+    
     process.exit(result.success ? 0 : 1);
     
   } catch (err) {
@@ -457,6 +651,3 @@ if (isMainModule) {
     process.exit(1);
   }
 }
-
-// Named exports for API usage
-export const CONSTANTS = { MAP_WIDTH, MAP_HEIGHT, TILE_SIZE };
