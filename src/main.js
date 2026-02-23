@@ -5307,7 +5307,7 @@ class GameScene extends Phaser.Scene {
       this.objectiveText.setFill('#00ff00');
       this.statusText.setText('Key obtained! Hack the terminal!');
       this.statusText.setFill('#00aaff');
-      this.cameras.main.flash(200, 0, 150, 255);
+      if (this.cameras?.main) this.cameras.main.flash(200, 0, 150, 255);
     }
   }
 
@@ -5330,7 +5330,7 @@ class GameScene extends Phaser.Scene {
       }
       this.exitText.setText('OPEN');
       this.exitText.setFill('#22ff66');
-      this.cameras.main.flash(200, 0, 255, 100);
+      if (this.cameras?.main) this.cameras.main.flash(200, 0, 255, 100);
     }
   }
 
@@ -5377,14 +5377,14 @@ class GameScene extends Phaser.Scene {
             this.objectiveTextRelay.setFill('#66ffaa');
           }
           sfx.collect();
-          this.cameras.main.flash(200, 0, 200, 100);
+          if (this.cameras?.main) this.cameras.main.flash(200, 0, 200, 100);
         } else {
           // No relay - go straight to data core
           this.hackStage = 2;
           this.statusText.setText('Terminal hacked! Get the data core!');
           this.statusText.setFill('#ffaa00');
           sfx.win();
-          this.cameras.main.flash(200, 255, 255, 100);
+          if (this.cameras?.main) this.cameras.main.flash(200, 255, 255, 100);
         }
       } else if (terminal === 'relay') {
         this.hackStage = 2;
@@ -5395,7 +5395,7 @@ class GameScene extends Phaser.Scene {
         this.statusText.setText('Relay complete! Get the data core!');
         this.statusText.setFill('#ffaa00');
         sfx.win();
-        this.cameras.main.flash(200, 255, 255, 100);
+        if (this.cameras?.main) this.cameras.main.flash(200, 255, 255, 100);
       }
     }
   }
@@ -5556,6 +5556,20 @@ class GameScene extends Phaser.Scene {
 
   updatePlayer() {
     const body = this.player.body;
+    // Movement fix: Immediate stop on key release (no inertia/drift)
+    // Check if any movement keys are pressed
+    const leftDown = this.cursors?.left?.isDown || this.wasd?.left?.isDown;
+    const rightDown = this.cursors?.right?.isDown || this.wasd?.right?.isDown;
+    const upDown = this.cursors?.up?.isDown || this.wasd?.up?.isDown;
+    const downDown = this.cursors?.down?.isDown || this.wasd?.down?.isDown;
+    
+    // Immediate stop when no keys pressed - prevents unwanted drift/inertia
+    if (!leftDown && !rightDown && !upDown && !downDown) {
+      body.setVelocity(0, 0);
+      body.setAcceleration(0, 0);
+      return;
+    }
+    
     // Game-feel improvement: Use acceleration for smoother, more responsive movement
     // instead of instant velocity changes. Drag provides natural deceleration.
     body.setAcceleration(0);
@@ -5563,10 +5577,10 @@ class GameScene extends Phaser.Scene {
     // Scale acceleration to reach target speed quickly but smoothly
     const accel = speed * 10;  // High acceleration for responsive feel
     
-    if (this.cursors.left.isDown || this.wasd.left.isDown) body.setAccelerationX(-accel);
-    else if (this.cursors.right.isDown || this.wasd.right.isDown) body.setAccelerationX(accel);
-    if (this.cursors.up.isDown || this.wasd.up.isDown) body.setAccelerationY(-accel);
-    else if (this.cursors.down.isDown || this.wasd.down.isDown) body.setAccelerationY(accel);
+    if (leftDown) body.setAccelerationX(-accel);
+    else if (rightDown) body.setAccelerationX(accel);
+    if (upDown) body.setAccelerationY(-accel);
+    else if (downDown) body.setAccelerationY(accel);
     
     // Normalize diagonal movement (acceleration-based)
     if (body.acceleration.x !== 0 && body.acceleration.y !== 0) {
