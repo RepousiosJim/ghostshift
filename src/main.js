@@ -1702,45 +1702,118 @@ class MainMenuScene extends Phaser.Scene {
     runSceneTransition(this, sceneKey, data);
   }
   
+  // ========== PREMIUM BUTTON SYSTEM ==========
+  // Enhanced button visuals with depth, glow, and premium feel
+  // Maintains original hitboxes and interactions for compatibility
   createMenuButton(x, y, width, height, text, bgColor, strokeColor, onClick, disabled = false) {
+    // === VISUAL LAYERS ===
+    
+    // 1. Outer glow - creates premium depth effect
+    const glowColor = disabled ? 0x222230 : strokeColor;
+    const glowAlpha = disabled ? 0.08 : 0.15;
+    const outerGlow = this.add.rectangle(x, y, width + 8, height + 8, glowColor, glowAlpha);
+    
+    // 2. Inner highlight - simulates top-lit edge
+    const highlightColor = disabled ? 0x333340 : 0xffffff;
+    const highlight = this.add.rectangle(x, y - height/2 + 3, width - 4, 2, highlightColor, disabled ? 0.05 : 0.12);
+    
+    // 3. Main button background
     const bg = this.add.rectangle(x, y, width, height, bgColor);
-    bg.setStrokeStyle(2, strokeColor);
+    bg.setStrokeStyle(2, disabled ? 0x333340 : strokeColor);
     bg.setInteractive({ useHandCursor: !disabled });
     
+    // 4. Text shadow for depth
+    const textShadow = this.add.text(x + 1, y + 1, text, { fontSize: '16px', fill: '#000000', fontFamily: 'Courier New', fontStyle: 'bold', alpha: disabled ? 0.2 : 0.3 }).setOrigin(0.5);
+    
+    // 5. Main text
     const label = this.add.text(x, y, text, { fontSize: '16px', fill: disabled ? '#444444' : '#ffffff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    
+    // 6. Icon/indicator glow (subtle pulse for primary buttons)
+    let pulseGlow = null;
+    if (!disabled && (text.includes('▶') || text.includes('PLAY'))) {
+      pulseGlow = this.add.rectangle(x, y, width - 10, height - 10, strokeColor, 0);
+      this.tweens.add({
+        targets: pulseGlow,
+        alpha: 0.08,
+        duration: 1200,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      });
+    }
+    
+    // === STATE HANDLERS ===
+    
+    const updateHover = (isHovering) => {
+      if (disabled) return;
+      
+      const brightColor = bgColor + 0x303050;
+      
+      if (isHovering) {
+        bg.setFillStyle(brightColor);
+        bg.setStrokeStyle(3, 0xffffff);
+        outerGlow.setAlpha(0.25);
+        highlight.setAlpha(0.25);
+        label.setFill('#ffffff');
+      } else {
+        bg.setFillStyle(bgColor);
+        bg.setStrokeStyle(2, strokeColor);
+        outerGlow.setAlpha(0.15);
+        highlight.setAlpha(0.12);
+        label.setFill('#ffffff');
+      }
+    };
     
     // Hover effects
     bg.on('pointerover', () => { 
       if (!disabled) { 
-        bg.setFillStyle(bgColor + 0x202020); 
-        bg.setStrokeStyle(2, 0xffffff);
+        updateHover(true);
         sfx.menuHover(); 
       } 
     });
     
     bg.on('pointerout', () => { 
       if (!disabled) {
-        bg.setFillStyle(bgColor); 
-        bg.setStrokeStyle(2, strokeColor);
+        updateHover(false);
       }
     });
     
     bg.on('pointerdown', () => { 
-      // Button press animation
-      this.tweens.add({
-        targets: bg,
-        scaleX: 0.95,
-        scaleY: 0.95,
-        duration: 50,
-        yoyo: true,
-        onComplete: () => {
-          bg.setScale(1);
-        }
-      });
-      onClick(); 
+      // Button press animation with visual feedback
+      if (!disabled) {
+        // Visual press - darken and shrink
+        bg.setFillStyle(bgColor - 0x202020);
+        bg.setStrokeStyle(2, strokeColor);
+        
+        this.tweens.add({
+          targets: [bg, outerGlow, highlight, pulseGlow].filter(Boolean),
+          scaleX: 0.96,
+          scaleY: 0.96,
+          duration: 40,
+          yoyo: true,
+          onComplete: () => {
+            bg.setScale(1);
+            if (outerGlow) outerGlow.setScale(1);
+            if (highlight) highlight.setScale(1);
+            if (pulseGlow) pulseGlow.setScale(1);
+            onClick();
+          }
+        });
+        
+        // Flash effect
+        const flash = this.add.rectangle(x, y, width, height, 0xffffff, 0.15);
+        this.tweens.add({
+          targets: flash,
+          alpha: 0,
+          duration: 150,
+          onComplete: () => flash.destroy()
+        });
+      } else {
+        onClick();
+      }
     });
     
-    return { bg, label };
+    return { bg, label, outerGlow, highlight, textShadow };
   }
   
   // Phase 7: Kid-friendly How to Play guide
@@ -2751,17 +2824,65 @@ class SettingsScene extends Phaser.Scene {
     const rowHeight = 45;
     const rightAlignX = MAP_WIDTH * TILE_SIZE - 50;
     
-    // Audio Enabled toggle
+    // ========== PREMIUM TOGGLE BUTTONS ==========
+    // Audio Enabled toggle with premium styling
     this.add.text(40, audioStartY, 'Sound Effects', { fontSize: '15px', fill: '#ffffff', fontFamily: 'Courier New' });
-    const audioToggle = this.add.text(rightAlignX, audioStartY + 2, sfx.isEnabled ? '● ON' : '○ OFF', { fontSize: '14px', fill: sfx.isEnabled ? '#44ff88' : '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
+    
+    // Toggle background with premium look
+    const toggleWidth = 70;
+    const toggleHeight = 28;
+    const toggleX = rightAlignX - 10;
+    const toggleY = audioStartY + 2;
+    
+    // Toggle track
+    const audioToggleBg = this.add.rectangle(toggleX + toggleWidth/2, toggleY, toggleWidth, toggleHeight, sfx.isEnabled ? 0x1a4a2a : 0x2a1a1a);
+    audioToggleBg.setStrokeStyle(2, sfx.isEnabled ? 0x44ff88 : 0xff4444);
+    
+    // Toggle glow when on
+    const audioToggleGlow = this.add.rectangle(toggleX + toggleWidth/2, toggleY, toggleWidth + 6, toggleHeight + 6, sfx.isEnabled ? 0x44ff88 : 0xff4444, sfx.isEnabled ? 0.12 : 0.08);
+    
+    // Toggle indicator circle
+    const audioToggleIndicator = this.add.circle(toggleX + (sfx.isEnabled ? toggleWidth - 12 : 12), toggleY, 8, sfx.isEnabled ? 0x44ff88 : 0xff4444);
+    
+    // Toggle text
+    const audioToggle = this.add.text(rightAlignX, audioStartY + 2, sfx.isEnabled ? 'ON' : 'OFF', { fontSize: '12px', fill: sfx.isEnabled ? '#44ff88' : '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
     audioToggle.setOrigin(1, 0);
-    audioToggle.on('pointerover', () => { if (!sfx.isEnabled) audioToggle.setFill('#ff6666'); });
-    audioToggle.on('pointerout', () => { audioToggle.setFill(sfx.isEnabled ? '#44ff88' : '#ff4444'); });
+    
+    // Toggle hit area (larger for easier clicking)
+    const audioToggleHit = this.add.rectangle(toggleX + toggleWidth/2, toggleY, toggleWidth + 20, toggleHeight + 10, 0x000000, 0);
+    audioToggleHit.setInteractive({ useHandCursor: true });
+    
+    const updateAudioToggle = (enabled) => {
+      audioToggleBg.setFillStyle(enabled ? 0x1a4a2a : 0x2a1a1a);
+      audioToggleBg.setStrokeStyle(2, enabled ? 0x44ff88 : 0xff4444);
+      audioToggleGlow.setFillStyle(enabled ? 0x44ff88 : 0xff4444, enabled ? 0.12 : 0.08);
+      audioToggleIndicator.setFillStyle(enabled ? 0x44ff88 : 0xff4444);
+      audioToggleIndicator.x = toggleX + (enabled ? toggleWidth - 12 : 12);
+      audioToggle.setText(enabled ? 'ON' : 'OFF');
+      audioToggle.setFill(enabled ? '#44ff88' : '#ff4444');
+    };
+    
+    audioToggleHit.on('pointerover', () => { 
+      if (!sfx.isEnabled) {
+        audioToggleBg.setStrokeStyle(2, 0xff6666);
+        audioToggleIndicator.setFillStyle(0xff6666);
+      }
+    });
+    audioToggleHit.on('pointerout', () => { 
+      audioToggleBg.setStrokeStyle(2, sfx.isEnabled ? 0x44ff88 : 0xff4444);
+      audioToggleIndicator.setFillStyle(sfx.isEnabled ? 0x44ff88 : 0xff4444);
+    });
+    audioToggleHit.on('pointerdown', () => { 
+      const newState = !sfx.isEnabled; 
+      sfx.setEnabled(newState); 
+      updateAudioToggle(newState);
+      sfx.select(); 
+    });
+    // Also trigger from text click
     audioToggle.on('pointerdown', () => { 
       const newState = !sfx.isEnabled; 
       sfx.setEnabled(newState); 
-      audioToggle.setText(newState ? '● ON' : '○ OFF'); 
-      audioToggle.setFill(newState ? '#44ff88' : '#ff4444'); 
+      updateAudioToggle(newState);
       sfx.select(); 
     });
     
@@ -2792,23 +2913,43 @@ class SettingsScene extends Phaser.Scene {
       sfx.select();
     });
     
-    // Slider track background
+    // ========== PREMIUM SLIDER SYSTEM ==========
     const sliderX = 180;
     const sliderWidth = 280;
     const sliderY = volY + 18;
-    const volBarBg = this.add.rectangle(sliderX + sliderWidth / 2, sliderY, sliderWidth, 8, 0x1a1a2a);
+    
+    // 1. Slider track background with premium styling
+    const volBarBg = this.add.rectangle(sliderX + sliderWidth / 2, sliderY, sliderWidth, 10, 0x1a1a2a);
     volBarBg.setStrokeStyle(1, 0x333344);
     
-    // Slider fill
+    // 2. Track inner shadow effect
+    const trackShadow = this.add.rectangle(sliderX + sliderWidth / 2, sliderY + 2, sliderWidth - 4, 3, 0x000000, 0.2);
+    
+    // 3. Slider fill with gradient-like appearance
     const volBarFill = this.add.rectangle(sliderX, sliderY, sfx.volume * sliderWidth, 6, 0x4488ff);
     volBarFill.setOrigin(0, 0.5);
     
-    // Slider thumb
+    // 4. Fill highlight (top edge)
+    const fillHighlight = this.add.rectangle(sliderX, sliderY - 2, sfx.volume * sliderWidth, 2, 0x66aaff, 0.4);
+    fillHighlight.setOrigin(0, 0.5);
+    
+    // 5. Premium thumb with glow
+    const thumbGlow = this.add.circle(sliderX + sfx.volume * sliderWidth, sliderY, 16, 0x66aaff, 0.15);
     const volThumb = this.add.circle(sliderX + sfx.volume * sliderWidth, sliderY, 10, 0x66aaff);
     volThumb.setStrokeStyle(2, 0xffffff);
     volThumb.setInteractive({ useHandCursor: true });
-    volThumb.on('pointerover', () => { volThumb.setFill(0x88bbff); volThumb.setScale(1.2); });
-    volThumb.on('pointerout', () => { volThumb.setFill(0x66aaff); volThumb.setScale(1); });
+    
+    // Enhanced thumb hover/active states
+    volThumb.on('pointerover', () => { 
+      volThumb.setFill(0x88bbff); 
+      volThumb.setScale(1.3); 
+      thumbGlow.setAlpha(0.3);
+    });
+    volThumb.on('pointerout', () => { 
+      volThumb.setFill(0x66aaff); 
+      volThumb.setScale(1); 
+      thumbGlow.setAlpha(0.15);
+    });
     
     // Volume controls (-/+)
     const volDown = this.add.text(sliderX - 25, sliderY - 1, '−', { fontSize: '22px', fill: '#888888', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
@@ -2824,7 +2965,9 @@ class SettingsScene extends Phaser.Scene {
       const vol = sfx.volume;
       volPercentText.setText(Math.round(vol * 100) + '%');
       volBarFill.width = vol * sliderWidth;
+      fillHighlight.width = vol * sliderWidth;
       volThumb.x = sliderX + vol * sliderWidth;
+      thumbGlow.x = sliderX + vol * sliderWidth;
       muteBtn.setText(vol === 0 || !sfx.isEnabled ? '🔇' : '🔊');
       // Update audio toggle state
       audioToggle.setText(sfx.isEnabled ? '● ON' : '○ OFF');
@@ -2877,51 +3020,104 @@ class SettingsScene extends Phaser.Scene {
       sfx.select();
     });
     
-    // Fullscreen toggle
+    // ========== PREMIUM FULLSCREEN TOGGLE ==========
     const fullY = graphicsStartY + rowHeight;
     this.add.text(40, fullY, 'Fullscreen', { fontSize: '15px', fill: '#ffffff', fontFamily: 'Courier New' });
     this.add.text(40, fullY + 18, 'Stretch to fill screen', { fontSize: '11px', fill: '#666677', fontFamily: 'Courier New' });
     
     // Check actual browser fullscreen state
     const isFullscreen = fullscreenManager.isFullscreen;
-    const fullToggle = this.add.text(rightAlignX, fullY + 2, isFullscreen ? '● ON' : '○ OFF', { fontSize: '14px', fill: isFullscreen ? '#44ff88' : '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
+    
+    // Premium toggle styling
+    const fullToggleX = rightAlignX - 10;
+    const fullToggleY = fullY + 2;
+    const fullToggleBg = this.add.rectangle(fullToggleX + toggleWidth/2, fullToggleY, toggleWidth, toggleHeight, isFullscreen ? 0x1a4a2a : 0x2a1a1a);
+    fullToggleBg.setStrokeStyle(2, isFullscreen ? 0x44ff88 : 0xff4444);
+    const fullToggleGlow = this.add.rectangle(fullToggleX + toggleWidth/2, fullToggleY, toggleWidth + 6, toggleHeight + 6, isFullscreen ? 0x44ff88 : 0xff4444, isFullscreen ? 0.12 : 0.08);
+    const fullToggleIndicator = this.add.circle(fullToggleX + (isFullscreen ? toggleWidth - 12 : 12), fullToggleY, 8, isFullscreen ? 0x44ff88 : 0xff4444);
+    const fullToggle = this.add.text(rightAlignX, fullY + 2, isFullscreen ? 'ON' : 'OFF', { fontSize: '12px', fill: isFullscreen ? '#44ff88' : '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
     fullToggle.setOrigin(1, 0);
+    const fullToggleHit = this.add.rectangle(fullToggleX + toggleWidth/2, fullToggleY, toggleWidth + 20, toggleHeight + 10, 0x000000, 0);
+    fullToggleHit.setInteractive({ useHandCursor: true });
     
     // Listen for fullscreen changes to keep toggle in sync
     this._fullscreenListener = (event, isFs) => {
-      fullToggle.setText(isFs ? '● ON' : '○ OFF');
+      fullToggleBg.setFillStyle(isFs ? 0x1a4a2a : 0x2a1a1a);
+      fullToggleBg.setStrokeStyle(2, isFs ? 0x44ff88 : 0xff4444);
+      fullToggleGlow.setFillStyle(isFs ? 0x44ff88 : 0xff4444, isFs ? 0.12 : 0.08);
+      fullToggleIndicator.setFillStyle(isFs ? 0x44ff88 : 0xff4444);
+      fullToggleIndicator.x = fullToggleX + (isFs ? toggleWidth - 12 : 12);
+      fullToggle.setText(isFs ? 'ON' : 'OFF');
       fullToggle.setFill(isFs ? '#44ff88' : '#ff4444');
-      // Also update save state
       saveManager.setSetting('fullscreen', isFs);
     };
     fullscreenManager.on('fullscreenchange', this._fullscreenListener);
     
-    // Resize listener already registered above.
-    fullToggle.on('pointerover', () => { if (!fullscreenManager.isFullscreen) fullToggle.setFill('#ff6666'); });
-    fullToggle.on('pointerout', () => { fullToggle.setFill(fullscreenManager.isFullscreen ? '#44ff88' : '#ff4444'); });
-    fullToggle.on('pointerdown', async () => { 
+    fullToggleHit.on('pointerover', () => { 
+      if (!fullscreenManager.isFullscreen) {
+        fullToggleBg.setStrokeStyle(2, 0xff6666);
+        fullToggleIndicator.setFillStyle(0xff6666);
+      }
+    });
+    fullToggleHit.on('pointerout', () => { 
+      fullToggleBg.setStrokeStyle(2, fullscreenManager.isFullscreen ? 0x44ff88 : 0xff4444);
+      fullToggleIndicator.setFillStyle(fullscreenManager.isFullscreen ? 0x44ff88 : 0xff4444);
+    });
+    fullToggleHit.on('pointerdown', async () => { 
       const newState = !fullscreenManager.isFullscreen;
       if (newState) {
         await fullscreenManager.request();
       } else {
         await fullscreenManager.exit();
       }
-      // State will be updated by the fullscreenchange listener
-      saveManager.setSetting('fullscreen', fullscreenManager.isFullscreen);
       sfx.select();
     });
     
-    // ==================== GAME SETTINGS ====================
+    // ========== PREMIUM REDUCED MOTION TOGGLE ==========
     const gameStartY = gameY + 35;
     
-    // Reduced Motion toggle
     this.add.text(40, gameStartY, 'Reduced Motion', { fontSize: '15px', fill: '#ffffff', fontFamily: 'Courier New' });
     this.add.text(40, gameStartY + 18, 'Minimize animations', { fontSize: '11px', fill: '#666677', fontFamily: 'Courier New' });
     
     const reducedMotion = saveManager.getSetting('reducedMotion') || false;
-    const motionToggle = this.add.text(rightAlignX, gameStartY + 2, reducedMotion ? '● ON' : '○ OFF', { fontSize: '14px', fill: reducedMotion ? '#44ff88' : '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
+    const motionToggleX = rightAlignX - 10;
+    const motionToggleY = gameStartY + 2;
+    const motionToggleBg = this.add.rectangle(motionToggleX + toggleWidth/2, motionToggleY, toggleWidth, toggleHeight, reducedMotion ? 0x1a4a2a : 0x2a1a1a);
+    motionToggleBg.setStrokeStyle(2, reducedMotion ? 0x44ff88 : 0xff4444);
+    const motionToggleGlow = this.add.rectangle(motionToggleX + toggleWidth/2, motionToggleY, toggleWidth + 6, toggleHeight + 6, reducedMotion ? 0x44ff88 : 0xff4444, reducedMotion ? 0.12 : 0.08);
+    const motionToggleIndicator = this.add.circle(motionToggleX + (reducedMotion ? toggleWidth - 12 : 12), motionToggleY, 8, reducedMotion ? 0x44ff88 : 0xff4444);
+    const motionToggle = this.add.text(rightAlignX, gameStartY + 2, reducedMotion ? 'ON' : 'OFF', { fontSize: '12px', fill: reducedMotion ? '#44ff88' : '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
     motionToggle.setOrigin(1, 0);
-    motionToggle.on('pointerover', () => { if (!saveManager.getSetting('reducedMotion')) motionToggle.setFill('#ff6666'); });
+    const motionToggleHit = this.add.rectangle(motionToggleX + toggleWidth/2, motionToggleY, toggleWidth + 20, toggleHeight + 10, 0x000000, 0);
+    motionToggleHit.setInteractive({ useHandCursor: true });
+    
+    const updateMotionToggle = (enabled) => {
+      motionToggleBg.setFillStyle(enabled ? 0x1a4a2a : 0x2a1a1a);
+      motionToggleBg.setStrokeStyle(2, enabled ? 0x44ff88 : 0xff4444);
+      motionToggleGlow.setFillStyle(enabled ? 0x44ff88 : 0xff4444, enabled ? 0.12 : 0.08);
+      motionToggleIndicator.setFillStyle(enabled ? 0x44ff88 : 0xff4444);
+      motionToggleIndicator.x = motionToggleX + (enabled ? toggleWidth - 12 : 12);
+      motionToggle.setText(enabled ? 'ON' : 'OFF');
+      motionToggle.setFill(enabled ? '#44ff88' : '#ff4444');
+    };
+    
+    motionToggleHit.on('pointerover', () => { 
+      if (!saveManager.getSetting('reducedMotion')) {
+        motionToggleBg.setStrokeStyle(2, 0xff6666);
+        motionToggleIndicator.setFillStyle(0xff6666);
+      }
+    });
+    motionToggleHit.on('pointerout', () => { 
+      const isOn = saveManager.getSetting('reducedMotion');
+      motionToggleBg.setStrokeStyle(2, isOn ? 0x44ff88 : 0xff4444);
+      motionToggleIndicator.setFillStyle(isOn ? 0x44ff88 : 0xff4444);
+    });
+    motionToggleHit.on('pointerdown', () => { 
+      const newState = !saveManager.getSetting('reducedMotion');
+      saveManager.setSetting('reducedMotion', newState);
+      updateMotionToggle(newState);
+      sfx.select();
+    });
     motionToggle.on('pointerout', () => { motionToggle.setFill(saveManager.getSetting('reducedMotion') ? '#44ff88' : '#ff4444'); });
     motionToggle.on('pointerdown', () => { 
       const newState = !saveManager.getSetting('reducedMotion');
@@ -3590,41 +3786,104 @@ class ResultsScene extends Phaser.Scene {
     runSceneTransition(this, sceneKey, data);
   }
   
+  // ========== PREMIUM BUTTON SYSTEM ==========
+  // Enhanced button visuals for Results Scene
   createButton(x, y, width, height, text, bgColor, strokeColor, onClick, disabled = false) {
+    // === VISUAL LAYERS ===
+    
+    // 1. Outer glow - premium depth
+    const glowColor = disabled ? 0x222230 : strokeColor;
+    const outerGlow = this.add.rectangle(x, y, width + 6, height + 6, glowColor, disabled ? 0.06 : 0.12);
+    
+    // 2. Inner highlight - top edge lighting
+    const highlight = this.add.rectangle(x, y - height/2 + 2, width - 4, 2, 0xffffff, disabled ? 0.04 : 0.1);
+    
+    // 3. Main button background
     const bg = this.add.rectangle(x, y, width, height, disabled ? 0x1a1a1a : bgColor);
     bg.setStrokeStyle(2, disabled ? 0x333333 : strokeColor);
     bg.setInteractive({ useHandCursor: !disabled });
+    
+    // 4. Text with shadow for depth
+    const textShadow = this.add.text(x + 1, y + 1, text, { fontSize: '16px', fill: '#000000', fontFamily: 'Courier New', fontStyle: 'bold', alpha: disabled ? 0.15 : 0.25 }).setOrigin(0.5);
     const label = this.add.text(x, y, text, { fontSize: '16px', fill: disabled ? '#444444' : '#ffffff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    
+    // 5. Subtle pulse for primary actions (Retry, Next)
+    let pulseGlow = null;
+    if (!disabled && (text.includes('RETRY') || text.includes('NEXT'))) {
+      pulseGlow = this.add.rectangle(x, y, width - 12, height - 12, strokeColor, 0);
+      this.tweens.add({
+        targets: pulseGlow,
+        alpha: 0.06,
+        duration: 1000,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      });
+    }
+    
+    // === STATE HANDLERS ===
+    
+    const updateHover = (isHovering) => {
+      if (disabled) return;
+      
+      if (isHovering) {
+        bg.setFillStyle(bgColor + 0x303050);
+        bg.setStrokeStyle(3, 0xffffff);
+        outerGlow.setAlpha(0.2);
+        highlight.setAlpha(0.2);
+      } else {
+        bg.setFillStyle(bgColor);
+        bg.setStrokeStyle(2, strokeColor);
+        outerGlow.setAlpha(0.12);
+        highlight.setAlpha(0.1);
+      }
+    };
     
     // Enhanced hover effects
     bg.on('pointerover', () => { 
       if (!disabled) { 
-        bg.setFillStyle(bgColor + 0x202020); 
-        bg.setStrokeStyle(2, 0xffffff);
+        updateHover(true);
         sfx.menuHover(); 
       } 
     });
     bg.on('pointerout', () => { 
       if (!disabled) {
-        bg.setFillStyle(bgColor); 
-        bg.setStrokeStyle(2, strokeColor);
+        updateHover(false);
       }
     });
     bg.on('pointerdown', () => {
-      // Button press animation
-      this.tweens.add({
-        targets: bg,
-        scaleX: 0.95,
-        scaleY: 0.95,
-        duration: 50,
-        yoyo: true,
-        onComplete: () => {
-          bg.setScale(1);
-        }
-      });
-      onClick();
+      if (!disabled) {
+        // Press visual
+        bg.setFillStyle(bgColor - 0x202020);
+        
+        this.tweens.add({
+          targets: [bg, outerGlow, highlight, pulseGlow].filter(Boolean),
+          scaleX: 0.96,
+          scaleY: 0.96,
+          duration: 40,
+          yoyo: true,
+          onComplete: () => {
+            bg.setScale(1);
+            if (outerGlow) outerGlow.setScale(1);
+            if (highlight) highlight.setScale(1);
+            if (pulseGlow) pulseGlow.setScale(1);
+            onClick();
+          }
+        });
+        
+        // Flash effect
+        const flash = this.add.rectangle(x, y, width, height, 0xffffff, 0.12);
+        this.tweens.add({
+          targets: flash,
+          alpha: 0,
+          duration: 120,
+          onComplete: () => flash.destroy()
+        });
+      } else {
+        onClick();
+      }
     });
-    return { bg, label };
+    return { bg, label, outerGlow, highlight };
   }
   
   formatTime(ms) { if (!ms) return '--:--'; const minutes = Math.floor(ms / 60000); const seconds = Math.floor((ms % 60000) / 1000); const centis = Math.floor((ms % 1000) / 10); return minutes.toString().padStart(2, '0') + ':' + seconds.toString().padStart(2, '0') + '.' + centis.toString().padStart(2, '0'); }
@@ -3880,35 +4139,81 @@ class VictoryScene extends Phaser.Scene {
     runSceneTransition(this, sceneKey, data);
   }
   
+  // ========== PREMIUM BUTTON SYSTEM ==========
+  // Enhanced button visuals for Victory Scene
   createButton(x, y, width, height, text, bgColor, strokeColor, onClick) {
+    // === VISUAL LAYERS ===
+    
+    // 1. Outer glow - celebration effect
+    const outerGlow = this.add.rectangle(x, y, width + 6, height + 6, strokeColor, 0.15);
+    
+    // 2. Inner highlight - premium edge
+    const highlight = this.add.rectangle(x, y - height/2 + 2, width - 4, 2, 0xffffff, 0.12);
+    
+    // 3. Main button background
     const bg = this.add.rectangle(x, y, width, height, bgColor);
     bg.setStrokeStyle(2, strokeColor);
     bg.setInteractive({ useHandCursor: true });
+    
+    // 4. Text shadow for depth
+    const textShadow = this.add.text(x + 1, y + 1, text, { fontSize: '16px', fill: '#000000', fontFamily: 'Courier New', fontStyle: 'bold', alpha: 0.3 }).setOrigin(0.5);
     const label = this.add.text(x, y, text, { fontSize: '16px', fill: '#ffffff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
     
+    // 5. Golden pulse for celebration buttons
+    const pulseGlow = this.add.rectangle(x, y, width - 12, height - 12, 0xffd700, 0);
+    this.tweens.add({
+      targets: pulseGlow,
+      alpha: 0.08,
+      duration: 800,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
+    
+    // === STATE HANDLERS ===
+    
     bg.on('pointerover', () => { 
-      bg.setFillStyle(bgColor + 0x202020); 
-      bg.setStrokeStyle(2, 0xffffff);
+      bg.setFillStyle(bgColor + 0x303050); 
+      bg.setStrokeStyle(3, 0xffffff);
+      outerGlow.setAlpha(0.25);
+      highlight.setAlpha(0.22);
       sfx.menuHover(); 
     });
     bg.on('pointerout', () => { 
       bg.setFillStyle(bgColor); 
       bg.setStrokeStyle(2, strokeColor);
+      outerGlow.setAlpha(0.15);
+      highlight.setAlpha(0.12);
     });
     bg.on('pointerdown', () => {
+      // Press visual
+      bg.setFillStyle(bgColor - 0x202020);
+      
       this.tweens.add({
-        targets: bg,
-        scaleX: 0.95,
-        scaleY: 0.95,
-        duration: 50,
+        targets: [bg, outerGlow, highlight, pulseGlow],
+        scaleX: 0.96,
+        scaleY: 0.96,
+        duration: 40,
         yoyo: true,
         onComplete: () => {
           bg.setScale(1);
+          outerGlow.setScale(1);
+          highlight.setScale(1);
+          pulseGlow.setScale(1);
+          onClick();
         }
       });
-      onClick();
+      
+      // Flash effect
+      const flash = this.add.rectangle(x, y, width, height, 0xffffff, 0.15);
+      this.tweens.add({
+        targets: flash,
+        alpha: 0,
+        duration: 130,
+        onComplete: () => flash.destroy()
+      });
     });
-    return { bg, label };
+    return { bg, label, outerGlow, highlight };
   }
   
   formatTime(ms) { if (!ms) return '--:--'; const minutes = Math.floor(ms / 60000); const seconds = Math.floor((ms % 60000) / 1000); const centis = Math.floor((ms % 1000) / 10); return minutes.toString().padStart(2, '0') + ':' + seconds.toString().padStart(2, '0') + '.' + centis.toString().padStart(2, '0'); }
