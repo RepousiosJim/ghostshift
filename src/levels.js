@@ -67,51 +67,105 @@ function normalizeLaserGrids(laserGrids, levelName) {
 // Base coordinates designed to fit within 22x18 after +6 shift (max x=15, max y=11)
 const RAW_LEVEL_LAYOUTS = [
   // Level 1: Warehouse - 22x18 map
-  { name: 'Warehouse', obstacles: shiftArray6([{x:5,y:3},{x:6,y:3},{x:7,y:3},{x:5,y:4},{x:7,y:4},{x:5,y:5},{x:7,y:5},{x:2,y:8},{x:3,y:8},{x:11,y:6},{x:12,y:6},{x:9,y:2},{x:10,y:2},{x:4,y:6},{x:5,y:6}]), guardPatrol:shiftArray6([{x:12,y:5},{x:4,y:5},{x:4,y:10},{x:12,y:10}]), dataCore:shiftBy6({x:13,y:2}), keyCard:shiftBy6({x:2,y:10}), hackTerminal:shiftBy6({x:7,y:5}), playerStart:shiftBy6({x:2,y:2}), exitZone:shiftBy6({x:15,y:5}), cameras:shiftArray6([{x:4,y:2},{x:12,y:10}]), motionSensors:shiftArray6([{x:6,y:5},{x:9,y:8}]), laserGrids:shiftArray6([{x:7,y:7,h:true},{x:4,y:2,v:true}]), patrolDrones:[{x:9+6,y:4+6,patrol:shiftArray6([{x:9,y:4},{x:13,y:4},{x:13,y:8},{x:9,y:8}])}], securityCode:shiftBy6({x:3,y:6}), powerCell:shiftBy6({x:11,y:3}), difficulty: 1 },
-  
-  // Level 2: Labs - 22x18 map
-  { name: 'Labs', obstacles: shiftArray6([{x:4,y:2},{x:4,y:3},{x:4,y:4},{x:4,y:5},{x:7,y:6},{x:8,y:6},{x:9,y:6},{x:7,y:7},{x:9,y:7},{x:7,y:8},{x:8,y:8},{x:9,y:8},{x:12,y:2},{x:13,y:2},{x:14,y:2},{x:2,y:9},{x:3,y:9},{x:4,y:9},{x:6,y:11},{x:7,y:11}]), guardPatrol:shiftArray6([{x:11,y:4},{x:5,y:4},{x:5,y:11},{x:11,y:11}]), dataCore:shiftBy6({x:14,y:2}), keyCard:shiftBy6({x:2,y:2}), hackTerminal:shiftBy6({x:6,y:4}), playerStart:shiftBy6({x:2,y:11}), exitZone:shiftBy6({x:15,y:2}), cameras:shiftArray6([{x:7,y:2},{x:2,y:6}]), motionSensors:shiftArray6([{x:9,y:4},{x:5,y:9}]), laserGrids:shiftArray6([{x:6,y:5,h:true},{x:11,y:7,v:true}]), patrolDrones:[{x:7+6,y:8+6,patrol:shiftArray6([{x:7,y:8},{x:11,y:8},{x:11,y:3},{x:7,y:3}])}], securityCode:shiftBy6({x:4,y:2}), powerCell:shiftBy6({x:13,y:10}), difficulty: 1 },
+  {
+    name: 'Warehouse',
+    obstacles: shiftArray6([
+      // Left storage racks
+      {x:3,y:3},{x:4,y:3},{x:3,y:4},{x:4,y:4},{x:3,y:5},{x:4,y:5},{x:3,y:6},{x:4,y:6},
+      {x:3,y:11},{x:4,y:11},{x:3,y:12},{x:4,y:12},{x:3,y:13},{x:4,y:13},
+      {x:6,y:5},{x:6,y:6},{x:6,y:12},{x:6,y:13},
+      // Central crate stacks
+      {x:8,y:5},{x:9,y:5},{x:8,y:6},{x:9,y:6},
+      {x:8,y:10},{x:9,y:10},{x:8,y:11},{x:9,y:11},
+      {x:11,y:7},{x:12,y:7},{x:11,y:8},{x:12,y:8},
+      {x:11,y:12},{x:12,y:12},{x:11,y:13},{x:12,y:13},
+      // Right-side office enclosure (door gaps at x=16)
+      {x:15,y:3},{x:16,y:3},{x:17,y:3},
+      {x:15,y:4},{x:17,y:4},
+      {x:15,y:5},{x:17,y:5},
+      {x:15,y:6},{x:17,y:6},
+      // Loading bay barricades
+      {x:14,y:13},{x:16,y:13},{x:14,y:14},{x:15,y:14},{x:16,y:14},
+      {x:14,y:15},{x:16,y:15}
+    ]),
+    guardPatrol: shiftArray6([
+      {x:6,y:8},{x:13,y:8},{x:13,y:12},{x:6,y:12}
+    ]),
+    dataCore: shiftBy6({x:16,y:5}),
+    keyCard: shiftBy6({x:5,y:12}),
+    hackTerminal: shiftBy6({x:10,y:9}),
+    playerStart: shiftBy6({x:2,y:14}),
+    exitZone: shiftBy6({x:20,y:3}),
+    cameras: shiftArray6([{x:7,y:2},{x:16,y:10}]),
+    motionSensors: shiftArray6([{x:10,y:14}]),
+    laserGrids: shiftArray6([{x:12,y:5,h:true},{x:14,y:9,v:true}]),
+    patrolDrones: [
+      {x:17,y:11,patrol:shiftArray6([{x:15,y:9},{x:19,y:9},{x:19,y:13},{x:15,y:13}])}
+    ],
+    securityCode: shiftBy6({x:6,y:4}),
+    powerCell: shiftBy6({x:15,y:15}),
+    difficulty: 1
+  },
+
+// Level 2: Labs - 22x18 map
+  { name: 'Labs', obstacles: shiftArray6([
+      // Lab equipment rows (left side)
+      {x:4,y:2},{x:4,y:3},{x:4,y:4},
+      // Central work area
+      {x:7,y:6},{x:8,y:6},{x:9,y:6},
+      {x:7,y:7},{x:9,y:7},
+      {x:7,y:8},{x:8,y:8},{x:9,y:8},
+      // Right-side storage
+      {x:12,y:2},{x:13,y:2},{x:14,y:2},
+      // Lower corridor
+      {x:2,y:9},{x:3,y:9},{x:4,y:9},
+      {x:6,y:11},{x:7,y:11}
+    ]),
+    guardPatrol:shiftArray6([{x:11,y:4},{x:5,y:4},{x:5,y:11},{x:11,y:11}]),
+    dataCore:shiftBy6({x:14,y:2}), keyCard:shiftBy6({x:2,y:2}), hackTerminal:shiftBy6({x:6,y:4}), playerStart:shiftBy6({x:2,y:11}), exitZone:shiftBy6({x:15,y:2}), cameras:shiftArray6([{x:7,y:2},{x:2,y:6},{x:12,y:11}]), motionSensors:shiftArray6([{x:9,y:4},{x:5,y:9}]), laserGrids:shiftArray6([{x:6,y:5,h:true},{x:11,y:7,v:true}]), patrolDrones:[{x:7+6,y:8+6,patrol:shiftArray6([{x:7,y:8},{x:11,y:8},{x:11,y:3},{x:7,y:3}])}], securityCode:shiftBy6({x:4,y:2}), powerCell:shiftBy6({x:13,y:10}), difficulty: 1 },
   
   // Level 3: Server Farm - 22x18 map
-  { name: 'Server Farm', obstacles: shiftArray6([{x:3,y:2},{x:4,y:2},{x:7,y:2},{x:8,y:2},{x:3,y:4},{x:8,y:4},{x:3,y:6},{x:4,y:6},{x:7,y:6},{x:8,y:6},{x:5,y:8},{x:6,y:8},{x:2,y:10},{x:5,y:10},{x:9,y:10},{x:13,y:10},{x:2,y:11},{x:3,y:11},{x:12,y:11},{x:13,y:11}]), guardPatrol:shiftArray6([{x:2,y:8},{x:15,y:8},{x:15,y:4},{x:2,y:4}]), dataCore:shiftBy6({x:15,y:11}), keyCard:shiftBy6({x:5,y:2}), hackTerminal:shiftBy6({x:11,y:8}), playerStart:shiftBy6({x:2,y:2}), exitZone:shiftBy6({x:15,y:6}), cameras:shiftArray6([{x:2,y:4},{x:14,y:10}]), motionSensors:shiftArray6([{x:5,y:6},{x:9,y:4}]), laserGrids:shiftArray6([{x:4,y:4,v:true},{x:9,y:8,h:true}]), patrolDrones:[{x:6+6,y:5+6,patrol:shiftArray6([{x:6,y:5},{x:11,y:5},{x:11,y:10},{x:6,y:10}])}], securityCode:shiftBy6({x:2,y:10}), powerCell:shiftBy6({x:15,y:2}), difficulty: 2 },
+  { name: 'Server Farm', obstacles: shiftArray6([{x:3,y:2},{x:4,y:2},{x:7,y:2},{x:8,y:2},{x:3,y:4},{x:8,y:4},{x:3,y:6},{x:4,y:6},{x:7,y:6},{x:8,y:6},{x:5,y:8},{x:6,y:8},{x:2,y:10},{x:5,y:10},{x:9,y:10},{x:13,y:10},{x:2,y:11},{x:3,y:11},{x:12,y:11},{x:13,y:11}]), guardPatrol:shiftArray6([{x:2,y:8},{x:15,y:8},{x:15,y:4},{x:2,y:4}]), dataCore:shiftBy6({x:15,y:11}), keyCard:shiftBy6({x:5,y:2}), hackTerminal:shiftBy6({x:11,y:8}), playerStart:shiftBy6({x:2,y:2}), exitZone:shiftBy6({x:15,y:6}), cameras:shiftArray6([{x:2,y:4},{x:14,y:10},{x:8,y:2}]), motionSensors:shiftArray6([{x:5,y:6},{x:9,y:4}]), laserGrids:shiftArray6([{x:4,y:4,v:true},{x:9,y:8,h:true}]), patrolDrones:[{x:6+6,y:5+6,patrol:shiftArray6([{x:6,y:5},{x:11,y:5},{x:11,y:10},{x:6,y:10}])}], securityCode:shiftBy6({x:2,y:10}), powerCell:shiftBy6({x:15,y:2}), difficulty: 2 },
   
   // Level 4: Comms Tower - 22x18 map
   // Two terminals must be hacked in sequence; dense drone corridor in center
   { name: 'Comms Tower', obstacles: shiftArray6([
-      // Upper antenna array (top-left cluster)
+      // Upper antenna array (top-left cluster) - expanded
       {x:2,y:1},{x:3,y:1},{x:4,y:1},{x:2,y:2},{x:4,y:2},
-      // Central server rack corridor walls
+      // Central corridor walls - denser
       {x:5,y:3},{x:6,y:3},{x:5,y:4},{x:6,y:4},
       {x:5,y:5},{x:6,y:5},{x:5,y:6},{x:6,y:6},
-      // Right-side comms room
-      {x:9,y:2},{x:10,y:2},{x:11,y:2},{x:9,y:3},{x:11,y:3},
-      // Lower equipment bays
+      // Right-side comms room - expanded further right
+      {x:9,y:2},{x:10,y:2},{x:11,y:2},{x:12,y:2},{x:9,y:3},{x:11,y:3},{x:12,y:3},
+      // Lower equipment bays - expanded 
       {x:2,y:6},{x:3,y:6},{x:2,y:7},{x:3,y:7},
-      {x:9,y:7},{x:10,y:7},{x:11,y:7}
+      {x:9,y:7},{x:10,y:7},{x:11,y:7},{x:12,y:7},
+      // Bottom row extensions
+      {x:2,y:9},{x:3,y:9},{x:9,y:9},{x:10,y:9}
     ]),
     guardPatrol: shiftArray6([
-      {x:4,y:2},{x:8,y:2},{x:8,y:7},{x:4,y:7}
+      {x:4,y:2},{x:10,y:2},{x:10,y:9},{x:4,y:9}
     ]),
-    dataCore:shiftBy6({x:10,y:5}),
-    keyCard:shiftBy6({x:3,y:8}),
+    dataCore:shiftBy6({x:12,y:5}),
+    keyCard:shiftBy6({x:3,y:10}),
     hackTerminal:shiftBy6({x:3,y:3}),
-    relayTerminal:shiftBy6({x:10,y:4}),
+    relayTerminal:shiftBy6({x:12,y:4}),
     playerStart:shiftBy6({x:2,y:5}),
-    exitZone:shiftBy6({x:12,y:5}),
+    exitZone:shiftBy6({x:14,y:5}),
     cameras:shiftArray6([
-      {x:4,y:1},{x:8,y:8},{x:11,y:5}
+      {x:4,y:1},{x:10,y:10},{x:12,y:5}
     ]),
     motionSensors:shiftArray6([
-      {x:7,y:5},{x:4,y:6}
+      {x:7,y:5},{x:4,y:8},{x:10,y:7}
     ]),
     laserGrids:shiftArray6([
-      {x:4,y:5,h:true},{x:8,y:5,h:true}
+      {x:4,y:5,h:true},{x:10,y:5,v:true}
     ]),
     patrolDrones:[
-      {x:7+6,y:3+6,patrol:shiftArray6([{x:7,y:3},{x:7,y:7},{x:4,y:7},{x:4,y:3}])},
-      {x:9+6,y:4+6,patrol:shiftArray6([{x:9,y:4},{x:9,y:8},{x:12,y:8},{x:12,y:4}])}
+      {x:7+6,y:3+6,patrol:shiftArray6([{x:7,y:3},{x:7,y:8},{x:4,y:8},{x:4,y:3}])},
+      {x:9+6,y:6+6,patrol:shiftArray6([{x:9,y:6},{x:9,y:10},{x:13,y:10},{x:13,y:6}])}
     ],
-    securityCode:shiftBy6({x:11,y:8}),
+    securityCode:shiftBy6({x:11,y:10}),
     powerCell:shiftBy6({x:2,y:1}),
     difficulty: 2
   },

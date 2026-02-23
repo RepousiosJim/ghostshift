@@ -3982,7 +3982,6 @@ class GameScene extends Phaser.Scene {
     this.alarmRemaining = this.alarmTimer;
     this.createMap();
     this.createEntities();
-    this.runCount = (saveManager.data.totalRuns || 0) + 1;
     this.createUI();
     this.createPauseMenu();
     // Phase 11: Add level start briefing for onboarding - shows tips for first-time players
@@ -4390,7 +4389,10 @@ class GameScene extends Phaser.Scene {
     hudCorner.lineBetween(cornerX, cornerY, cornerX, cornerY + cornerSize);
     
     // Bottom edge of HUD panel (subtle line)
-    const hudHeight = this.hasRelayTerminal ? 215 : 200;
+    const extraObjectives = (this.hasRelayTerminal ? 1 : 0)
+      + (this.currentLayout?.securityCode ? 1 : 0)
+      + (this.currentLayout?.powerCell ? 1 : 0);
+    const hudHeight = 200 + (extraObjectives * 16);
     hudCorner.lineStyle(1, 0x223344, 0.25);
     hudCorner.lineBetween(cornerX, cornerY + hudHeight, cornerX + 180, cornerY + hudHeight);
     

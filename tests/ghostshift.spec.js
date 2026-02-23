@@ -18,8 +18,8 @@ function assertNoRuntimeCrashes(pageErrors, consoleErrors) {
   ).toEqual([])
 }
 
-const GAME_WIDTH = 16 * 48
-const GAME_HEIGHT = 12 * 48
+const GAME_WIDTH = 22 * 48
+const GAME_HEIGHT = 18 * 48
 
 async function clickGamePoint(page, x, y) {
   const canvas = page.locator('canvas')
@@ -70,18 +70,22 @@ test('Main menu settings -> back -> controls navigation works', async ({ page })
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await expect(page.locator('canvas')).toHaveCount(1)
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('MainMenuScene'))
+  await page.waitForTimeout(500) // Wait for menu to be fully ready
 
   const centerX = GAME_WIDTH / 2
   const startY = 190
   const spacing = 65
 
   await clickGamePoint(page, centerX, startY + spacing * 4)
+  await page.waitForTimeout(500) // Wait for transition
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('SettingsScene'))
 
   await clickGamePoint(page, 40, 20)
+  await page.waitForTimeout(500)
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('MainMenuScene'))
 
   await clickGamePoint(page, centerX, startY + spacing * 3)
+  await page.waitForTimeout(500)
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('ControlsScene'))
 
   assertNoRuntimeCrashes(pageErrors, consoleErrors)
@@ -219,6 +223,7 @@ test('Main menu controls -> back -> settings navigation works', async ({ page })
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await expect(page.locator('canvas')).toHaveCount(1)
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('MainMenuScene'))
+  await page.waitForTimeout(500) // Wait for menu to be fully ready
 
   const centerX = GAME_WIDTH / 2
   const startY = 190
@@ -226,14 +231,17 @@ test('Main menu controls -> back -> settings navigation works', async ({ page })
 
   // MainMenu -> Controls
   await clickGamePoint(page, centerX, startY + spacing * 3)
+  await page.waitForTimeout(500)
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('ControlsScene'))
 
   // Controls -> Back (to MainMenu)
   await clickGamePoint(page, 40, 20)
+  await page.waitForTimeout(500)
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('MainMenuScene'))
 
   // MainMenu -> Settings
   await clickGamePoint(page, centerX, startY + spacing * 4)
+  await page.waitForTimeout(500)
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('SettingsScene'))
 
   assertNoRuntimeCrashes(pageErrors, consoleErrors)
@@ -245,6 +253,7 @@ test('Main menu -> level select -> back -> main menu navigation works', async ({
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await expect(page.locator('canvas')).toHaveCount(1)
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('MainMenuScene'))
+  await page.waitForTimeout(500) // Wait for menu to be fully ready
 
   const centerX = GAME_WIDTH / 2
   const startY = 190
@@ -252,10 +261,12 @@ test('Main menu -> level select -> back -> main menu navigation works', async ({
 
   // MainMenu -> LevelSelect (via PLAY button)
   await clickGamePoint(page, centerX, startY)
+  await page.waitForTimeout(500)
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('LevelSelectScene'))
 
   // LevelSelect -> Back (to MainMenu)
   await clickGamePoint(page, 40, 20)
+  await page.waitForTimeout(500)
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('MainMenuScene'))
 
   assertNoRuntimeCrashes(pageErrors, consoleErrors)
@@ -267,12 +278,14 @@ test('Level select -> play level -> restart cycle works', async ({ page }) => {
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await expect(page.locator('canvas')).toHaveCount(1)
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('MainMenuScene'))
+  await page.waitForTimeout(500) // Wait for menu to be fully ready
 
   const centerX = GAME_WIDTH / 2
   const startY = 190
 
   // MainMenu -> LevelSelect
   await clickGamePoint(page, centerX, startY)
+  await page.waitForTimeout(500)
   await page.waitForFunction(() => window.__ghostGame?.scene?.isActive('LevelSelectScene'))
 
   // Click on first level card (y position: startY=80, spacingY=70)
