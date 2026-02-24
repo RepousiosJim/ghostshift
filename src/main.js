@@ -1886,57 +1886,690 @@ class MainMenuScene extends Phaser.Scene {
     // Premium background using BackgroundComposer (hero variant)
     this.backgroundComposer = new BackgroundComposer(this, { variant: 'hero' });
     
-    // Title
-    this.titleText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, 50, 'GHOSTSHIFT', { fontSize: '40px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
-    this.subtitleText = this.add.text(MAP_WIDTH * TILE_SIZE / 2, 85, 'Infiltrate. Hack. Escape.', { fontSize: '14px', fill: '#666688', fontFamily: 'Courier New' }).setOrigin(0.5);
+    // ========== PHASE A: COMMAND-CENTER LAYOUT ==========
+    // Three-column layout: Left (progression) | Center (actions) | Right (utility)
+    const screenCenterX = MAP_WIDTH * TILE_SIZE / 2;
+    const screenCenterY = MAP_HEIGHT * TILE_SIZE / 2;
+    
+    // Column X positions
+    const leftColX = 160;      // Left progression panel
+    const centerColX = screenCenterX;  // Center action stack
+    const rightColX = MAP_WIDTH * TILE_SIZE - 160;  // Right utility panel
+    
+    // ========== ENHANCED TITLE (Center Top) ==========
+    this.titleText = this.add.text(screenCenterX, 42, 'GHOSTSHIFT', { 
+      fontSize: '48px', 
+      fill: '#4488ff', 
+      fontFamily: 'Courier New', 
+      fontStyle: 'bold',
+      stroke: '#4488ff',
+      strokeThickness: 2
+    }).setOrigin(0.5);
+    this.titleText.setShadow(0, 0, '#4488ff', 12, true, true);
+    
+    this.subtitleText = this.add.text(screenCenterX, 82, 'INFILTRATE · HACK · ESCAPE', { 
+      fontSize: '13px', 
+      fill: '#667788', 
+      fontFamily: 'Courier New',
+      letterSpacing: 3
+    }).setOrigin(0.5);
     
     // Title glow animation
     this.tweens.add({
       targets: this.titleText,
-      alpha: 0.8,
-      duration: 1500,
+      alpha: { from: 1, to: 0.85 },
+      duration: 2000,
       yoyo: true,
       repeat: -1,
       ease: 'Sine.easeInOut'
     });
     
-    // Stats bar (compact, top-left)
-    if (saveManager.hasSave()) {
-      this.add.text(40, 108, 'Runs: ' + saveManager.data.totalRuns + ' | Best: ' + this.formatTime(saveManager.data.bestTime), { fontSize: '11px', fill: '#667788', fontFamily: 'Courier New' });
-    }
+    // ========== LEFT PANEL: PROGRESSION ==========
+    this.createProgressionPanel(leftColX, 130);
     
-    // ========== PREMIUM STARS SUMMARY CARD ==========
-    // Polished card with progress visualization and per-level grid
-    this.createStarsSummaryCard();
+    // ========== RIGHT PANEL: UTILITY ==========
+    this.createUtilityPanel(rightColX, 130);
     
-    // ========== PREMIUM CREDITS DISPLAY ==========
-    // Enhanced credits panel with neon sci-fi styling
-    this.createCreditsDisplay();
-    
-    // Phase 7: Larger buttons with better spacing
-    const buttonWidth = 300, buttonHeight = 52, startY = 190, spacing = 65;
-    
-    // Main play button (larger, more prominent)
-    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY, buttonWidth, buttonHeight, '▶  PLAY', 0x2244aa, 0x66aaff, () => this.transitionTo('LevelSelectScene'));
-    
-    const canContinue = saveManager.hasSave();
-    const lastPlayedLevel = saveManager.getLastPlayed() ? saveManager.data.unlockedLevels[saveManager.data.unlockedLevels.length - 1] : 0;
-    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing, buttonWidth, buttonHeight, '↻  CONTINUE', canContinue ? 0x1a4a2a : 0x1a1a1a, canContinue ? 0x66ff88 : 0x444444, () => { 
-      if (canContinue) {
-        this.transitionTo('GameScene', { levelIndex: lastPlayedLevel, continueRun: true }); 
-      }
-    }, !canContinue);
-    
-    // How to Play (new - kid-friendly guide)
-    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 2, buttonWidth, buttonHeight, '📖  HOW TO PLAY', 0x1a3a5a, 0x66ccff, () => this.showHowToPlayOverlay());
-    
-    // Controls and other menu items
-    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 3, buttonWidth, buttonHeight, '🎮  CONTROLS', 0x2a3a4a, 0xaaaacc, () => this.transitionTo('ControlsScene'));
-    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 4, buttonWidth, buttonHeight, '⚙  SETTINGS', 0x2a3a4a, 0xaaaacc, () => this.transitionTo('SettingsScene'));
-    this.createMenuButton(MAP_WIDTH * TILE_SIZE / 2, startY + spacing * 5, buttonWidth, buttonHeight, '★  CREDITS', 0x2a3a4a, 0xaaaacc, () => this.showCreditsOverlay());
+    // ========== CENTER PANEL: PRIMARY ACTIONS ==========
+    this.createPrimaryActionStack(centerColX, 200);
     
     this.input.keyboard.once('keydown', () => sfx.init());
     this.input.on('pointerdown', () => sfx.init(), this);
+  }
+  
+  // ========== PHASE A: PROGRESSION PANEL (Left) ==========
+  createProgressionPanel(x, y) {
+    const panelWidth = 240;
+    const panelHeight = 380;
+    
+    this.progressionPanelElements = [];
+    
+    // Panel background with glow
+    const panelGlow = this.add.rectangle(x, y + panelHeight / 2, panelWidth + 10, panelHeight + 10, 0x4488ff, 0.05);
+    const panelBg = this.add.rectangle(x, y + panelHeight / 2, panelWidth, panelHeight, 0x0d1117, 0.92);
+    panelBg.setStrokeStyle(1, 0x2a3a4a);
+    this.progressionPanelElements.push(panelGlow, panelBg);
+    
+    // Section title
+    const sectionTitle = this.add.text(x, y + 15, 'PROGRESSION', { 
+      fontSize: '11px', 
+      fill: '#667788', 
+      fontFamily: 'Courier New',
+      letterSpacing: 2
+    }).setOrigin(0.5);
+    this.progressionPanelElements.push(sectionTitle);
+    
+    // Stars summary
+    const totalStars = saveManager.getTotalStars();
+    const maxStars = saveManager.getMaxStars();
+    const progress = maxStars > 0 ? totalStars / maxStars : 0;
+    
+    // Star icon with glow
+    const starIcon = this.add.text(x - 60, y + 55, '★', { 
+      fontSize: '32px', 
+      fill: '#ffdd00', 
+      fontFamily: 'Courier New'
+    }).setOrigin(0.5);
+    starIcon.setShadow(0, 0, '#ffdd00', 8, true, true);
+    this.progressionPanelElements.push(starIcon);
+    
+    // Phase B: Add sparkle effects around the star icon
+    this._createStarSparkles(x - 50, y + 45);
+    
+    // Star count
+    const starCount = this.add.text(x - 20, y + 45, `${totalStars}`, { 
+      fontSize: '28px', 
+      fill: '#ffffff', 
+      fontFamily: 'Courier New',
+      fontStyle: 'bold'
+    }).setOrigin(0, 0.5);
+    const starMax = this.add.text(x - 20, y + 70, `/ ${maxStars} stars`, { 
+      fontSize: '12px', 
+      fill: '#667788', 
+      fontFamily: 'Courier New'
+    }).setOrigin(0, 0.5);
+    this.progressionPanelElements.push(starCount, starMax);
+    
+    // Progress bar
+    const barWidth = 180;
+    const barHeight = 10;
+    const barY = y + 100;
+    const barX = x - barWidth / 2;
+    
+    const progressBg = this.add.rectangle(x, barY, barWidth, barHeight, 0x1a2030);
+    progressBg.setStrokeStyle(1, 0x2a3a4a);
+    this.progressionPanelElements.push(progressBg);
+    
+    const progressFill = this.add.rectangle(
+      barX + (barWidth * progress) / 2,
+      barY,
+      Math.max(4, barWidth * progress),
+      barHeight - 2,
+      0xffdd00,
+      0.9
+    );
+    this.progressionPanelElements.push(progressFill);
+    
+    // Animate progress bar
+    progressFill.setScale(0.01, 1);
+    this.tweens.add({
+      targets: progressFill,
+      scaleX: 1,
+      duration: 1000,
+      ease: 'Quad.easeOut',
+      delay: 300
+    });
+    
+    // Percentage
+    const progressPct = this.add.text(x + barWidth / 2 + 8, barY, `${Math.round(progress * 100)}%`, { 
+      fontSize: '11px', 
+      fill: '#66aacc', 
+      fontFamily: 'Courier New'
+    }).setOrigin(0, 0.5);
+    this.progressionPanelElements.push(progressPct);
+    
+    // Level grid
+    const gridY = y + 140;
+    const cellWidth = 36;
+    const cellHeight = 28;
+    const cols = 5;
+    const gridStartX = x - (cols * cellWidth) / 2 + cellWidth / 2;
+    
+    LEVEL_LAYOUTS.forEach((level, index) => {
+      const isUnlocked = saveManager.isLevelUnlocked(index);
+      const mastery = saveManager.getMastery(index);
+      const stars = mastery?.stars || 0;
+      
+      const col = index % cols;
+      const row = Math.floor(index / cols);
+      const cellX = gridStartX + col * cellWidth;
+      const cellY = gridY + row * cellHeight;
+      
+      // Badge
+      const badge = this.add.rectangle(cellX, cellY, cellWidth - 4, cellHeight - 4,
+        isUnlocked ? 0x1a2a3a : 0x0a0c10, 0.9);
+      badge.setStrokeStyle(1, isUnlocked ? (stars >= 5 ? 0xffdd00 : 0x4488ff) : 0x252530);
+      this.progressionPanelElements.push(badge);
+      
+      // Level number
+      const levelNum = this.add.text(cellX - 6, cellY, String(index + 1), { 
+        fontSize: '10px', 
+        fill: isUnlocked ? '#66aaff' : '#445566', 
+        fontFamily: 'Courier New',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      this.progressionPanelElements.push(levelNum);
+      
+      // Stars
+      const starText = this.add.text(cellX + 8, cellY, isUnlocked ? `${stars}★` : '🔒', { 
+        fontSize: '8px', 
+        fill: isUnlocked ? (stars > 0 ? '#ffdd00' : '#667788') : '#334455', 
+        fontFamily: 'Courier New'
+      }).setOrigin(0.5);
+      this.progressionPanelElements.push(starText);
+      
+      // Glow for completed levels
+      if (stars >= 5) {
+        this.tweens.add({
+          targets: badge,
+          alpha: 0.7,
+          duration: 2000,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.easeInOut'
+        });
+      }
+    });
+    
+    // Stats section
+    const statsY = gridY + Math.ceil(LEVEL_LAYOUTS.length / cols) * cellHeight + 20;
+    
+    if (saveManager.hasSave()) {
+      const runsText = this.add.text(x, statsY, `RUNS: ${saveManager.data.totalRuns}`, { 
+        fontSize: '11px', 
+        fill: '#667788', 
+        fontFamily: 'Courier New'
+      }).setOrigin(0.5);
+      this.progressionPanelElements.push(runsText);
+      
+      if (saveManager.data.bestTime) {
+        const bestText = this.add.text(x, statsY + 18, `BEST: ${this.formatTime(saveManager.data.bestTime)}`, { 
+          fontSize: '11px', 
+          fill: '#66ccff', 
+          fontFamily: 'Courier New'
+        }).setOrigin(0.5);
+        this.progressionPanelElements.push(bestText);
+      }
+    }
+    
+    // Panel bounds for resize
+    this._progressionPanelBounds = { x: x - panelWidth/2, y, width: panelWidth, height: panelHeight };
+  }
+  
+  // ========== PHASE A: UTILITY PANEL (Right) ==========
+  createUtilityPanel(x, y) {
+    const panelWidth = 200;
+    const panelHeight = 380;
+    
+    this.utilityPanelElements = [];
+    
+    // Panel background
+    const panelBg = this.add.rectangle(x, y + panelHeight / 2, panelWidth, panelHeight, 0x0d1117, 0.92);
+    panelBg.setStrokeStyle(1, 0x2a3a4a);
+    this.utilityPanelElements.push(panelBg);
+    
+    // Section title
+    const sectionTitle = this.add.text(x, y + 15, 'UTILITIES', { 
+      fontSize: '11px', 
+      fill: '#667788', 
+      fontFamily: 'Courier New',
+      letterSpacing: 2
+    }).setOrigin(0.5);
+    this.utilityPanelElements.push(sectionTitle);
+    
+    // Credits display
+    const credits = saveManager.data.credits;
+    const creditsY = y + 55;
+    
+    const creditsIcon = this.add.text(x - 50, creditsY, '◆', { 
+      fontSize: '22px', 
+      fill: '#ffaa00', 
+      fontFamily: 'Courier New'
+    }).setOrigin(0.5);
+    creditsIcon.setShadow(0, 0, '#ffaa00', 6, true, true);
+    this.utilityPanelElements.push(creditsIcon);
+    
+    const creditsCount = this.add.text(x - 20, creditsY - 5, `${credits}`, { 
+      fontSize: '22px', 
+      fill: '#ffffff', 
+      fontFamily: 'Courier New',
+      fontStyle: 'bold'
+    }).setOrigin(0, 0.5);
+    this.utilityPanelElements.push(creditsCount);
+    this.creditsText = creditsCount;
+    
+    const creditsLabel = this.add.text(x - 20, creditsY + 15, 'CREDITS', { 
+      fontSize: '10px', 
+      fill: '#667788', 
+      fontFamily: 'Courier New'
+    }).setOrigin(0, 0.5);
+    this.utilityPanelElements.push(creditsLabel);
+    
+    // Pulse animation for credits icon
+    this.tweens.add({
+      targets: creditsIcon,
+      alpha: 0.6,
+      duration: 2000,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
+    
+    // Phase B: Add sparkle effects around credits
+    this._createCreditSparkles(x - 50, creditsY);
+    
+    // Secondary action buttons (smaller, stacked)
+    const buttonWidth = 160;
+    const buttonHeight = 40;
+    const buttonStartY = y + 110;
+    const buttonSpacing = 50;
+    
+    // How to Play
+    this.createSecondaryButton(x, buttonStartY, buttonWidth, buttonHeight, '📖 HOW TO PLAY', 0x1a3a5a, 0x66ccff, () => this.showHowToPlayOverlay());
+    
+    // Controls
+    this.createSecondaryButton(x, buttonStartY + buttonSpacing, buttonWidth, buttonHeight, '🎮 CONTROLS', 0x2a3a4a, 0x88aacc, () => this.transitionTo('ControlsScene'));
+    
+    // Settings
+    this.createSecondaryButton(x, buttonStartY + buttonSpacing * 2, buttonWidth, buttonHeight, '⚙ SETTINGS', 0x2a3a4a, 0x88aacc, () => this.transitionTo('SettingsScene'));
+    
+    // Credits (game credits, not currency)
+    this.createSecondaryButton(x, buttonStartY + buttonSpacing * 3, buttonWidth, buttonHeight, '★ GAME CREDITS', 0x2a3a4a, 0x88aacc, () => this.showCreditsOverlay());
+    
+    // Panel bounds for resize
+    this._utilityPanelBounds = { x: x - panelWidth/2, y, width: panelWidth, height: panelHeight };
+  }
+  
+  // ========== PHASE B: CREDIT SPARKLE EFFECTS ==========
+  _createCreditSparkles(centerX, centerY) {
+    // Create subtle sparkle effects around the credits icon
+    if (!this._creditSparkles) this._creditSparkles = [];
+    
+    const sparkleCount = 3;
+    for (let i = 0; i < sparkleCount; i++) {
+      const angle = (Math.PI * 2 * i) / sparkleCount;
+      const distance = 25 + Math.random() * 10;
+      const x = centerX + Math.cos(angle) * distance;
+      const y = centerY + Math.sin(angle) * distance;
+      
+      const sparkle = this.add.graphics();
+      sparkle.fillStyle(0xffdd00, 0.8);
+      sparkle.fillCircle(0, 0, 2);
+      sparkle.fillStyle(0xffffff, 1);
+      sparkle.fillCircle(0, 0, 1);
+      sparkle.x = x;
+      sparkle.y = y;
+      sparkle.setAlpha(0);
+      sparkle.setDepth(10);
+      
+      this._creditSparkles.push({
+        graphics: sparkle,
+        baseX: x,
+        baseY: y,
+        phase: Math.random() * Math.PI * 2,
+        speed: 0.03 + Math.random() * 0.02
+      });
+    }
+    
+    // Animate sparkles
+    if (!this._sparkleTimer) {
+      this._sparkleTimer = this.time.addEvent({
+        delay: 33,
+        callback: () => this._updateCreditSparkles(),
+        loop: true
+      });
+    }
+  }
+  
+  _updateCreditSparkles() {
+    if (!this._creditSparkles) return;
+    
+    this._creditSparkles.forEach(sparkle => {
+      sparkle.phase += sparkle.speed;
+      const alpha = Math.max(0, Math.sin(sparkle.phase) * 0.7);
+      const scale = 0.8 + Math.sin(sparkle.phase * 0.5) * 0.3;
+      
+      sparkle.graphics.setAlpha(alpha);
+      sparkle.graphics.setScale(scale);
+    });
+  }
+  
+  // ========== PHASE B: STAR SPARKLE EFFECTS ==========
+  _createStarSparkles(centerX, centerY) {
+    // Create subtle sparkle effects around the star icon
+    if (!this._starSparkles) this._starSparkles = [];
+    
+    const sparkleCount = 4;
+    for (let i = 0; i < sparkleCount; i++) {
+      const angle = (Math.PI * 2 * i) / sparkleCount + Math.random() * 0.5;
+      const distance = 30 + Math.random() * 15;
+      const x = centerX + Math.cos(angle) * distance;
+      const y = centerY + Math.sin(angle) * distance;
+      
+      const sparkle = this.add.graphics();
+      sparkle.fillStyle(0xffdd00, 0.9);
+      sparkle.fillCircle(0, 0, 2.5);
+      sparkle.fillStyle(0xffffff, 1);
+      sparkle.fillCircle(0, 0, 1.2);
+      sparkle.x = x;
+      sparkle.y = y;
+      sparkle.setAlpha(0);
+      sparkle.setDepth(10);
+      
+      this._starSparkles.push({
+        graphics: sparkle,
+        baseX: x,
+        baseY: y,
+        phase: Math.random() * Math.PI * 2,
+        speed: 0.025 + Math.random() * 0.02
+      });
+    }
+    
+    // Reuse sparkle timer if it exists (both sparkles use same timer)
+    if (!this._sparkleTimer) {
+      this._sparkleTimer = this.time.addEvent({
+        delay: 33,
+        callback: () => {
+          this._updateCreditSparkles();
+          this._updateStarSparkles();
+        },
+        loop: true
+      });
+    }
+  }
+  
+  _updateStarSparkles() {
+    if (!this._starSparkles) return;
+    
+    this._starSparkles.forEach(sparkle => {
+      sparkle.phase += sparkle.speed;
+      const alpha = Math.max(0, Math.sin(sparkle.phase) * 0.8);
+      const scale = 0.7 + Math.sin(sparkle.phase * 0.6) * 0.4;
+      
+      sparkle.graphics.setAlpha(alpha);
+      sparkle.graphics.setScale(scale);
+    });
+  }
+  
+  // ========== PHASE A: PRIMARY ACTION STACK (Center) ==========
+  createPrimaryActionStack(x, y) {
+    // Main PLAY button - prominent CTA
+    const playWidth = 320;
+    const playHeight = 64;
+    
+    this.createPrimaryButton(x, y, playWidth, playHeight, '▶  PLAY', 0x2255cc, 0x66aaff, () => this.transitionTo('LevelSelectScene'), true);
+    
+    // Continue button
+    const canContinue = saveManager.hasSave();
+    const lastPlayedLevel = saveManager.getLastPlayed() ? saveManager.data.unlockedLevels[saveManager.data.unlockedLevels.length - 1] : 0;
+    const continueWidth = 320;
+    const continueHeight = 56;
+    const continueY = y + 85;
+    
+    this.createPrimaryButton(x, continueY, continueWidth, continueHeight, '↻  CONTINUE', 
+      canContinue ? 0x1a5a2a : 0x1a1a1a, 
+      canContinue ? 0x66ff88 : 0x444444, 
+      () => { 
+        if (canContinue) {
+          this.transitionTo('GameScene', { levelIndex: lastPlayedLevel, continueRun: true }); 
+        }
+      }, 
+      false,
+      !canContinue,
+      canContinue ? null : 'No save data'
+    );
+    
+    // Store continue button for potential updates
+    this._continueButtonY = continueY;
+  }
+  
+  // ========== PHASE A: PRIMARY BUTTON (Enhanced) ==========
+  createPrimaryButton(x, y, width, height, text, bgColor, strokeColor, onClick, isPrimary = false, disabled = false, hint = null) {
+    // Phase B: Staggered entrance animation - increment delay for each button
+    if (!this._buttonEntranceIndex) this._buttonEntranceIndex = 0;
+    const entranceDelay = 300 + (this._buttonEntranceIndex * 80);
+    this._buttonEntranceIndex++;
+    
+    // Outer glow
+    const glowColor = disabled ? 0x222230 : strokeColor;
+    const glowAlpha = disabled ? 0.06 : (isPrimary ? 0.25 : 0.15);
+    const outerGlow = this.add.rectangle(x, y, width + 12, height + 12, glowColor, glowAlpha);
+    
+    // Inner highlight
+    const highlight = this.add.rectangle(x, y - height/2 + 3, width - 8, 2, disabled ? 0x333340 : 0xffffff, disabled ? 0.03 : 0.15);
+    
+    // Main background
+    const bg = this.add.rectangle(x, y, width, height, bgColor);
+    bg.setStrokeStyle(isPrimary ? 3 : 2, disabled ? 0x333340 : strokeColor);
+    bg.setInteractive({ useHandCursor: !disabled });
+    
+    // Text shadow
+    const textShadow = this.add.text(x + 1, y + 1, text, { 
+      fontSize: isPrimary ? '20px' : '17px', 
+      fill: '#000000', 
+      fontFamily: 'Courier New', 
+      fontStyle: 'bold', 
+      alpha: disabled ? 0.15 : 0.3 
+    }).setOrigin(0.5);
+    
+    // Main text
+    const label = this.add.text(x, y, text, { 
+      fontSize: isPrimary ? '20px' : '17px', 
+      fill: disabled ? '#444444' : '#ffffff', 
+      fontFamily: 'Courier New', 
+      fontStyle: 'bold' 
+    }).setOrigin(0.5);
+    
+    // Hint text for disabled state
+    let hintText = null;
+    if (hint && disabled) {
+      hintText = this.add.text(x, y + height/2 + 12, hint, { 
+        fontSize: '11px', 
+        fill: '#555566', 
+        fontFamily: 'Courier New',
+        fontStyle: 'italic'
+      }).setOrigin(0.5);
+    }
+    
+    // Pulse glow for primary button
+    let pulseGlow = null;
+    if (!disabled && isPrimary) {
+      pulseGlow = this.add.rectangle(x, y, width - 16, height - 16, strokeColor, 0);
+      this.tweens.add({
+        targets: pulseGlow,
+        alpha: 0.1,
+        duration: 1500,
+        yoyo: true,
+        repeat: -1,
+        ease: 'Sine.easeInOut'
+      });
+    }
+    
+    // Hover/active state handlers
+    const updateHover = (isHovering) => {
+      if (disabled) return;
+      
+      if (isHovering) {
+        bg.setFillStyle(bgColor + 0x202030);
+        bg.setStrokeStyle(isPrimary ? 4 : 3, 0xffffff);
+        outerGlow.setAlpha(isPrimary ? 0.35 : 0.25);
+        highlight.setAlpha(0.25);
+        label.setFill('#ffffff');
+        // Scale effect
+        this.tweens.add({
+          targets: [bg, outerGlow, label, textShadow, highlight, pulseGlow].filter(Boolean),
+          scaleX: 1.02,
+          scaleY: 1.02,
+          duration: 80,
+          ease: 'Quad.easeOut'
+        });
+      } else {
+        bg.setFillStyle(bgColor);
+        bg.setStrokeStyle(isPrimary ? 3 : 2, strokeColor);
+        outerGlow.setAlpha(isPrimary ? 0.25 : 0.15);
+        highlight.setAlpha(0.15);
+        label.setFill('#ffffff');
+        this.tweens.add({
+          targets: [bg, outerGlow, label, textShadow, highlight, pulseGlow].filter(Boolean),
+          scaleX: 1,
+          scaleY: 1,
+          duration: 150,
+          ease: 'Quad.easeOut'
+        });
+      }
+    };
+    
+    bg.on('pointerover', () => { 
+      if (!disabled) { 
+        updateHover(true);
+        sfx.menuHover(); 
+      } 
+    });
+    
+    bg.on('pointerout', () => { 
+      if (!disabled) {
+        updateHover(false);
+      }
+    });
+    
+    bg.on('pointerdown', () => { 
+      if (!disabled) {
+        // Press animation
+        bg.setFillStyle(bgColor - 0x202020);
+        bg.setStrokeStyle(isPrimary ? 3 : 2, strokeColor);
+        
+        this.tweens.add({
+          targets: [bg, outerGlow, highlight, pulseGlow].filter(Boolean),
+          scaleX: 0.96,
+          scaleY: 0.96,
+          duration: 40,
+          yoyo: true,
+          onComplete: () => {
+            bg.setScale(1);
+            if (outerGlow) outerGlow.setScale(1);
+            if (highlight) highlight.setScale(1);
+            if (pulseGlow) pulseGlow.setScale(1);
+            onClick();
+          }
+        });
+        
+        // Flash effect
+        const flash = this.add.rectangle(x, y, width, height, 0xffffff, 0.2);
+        this.tweens.add({
+          targets: flash,
+          alpha: 0,
+          duration: 150,
+          onComplete: () => flash.destroy()
+        });
+      }
+    });
+    
+    // Phase B: Staggered entrance animation (fade + slide up)
+    const allElements = [bg, outerGlow, label, textShadow, highlight, pulseGlow].filter(Boolean);
+    allElements.forEach(el => {
+      el.setAlpha(0);
+      el.y += 20;
+    });
+    
+    this.tweens.add({
+      targets: allElements,
+      alpha: { from: 0, to: 1 },
+      y: '-=20',
+      duration: 350,
+      delay: entranceDelay,
+      ease: 'Quad.easeOut'
+    });
+    
+    return { bg, label, outerGlow, highlight, textShadow, hintText, pulseGlow };
+  }
+  
+  // ========== PHASE A: SECONDARY BUTTON (Smaller) ==========
+  createSecondaryButton(x, y, width, height, text, bgColor, strokeColor, onClick, disabled = false) {
+    // Phase B: Staggered entrance animation - increment delay for each button
+    if (!this._secondaryButtonEntranceIndex) this._secondaryButtonEntranceIndex = 0;
+    const entranceDelay = 400 + (this._secondaryButtonEntranceIndex * 60);
+    this._secondaryButtonEntranceIndex++;
+    
+    // Outer glow (subtle)
+    const outerGlow = this.add.rectangle(x, y, width + 6, height + 6, disabled ? 0x222230 : strokeColor, disabled ? 0.04 : 0.08);
+    
+    // Main background
+    const bg = this.add.rectangle(x, y, width, height, bgColor);
+    bg.setStrokeStyle(1, disabled ? 0x333340 : strokeColor);
+    bg.setInteractive({ useHandCursor: !disabled });
+    
+    // Text
+    const label = this.add.text(x, y, text, { 
+      fontSize: '13px', 
+      fill: disabled ? '#444444' : '#cccccc', 
+      fontFamily: 'Courier New' 
+    }).setOrigin(0.5);
+    
+    // Hover state
+    bg.on('pointerover', () => { 
+      if (!disabled) { 
+        bg.setFillStyle(bgColor + 0x151520);
+        bg.setStrokeStyle(2, 0xffffff);
+        outerGlow.setAlpha(0.15);
+        label.setFill('#ffffff');
+        sfx.menuHover(); 
+      } 
+    });
+    
+    bg.on('pointerout', () => { 
+      if (!disabled) {
+        bg.setFillStyle(bgColor);
+        bg.setStrokeStyle(1, strokeColor);
+        outerGlow.setAlpha(0.08);
+        label.setFill('#cccccc');
+      }
+    });
+    
+    bg.on('pointerdown', () => { 
+      if (!disabled) {
+        bg.setFillStyle(bgColor - 0x101010);
+        this.tweens.add({
+          targets: [bg, outerGlow],
+          scaleX: 0.97,
+          scaleY: 0.97,
+          duration: 30,
+          yoyo: true,
+          onComplete: () => {
+            bg.setScale(1);
+            outerGlow.setScale(1);
+            onClick();
+          }
+        });
+      }
+    });
+    
+    // Phase B: Staggered entrance animation
+    const allElements = [bg, outerGlow, label];
+    allElements.forEach(el => {
+      el.setAlpha(0);
+      el.y += 15;
+    });
+    
+    this.tweens.add({
+      targets: allElements,
+      alpha: { from: 0, to: 1 },
+      y: '-=15',
+      duration: 280,
+      delay: entranceDelay,
+      ease: 'Quad.easeOut'
+    });
+    
+    return { bg, label, outerGlow };
   }
   
   createAnimatedBackground() {
@@ -1980,343 +2613,6 @@ class MainMenuScene extends Phaser.Scene {
   transitionTo(sceneKey, data = null) {
     sfx.click();
     runSceneTransition(this, sceneKey, data);
-  }
-  
-  // ========== PREMIUM STARS SUMMARY CARD ==========
-  // Polished card showing total stars, progress bar, and per-level star grid
-  createStarsSummaryCard() {
-    const totalStars = saveManager.getTotalStars();
-    const maxStars = saveManager.getMaxStars();
-    const progress = maxStars > 0 ? totalStars / maxStars : 0;
-    
-    // Card position - left side of screen, below stats
-    const cardX = 40;
-    const cardY = 125;
-    const cardWidth = 280;
-    const cardHeight = 60;
-    
-    // Store references for cleanup and resize
-    this.starsCardElements = [];
-    
-    // 1. Card background with subtle glow
-    const outerGlow = this.add.rectangle(cardX + cardWidth / 2, cardY + cardHeight / 2, cardWidth + 6, cardHeight + 6, 0xffdd00, 0.08);
-    const cardBg = this.add.rectangle(cardX + cardWidth / 2, cardY + cardHeight / 2, cardWidth, cardHeight, 0x141a24, 0.95);
-    cardBg.setStrokeStyle(1, 0x3a5a6a);
-    this.starsCardElements.push(outerGlow, cardBg);
-    
-    // 2. Star icon with glow animation
-    const starIcon = this.add.text(cardX + 15, cardY + 12, '★', { 
-      fontSize: '24px', 
-      fill: '#ffdd00', 
-      fontFamily: 'Courier New',
-      fontStyle: 'bold'
-    });
-    starIcon.setShadow(0, 0, '#ffdd00', 6, true, true);
-    this.starsCardElements.push(starIcon);
-    
-    // Subtle pulse animation for the star icon
-    this.tweens.add({
-      targets: starIcon,
-      alpha: 0.7,
-      duration: 1500,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut'
-    });
-    
-    // 3. Stars count text
-    const starsCount = this.add.text(cardX + 42, cardY + 8, `${totalStars}/${maxStars}`, { 
-      fontSize: '18px', 
-      fill: '#ffffff', 
-      fontFamily: 'Courier New',
-      fontStyle: 'bold'
-    });
-    const starsLabel = this.add.text(cardX + 42, cardY + 28, 'STARS', { 
-      fontSize: '10px', 
-      fill: '#88aacc', 
-      fontFamily: 'Courier New'
-    });
-    this.starsCardElements.push(starsCount, starsLabel);
-    
-    // 4. Progress bar background
-    const barX = cardX + 115;
-    const barY = cardY + 15;
-    const barWidth = 100;
-    const barHeight = 8;
-    
-    const progressBg = this.add.rectangle(barX + barWidth / 2, barY + barHeight / 2, barWidth, barHeight, 0x1a2030);
-    progressBg.setStrokeStyle(1, 0x2a3a4a);
-    this.starsCardElements.push(progressBg);
-    
-    // 5. Progress bar fill (animated)
-    const progressFill = this.add.rectangle(
-      barX + (barWidth * progress) / 2, 
-      barY + barHeight / 2, 
-      Math.max(2, barWidth * progress), 
-      barHeight - 2, 
-      0xffdd00, 
-      0.9
-    );
-    this.starsCardElements.push(progressFill);
-    
-    // Animate progress bar on first load
-    progressFill.setScale(0.01, 1);
-    this.tweens.add({
-      targets: progressFill,
-      scaleX: 1,
-      duration: 800,
-      ease: 'Quad.easeOut',
-      delay: 200
-    });
-    
-    // 6. Progress percentage text
-    const progressText = this.add.text(barX + barWidth + 8, barY, `${Math.round(progress * 100)}%`, { 
-      fontSize: '11px', 
-      fill: '#66aacc', 
-      fontFamily: 'Courier New'
-    });
-    this.starsCardElements.push(progressText);
-    
-    // 7. Per-level star mini-grid (below the card)
-    const gridY = cardY + cardHeight + 8;
-    const levelCount = LEVEL_LAYOUTS.length;
-    const cellWidth = 38;
-    const cellHeight = 22;
-    const gridStartX = cardX + 5;
-    
-    this.starsGridElements = [];
-    
-    LEVEL_LAYOUTS.forEach((level, index) => {
-      const isUnlocked = saveManager.isLevelUnlocked(index);
-      const mastery = saveManager.getMastery(index);
-      const stars = mastery?.stars || 0;
-      
-      const cellX = gridStartX + index * cellWidth;
-      
-      // Level badge background
-      const badgeBg = this.add.rectangle(cellX + cellWidth / 2 - 2, gridY + cellHeight / 2, cellWidth - 4, cellHeight, 
-        isUnlocked ? 0x1a2a3a : 0x0a0c10, 0.9);
-      badgeBg.setStrokeStyle(1, isUnlocked ? 0x4488ff : 0x252530);
-      this.starsGridElements.push(badgeBg);
-      
-      // Level number
-      const levelNum = this.add.text(cellX + 6, gridY + cellHeight / 2, String(index + 1), { 
-        fontSize: '10px', 
-        fill: isUnlocked ? '#66aaff' : '#445566', 
-        fontFamily: 'Courier New',
-        fontStyle: 'bold'
-      }).setOrigin(0, 0.5);
-      this.starsGridElements.push(levelNum);
-      
-      // Star count for this level
-      const starText = this.add.text(cellX + cellWidth - 8, gridY + cellHeight / 2, isUnlocked ? `${stars}★` : '🔒', { 
-        fontSize: '9px', 
-        fill: isUnlocked ? (stars > 0 ? '#ffdd00' : '#667788') : '#334455', 
-        fontFamily: 'Courier New'
-      }).setOrigin(1, 0.5);
-      this.starsGridElements.push(starText);
-      
-      // Subtle glow for completed levels
-      if (stars >= 5) {
-        badgeBg.setStrokeStyle(1, 0xffdd00);
-        this.tweens.add({
-          targets: badgeBg,
-          alpha: 0.7,
-          duration: 2000,
-          yoyo: true,
-          repeat: -1,
-          ease: 'Sine.easeInOut'
-        });
-      }
-    });
-    
-    // Store combined elements for resize handling
-    this._starsCardBounds = { x: cardX, y: cardY, width: cardWidth, height: cardHeight + 30 };
-  }
-  
-  // ========== PREMIUM CREDITS DISPLAY ==========
-  // Enhanced credits panel with neon sci-fi styling
-  createCreditsDisplay() {
-    const credits = saveManager.data.credits;
-    const totalEarned = saveManager.data.totalCreditsEarned || 0;
-    
-    // Panel position - top right
-    const panelX = MAP_WIDTH * TILE_SIZE - 20;
-    const panelY = 15;
-    
-    // Store references for resize
-    this.creditsPanelElements = [];
-    
-    // 1. Panel background
-    const panelWidth = 140;
-    const panelHeight = 50;
-    const panelBg = this.add.rectangle(panelX - panelWidth / 2, panelY + panelHeight / 2, panelWidth, panelHeight, 0x141a24, 0.9);
-    panelBg.setStrokeStyle(1, 0x3a5a6a);
-    this.creditsPanelElements.push(panelBg);
-    
-    // 2. Credits icon
-    const creditsIcon = this.add.text(panelX - panelWidth + 12, panelY + 10, '◆', { 
-      fontSize: '18px', 
-      fill: '#ffaa00', 
-      fontFamily: 'Courier New'
-    });
-    creditsIcon.setShadow(0, 0, '#ffaa00', 4, true, true);
-    this.creditsPanelElements.push(creditsIcon);
-    
-    // Subtle pulse for the icon
-    this.tweens.add({
-      targets: creditsIcon,
-      alpha: 0.6,
-      duration: 2000,
-      yoyo: true,
-      repeat: -1,
-      ease: 'Sine.easeInOut'
-    });
-    
-    // 3. Current credits (main display)
-    const creditsText = this.add.text(panelX - panelWidth + 35, panelY + 8, `${credits}`, { 
-      fontSize: '20px', 
-      fill: '#ffffff', 
-      fontFamily: 'Courier New',
-      fontStyle: 'bold'
-    });
-    this.creditsPanelElements.push(creditsText);
-    this.creditsText = creditsText; // Keep reference for updates
-    
-    // 4. "CREDITS" label
-    const creditsLabel = this.add.text(panelX - panelWidth + 35, panelY + 30, 'CREDITS', { 
-      fontSize: '9px', 
-      fill: '#88aacc', 
-      fontFamily: 'Courier New'
-    });
-    this.creditsPanelElements.push(creditsLabel);
-    
-    // 5. Total earned indicator (smaller, below)
-    if (totalEarned > 0) {
-      const totalText = this.add.text(panelX - 12, panelY + panelHeight + 5, `Σ ${totalEarned}`, { 
-        fontSize: '10px', 
-        fill: '#667788', 
-        fontFamily: 'Courier New'
-      }).setOrigin(1, 0);
-      this.creditsPanelElements.push(totalText);
-    }
-    
-    // Store bounds for resize handling
-    this._creditsPanelBounds = { x: panelX - panelWidth, y: panelY, width: panelWidth, height: panelHeight };
-  }
-  
-  // ========== PREMIUM BUTTON SYSTEM ==========
-  // Enhanced button visuals with depth, glow, and premium feel
-  // Maintains original hitboxes and interactions for compatibility
-  createMenuButton(x, y, width, height, text, bgColor, strokeColor, onClick, disabled = false) {
-    // === VISUAL LAYERS ===
-    
-    // 1. Outer glow - creates premium depth effect
-    const glowColor = disabled ? 0x222230 : strokeColor;
-    const glowAlpha = disabled ? 0.08 : 0.15;
-    const outerGlow = this.add.rectangle(x, y, width + 8, height + 8, glowColor, glowAlpha);
-    
-    // 2. Inner highlight - simulates top-lit edge
-    const highlightColor = disabled ? 0x333340 : 0xffffff;
-    const highlight = this.add.rectangle(x, y - height/2 + 3, width - 4, 2, highlightColor, disabled ? 0.05 : 0.12);
-    
-    // 3. Main button background
-    const bg = this.add.rectangle(x, y, width, height, bgColor);
-    bg.setStrokeStyle(2, disabled ? 0x333340 : strokeColor);
-    bg.setInteractive({ useHandCursor: !disabled });
-    
-    // 4. Text shadow for depth
-    const textShadow = this.add.text(x + 1, y + 1, text, { fontSize: '16px', fill: '#000000', fontFamily: 'Courier New', fontStyle: 'bold', alpha: disabled ? 0.2 : 0.3 }).setOrigin(0.5);
-    
-    // 5. Main text
-    const label = this.add.text(x, y, text, { fontSize: '16px', fill: disabled ? '#444444' : '#ffffff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
-    
-    // 6. Icon/indicator glow (subtle pulse for primary buttons)
-    let pulseGlow = null;
-    if (!disabled && (text.includes('▶') || text.includes('PLAY'))) {
-      pulseGlow = this.add.rectangle(x, y, width - 10, height - 10, strokeColor, 0);
-      this.tweens.add({
-        targets: pulseGlow,
-        alpha: 0.08,
-        duration: 1200,
-        yoyo: true,
-        repeat: -1,
-        ease: 'Sine.easeInOut'
-      });
-    }
-    
-    // === STATE HANDLERS ===
-    
-    const updateHover = (isHovering) => {
-      if (disabled) return;
-      
-      const brightColor = bgColor + 0x303050;
-      
-      if (isHovering) {
-        bg.setFillStyle(brightColor);
-        bg.setStrokeStyle(3, 0xffffff);
-        outerGlow.setAlpha(0.25);
-        highlight.setAlpha(0.25);
-        label.setFill('#ffffff');
-      } else {
-        bg.setFillStyle(bgColor);
-        bg.setStrokeStyle(2, strokeColor);
-        outerGlow.setAlpha(0.15);
-        highlight.setAlpha(0.12);
-        label.setFill('#ffffff');
-      }
-    };
-    
-    // Hover effects
-    bg.on('pointerover', () => { 
-      if (!disabled) { 
-        updateHover(true);
-        sfx.menuHover(); 
-      } 
-    });
-    
-    bg.on('pointerout', () => { 
-      if (!disabled) {
-        updateHover(false);
-      }
-    });
-    
-    bg.on('pointerdown', () => { 
-      // Button press animation with visual feedback
-      if (!disabled) {
-        // Visual press - darken and shrink
-        bg.setFillStyle(bgColor - 0x202020);
-        bg.setStrokeStyle(2, strokeColor);
-        
-        this.tweens.add({
-          targets: [bg, outerGlow, highlight, pulseGlow].filter(Boolean),
-          scaleX: 0.96,
-          scaleY: 0.96,
-          duration: 40,
-          yoyo: true,
-          onComplete: () => {
-            bg.setScale(1);
-            if (outerGlow) outerGlow.setScale(1);
-            if (highlight) highlight.setScale(1);
-            if (pulseGlow) pulseGlow.setScale(1);
-            onClick();
-          }
-        });
-        
-        // Flash effect
-        const flash = this.add.rectangle(x, y, width, height, 0xffffff, 0.15);
-        this.tweens.add({
-          targets: flash,
-          alpha: 0,
-          duration: 150,
-          onComplete: () => flash.destroy()
-        });
-      } else {
-        onClick();
-      }
-    });
-    
-    return { bg, label, outerGlow, highlight, textShadow };
   }
   
   // Phase 7: Kid-friendly How to Play guide
@@ -2790,39 +3086,36 @@ class MainMenuScene extends Phaser.Scene {
   _handleResize() {
     const { width, height } = this.scale;
     const centerX = width / 2;
+    const centerY = height / 2;
     
     // Reposition title
     if (this.titleText) {
-      this.titleText.setPosition(centerX, 50);
+      this.titleText.setPosition(centerX, 42);
     }
     if (this.subtitleText) {
-      this.subtitleText.setPosition(centerX, 85);
+      this.subtitleText.setPosition(centerX, 82);
     }
     
-    // Reposition credits panel (top right)
-    if (this._creditsPanelBounds) {
-      const newPanelX = width - 20;
-      const panelWidth = this._creditsPanelBounds.width;
-      const panelHeight = this._creditsPanelBounds.height;
-      
-      if (this.creditsPanelElements) {
-        this.creditsPanelElements.forEach((el, i) => {
-          if (el.setPosition) {
-            // Reposition based on element index
-            if (i === 0) el.setPosition(newPanelX - panelWidth / 2, this._creditsPanelBounds.y + panelHeight / 2);
-          }
-        });
-      }
-      
-      if (this.creditsText) {
-        this.creditsText.setPosition(newPanelX - panelWidth + 35, this._creditsPanelBounds.y + 8);
+    // Reposition progression panel (left side)
+    if (this._progressionPanelBounds) {
+      const newPanelX = 160;
+      if (this.progressionPanelElements) {
+        // Panel elements stay relatively positioned - minimal repositioning needed
+        // Only adjust if viewport changes significantly
       }
     }
     
-    // Reposition stars card (left side)
-    if (this._starsCardBounds) {
-      // Stars card stays on the left - minimal repositioning needed
-      // Only adjust if viewport is very narrow
+    // Reposition utility panel (right side)
+    if (this._utilityPanelBounds) {
+      const newPanelX = width - 160;
+      if (this.utilityPanelElements) {
+        // Panel elements stay relatively positioned
+      }
+    }
+    
+    // Reposition continue button hint if present
+    if (this._continueButtonY && this.continueHintText) {
+      this.continueHintText.setPosition(centerX, this._continueButtonY + 40);
     }
   }
   
@@ -2836,6 +3129,26 @@ class MainMenuScene extends Phaser.Scene {
     if (this.backgroundComposer) {
       this.backgroundComposer.destroy();
       this.backgroundComposer = null;
+    }
+    // Clean up panel element arrays
+    if (this.progressionPanelElements) {
+      this.progressionPanelElements = [];
+    }
+    if (this.utilityPanelElements) {
+      this.utilityPanelElements = [];
+    }
+    // Phase B: Clean up sparkle effects
+    if (this._creditSparkles) {
+      this._creditSparkles.forEach(s => s.graphics.destroy());
+      this._creditSparkles = [];
+    }
+    if (this._starSparkles) {
+      this._starSparkles.forEach(s => s.graphics.destroy());
+      this._starSparkles = [];
+    }
+    if (this._sparkleTimer) {
+      this._sparkleTimer.remove();
+      this._sparkleTimer = null;
     }
     // Legacy cleanup for old animation timers (if any)
     if (this._gridTimer) {

@@ -39,6 +39,7 @@ const LAYER_DEPTHS = {
 };
 
 // Quality presets
+// Phase B: Enhanced with parallax and scanline settings
 const QUALITY_PRESETS = {
   low: {
     particleCount: 5,
@@ -46,7 +47,10 @@ const QUALITY_PRESETS = {
     lightAccentCount: 1,
     architecturalDetail: 'minimal',
     shadowBlur: 0,
-    decorativeElements: false
+    decorativeElements: false,
+    parallaxEnabled: false,
+    scanlineIntensity: 0,
+    sparkleCount: 0
   },
   medium: {
     particleCount: 10,
@@ -54,7 +58,10 @@ const QUALITY_PRESETS = {
     lightAccentCount: 2,
     architecturalDetail: 'standard',
     shadowBlur: 4,
-    decorativeElements: true
+    decorativeElements: true,
+    parallaxEnabled: true,
+    scanlineIntensity: 0.02,
+    sparkleCount: 3
   },
   high: {
     particleCount: 20,
@@ -62,7 +69,10 @@ const QUALITY_PRESETS = {
     lightAccentCount: 3,
     architecturalDetail: 'detailed',
     shadowBlur: 8,
-    decorativeElements: true
+    decorativeElements: true,
+    parallaxEnabled: true,
+    scanlineIntensity: 0.03,
+    sparkleCount: 5
   }
 };
 
@@ -84,6 +94,20 @@ export class BackgroundComposer {
     this.animationTimers = [];
     this.particles = [];
     this.lightAccents = [];
+    
+    // Phase B: Parallax layers for depth
+    this.parallaxLayers = [];
+    this.parallaxIntensity = 0.015; // Subtle movement (1.5% of mouse distance)
+    
+    // Phase B: Scanline overlay
+    this.scanlineOverlay = null;
+    
+    // Phase B: Sparkle effects
+    this.sparkles = [];
+    
+    // Mouse tracking for parallax
+    this.mouseX = this.width / 2;
+    this.mouseY = this.height / 2;
     
     // Initialize the background
     this.create();
@@ -243,14 +267,25 @@ export class BackgroundComposer {
     gradient.setDepth(LAYER_DEPTHS.BASE);
     this.cachedLayers.set('gradient', gradient);
     
-    // 2. Ambient scanlines (static, performance-friendly)
+    // Phase B: Create parallax background layers
+    if (this.qualitySettings.parallaxEnabled) {
+      this._createParallaxLayers();
+    }
+    
+    // 2. Ambient scanlines (Phase B: enhanced with subtle animation)
+    const scanlineIntensity = this.qualitySettings.scanlineIntensity || 0.04;
     const scanlines = this.scene.add.graphics();
-    scanlines.lineStyle(1, 0x000000, 0.04);
+    scanlines.lineStyle(1, 0x000000, scanlineIntensity);
     for (let y = 0; y < this.height; y += 3) {
       scanlines.lineBetween(0, y, this.width, y);
     }
     scanlines.setDepth(LAYER_DEPTHS.SCANLINES);
     this.cachedLayers.set('scanlines', scanlines);
+    
+    // Phase B: Add animated scanline overlay for CRT feel (high quality only)
+    if (this.quality === 'high' && scanlineIntensity > 0) {
+      this._createScanlineOverlay();
+    }
     
     // 3. Corner vignette for depth
     const vignette = this.scene.add.graphics();
@@ -262,6 +297,223 @@ export class BackgroundComposer {
     vignette.fillRect(this.width - edgeSize, 0, edgeSize, this.height);
     vignette.setDepth(LAYER_DEPTHS.VIGNETTE);
     this.cachedLayers.set('vignette', vignette);
+  }
+  
+  // ========== PHASE B: PARALLAX LAYERS ==========
+  
+  _createParallaxLayers() {
+    // Create 3 depth layers with subtle floating elements
+    // These respond to mouse movement for depth perception
+    
+    const layerConfigs = [
+      { depth: -9.5, count: 8, size: [2, 4], alpha: [0.05, 0.1], color: 0x2244aa, speedFactor: 0.3 },
+      { depth: -8.5, count: 12, size: [1, 3], alpha: [0.03, 0.08], color: 0x4488ff, speedFactor: 0.5 },
+      { depth: -7.5, count: 6, size: [3, 6], alpha: [0.02, 0.05], color: 0x66aaff, speedFactor: 0.7 }
+    ];
+    
+    layerConfigs.forEach(config => {
+      const layer = {
+        elements: [],
+        speedFactor: config.speedFactor
+      };
+      
+      for (let i = 0; i < config.count; i++) {
+        const x = Math.random() * this.width;
+        const y = Math.random() * this.height;
+        const size = config.size[0] + Math.random() * (config.size[1] - config.size[0]);
+        const alpha = config.alpha[0] + Math.random() * (config.alpha[1] - config.alpha[0]);
+        
+        const element = this.scene.add.circle(x, y, size, config.color, alpha);
+        element.setDepth(config.depth);
+        element.baseX = x;
+        element.baseY = y;
+        
+        layer.elements.push(element);
+      }
+      
+      this.parallaxLayers.push(layer);
+    });
+    
+    // Set up mouse tracking for parallax
+    this._setupMouseTracking();
+  }
+  
+  _setupMouseTracking() {
+    // Track mouse position for parallax effect
+    if (this.scene.input && this.scene.input.on) {
+      this.scene.input.on('pointermove', (pointer) => {
+        // Normalize mouse position to -1 to 1 range
+        this.mouseX = pointer.x;
+        this.mouseY = pointer.y;
+      });
+    }
+  }
+  
+  _updateParallax() {
+    if (!this.parallaxLayers || this.parallaxLayers.length === 0) return;
+    
+    const centerX = this.width / 2;
+    const centerY = this.height / 2;
+    const offsetX = (this.mouseX - centerX) * this.parallaxIntensity;
+    const offsetY = (this.mouseY - centerY) * this.parallaxIntensity;
+    
+    this.parallaxLayers.forEach(layer => {
+      layer.elements.forEach(element => {
+        // Apply parallax offset based on layer speed factor
+        const parallaxX = offsetX * layer.speedFactor;
+        const parallaxY = offsetY * layer.speedFactor;
+        
+        // Add subtle floating animation
+        const time = this.scene.time.now * 0.001;
+        const floatX = Math.sin(time + element.baseX * 0.01) * 3;
+        const floatY = Math.cos(time * 0.7 + element.baseY * 0.01) * 2;
+        
+        element.x = element.baseX + parallaxX + floatX;
+        element.y = element.baseY + parallaxY + floatY;
+      });
+    });
+  }
+  
+  // ========== PHASE B: SCANLINE OVERLAY ==========
+  
+  _createScanlineOverlay() {
+    // Animated scanline that moves down the screen (subtle CRT effect)
+    this.scanlineOverlay = this.scene.add.graphics();
+    this.scanlineOverlay.setDepth(LAYER_DEPTHS.VIGNETTE + 1);
+    this.scanlineOverlay.setAlpha(0.03);
+    
+    this._scanlineY = 0;
+    this._scanlineSpeed = 0.5; // Pixels per frame
+    
+    // Draw initial scanline
+    this._drawScanlineOverlay();
+  }
+  
+  _drawScanlineOverlay() {
+    if (!this.scanlineOverlay) return;
+    
+    this.scanlineOverlay.clear();
+    
+    // Draw a horizontal gradient bar
+    const barHeight = 100;
+    const gradient = this.scanlineOverlay;
+    
+    // Top fade
+    gradient.fillStyle(0x4488ff, 0.01);
+    gradient.fillRect(0, this._scanlineY - barHeight/2, this.width, barHeight);
+    
+    // Center highlight
+    gradient.fillStyle(0x4488ff, 0.015);
+    gradient.fillRect(0, this._scanlineY - 10, this.width, 20);
+  }
+  
+  _updateScanlineOverlay() {
+    if (!this.scanlineOverlay) return;
+    
+    // Move scanline down
+    this._scanlineY += this._scanlineSpeed;
+    if (this._scanlineY > this.height + 50) {
+      this._scanlineY = -50;
+    }
+    
+    this._drawScanlineOverlay();
+  }
+  
+  // ========== PHASE B: SPARKLE EFFECTS ==========
+  
+  _createSparkles(count = 5) {
+    const sparkleCount = count || this.qualitySettings.sparkleCount || 0;
+    if (sparkleCount === 0) return;
+    
+    for (let i = 0; i < sparkleCount; i++) {
+      const x = Math.random() * this.width;
+      const y = Math.random() * this.height;
+      
+      const sparkle = this.scene.add.graphics();
+      sparkle.setDepth(LAYER_DEPTHS.LIGHT_ACCENTS + 1);
+      
+      // Draw star shape
+      this._drawSparkle(sparkle, 0);
+      
+      sparkle.x = x;
+      sparkle.y = y;
+      sparkle.setAlpha(0);
+      
+      this.sparkles.push({
+        graphics: sparkle,
+        x: x,
+        y: y,
+        phase: Math.random() * Math.PI * 2,
+        speed: 0.02 + Math.random() * 0.03,
+        maxSize: 4 + Math.random() * 4
+      });
+    }
+  }
+  
+  _drawSparkle(graphics, size) {
+    graphics.clear();
+    if (size < 0.5) return;
+    
+    graphics.fillStyle(0xffffff, 0.8);
+    
+    // Draw 4-pointed star
+    const s = size;
+    graphics.fillTriangle(0, -s*2, -s*0.5, 0, s*0.5, 0);
+    graphics.fillTriangle(0, s*2, -s*0.5, 0, s*0.5, 0);
+    graphics.fillTriangle(-s*2, 0, 0, -s*0.5, 0, s*0.5);
+    graphics.fillTriangle(s*2, 0, 0, -s*0.5, 0, s*0.5);
+    
+    // Center dot
+    graphics.fillStyle(0xffffff, 1);
+    graphics.fillCircle(0, 0, s * 0.3);
+  }
+  
+  _updateSparkles() {
+    this.sparkles.forEach(sparkle => {
+      sparkle.phase += sparkle.speed;
+      
+      // Pulsing size
+      const size = Math.sin(sparkle.phase) * sparkle.maxSize;
+      const alpha = Math.max(0, Math.sin(sparkle.phase) * 0.6);
+      
+      this._drawSparkle(sparkle.graphics, Math.max(0, size));
+      sparkle.graphics.setAlpha(alpha);
+    });
+  }
+  
+  // ========== PHASE B: PUBLIC SPARKLE API ==========
+  
+  // Add sparkles at specific location (for stars/credits feedback)
+  addSparklesAt(x, y, count = 3, color = 0xffdd00) {
+    for (let i = 0; i < count; i++) {
+      const offsetX = (Math.random() - 0.5) * 40;
+      const offsetY = (Math.random() - 0.5) * 40;
+      
+      const sparkle = this.scene.add.graphics();
+      sparkle.setDepth(LAYER_DEPTHS.LIGHT_ACCENTS + 2);
+      sparkle.x = x + offsetX;
+      sparkle.y = y + offsetY;
+      sparkle.setAlpha(0);
+      
+      // Draw colored sparkle
+      sparkle.fillStyle(color, 0.9);
+      sparkle.fillCircle(0, 0, 2);
+      sparkle.fillStyle(0xffffff, 1);
+      sparkle.fillCircle(0, 0, 1);
+      
+      const sparkleData = {
+        graphics: sparkle,
+        x: x + offsetX,
+        y: y + offsetY,
+        phase: 0,
+        speed: 0.08 + Math.random() * 0.04,
+        maxSize: 3 + Math.random() * 3,
+        lifetime: 1,
+        decay: 0.02 + Math.random() * 0.02
+      };
+      
+      this.sparkles.push(sparkleData);
+    }
   }
   
   // ========== ARCHITECTURAL SILHOUETTES ==========
@@ -900,10 +1152,37 @@ export class BackgroundComposer {
   // ========== ANIMATION CONTROL ==========
   
   _startAnimations() {
-    // Grid animation removed - only particle, light, and fog animations remain
+    // Phase B: Combined animation timer for all effects (performance-optimized)
+    // Single timer handles parallax, particles, lights, fog, scanlines, and sparkles
     
-    // Particle animation timer (only if particles exist)
-    if (this.particles.length > 0) {
+    const hasAnimations = 
+      this.particles.length > 0 ||
+      this.lightAccents.length > 0 ||
+      (this.fogPatches && this.fogPatches.length > 0) ||
+      (this.parallaxLayers && this.parallaxLayers.length > 0) ||
+      this.scanlineOverlay ||
+      this.sparkles.length > 0;
+    
+    if (hasAnimations) {
+      const mainTimer = this.scene.time.addEvent({
+        delay: 33, // ~30fps for smooth but lightweight animation
+        callback: () => {
+          // Update all effects in single pass
+          if (this.particles.length > 0) this._updateParticles();
+          if (this.lightAccents.length > 0) this._updateLightAccents();
+          if (this.fogPatches && this.fogPatches.length > 0) this._updateFog();
+          if (this.parallaxLayers && this.parallaxLayers.length > 0) this._updateParallax();
+          if (this.scanlineOverlay) this._updateScanlineOverlay();
+          if (this.sparkles.length > 0) this._updateSparkles();
+        },
+        loop: true
+      });
+      this.animationTimers.push(mainTimer);
+    }
+    
+    // Legacy support: Keep individual timers if main timer isn't used
+    // Particle animation timer (only if particles exist and no main timer)
+    if (this.particles.length > 0 && !hasAnimations) {
       const particleTimer = this.scene.time.addEvent({
         delay: 16,
         callback: () => this._updateParticles(),
@@ -912,8 +1191,8 @@ export class BackgroundComposer {
       this.animationTimers.push(particleTimer);
     }
     
-    // Light accent animation timer
-    if (this.lightAccents.length > 0) {
+    // Light accent animation timer (only if no main timer)
+    if (this.lightAccents.length > 0 && !hasAnimations) {
       const lightTimer = this.scene.time.addEvent({
         delay: 50,
         callback: () => this._updateLightAccents(),
@@ -922,8 +1201,8 @@ export class BackgroundComposer {
       this.animationTimers.push(lightTimer);
     }
     
-    // Fog animation timer
-    if (this.fogPatches && this.fogPatches.length > 0) {
+    // Fog animation timer (only if no main timer)
+    if (this.fogPatches && this.fogPatches.length > 0 && !hasAnimations) {
       const fogTimer = this.scene.time.addEvent({
         delay: 50,
         callback: () => this._updateFog(),
@@ -961,6 +1240,24 @@ export class BackgroundComposer {
       this.fogPatches.forEach(f => f.graphics.destroy());
       this.fogPatches = [];
     }
+    
+    // Phase B: Destroy parallax layers
+    if (this.parallaxLayers) {
+      this.parallaxLayers.forEach(layer => {
+        layer.elements.forEach(e => e.destroy());
+      });
+      this.parallaxLayers = [];
+    }
+    
+    // Phase B: Destroy scanline overlay
+    if (this.scanlineOverlay) {
+      this.scanlineOverlay.destroy();
+      this.scanlineOverlay = null;
+    }
+    
+    // Phase B: Destroy sparkles
+    this.sparkles.forEach(s => s.graphics.destroy());
+    this.sparkles = [];
   }
   
   // ========== PUBLIC API ==========

@@ -145,6 +145,48 @@ export {
   isValidObjectivePosition
 } from './ObjectiveSpawner.js';
 
+// DungeonTileTypes module
+export {
+  DUNGEON_TILE_TYPES,
+  TILE_CATEGORIES,
+  DUNGEON_TILE_METADATA,
+  isRoomFloor,
+  isCorridorFloor,
+  isDoor,
+  isSlot,
+  isWalkableType,
+  isBlockingType,
+  getTileSemantic
+} from './DungeonTileTypes.js';
+
+// DungeonGenerator module
+export {
+  DungeonGenerator,
+  Room,
+  Corridor,
+  DUNGEON_CONFIG,
+  generateDungeon
+} from './DungeonGenerator.js';
+
+// DungeonValidator module
+export {
+  ValidationResult,
+  validateConnectivity,
+  validateWalkability,
+  validatePath,
+  validateObjectiveSlots,
+  validateDungeon
+} from './DungeonValidator.js';
+
+// DungeonIntegration module
+export {
+  dungeonToLevel,
+  extractObstacles,
+  levelToDungeon,
+  generateHybridLevel,
+  validateLevelWithDungeonRules
+} from './DungeonIntegration.js';
+
 // ==================== FACTORY FUNCTION ====================
 
 import { TileGrid } from './TileGrid.js';
