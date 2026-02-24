@@ -1,8 +1,9 @@
 /**
  * Canary Comparison Tests
  * 
- * Step 2: Validates modular guard AI behavior against legacy baseline.
- * Compares stuck rate, LOS correctness, and state transitions.
+ * Step 3: Validates modular guard AI behavior against legacy baseline.
+ * Canary levels: 0 (Warehouse), 1 (Labs), 3 (Comms Tower)
+ * Legacy levels: 2 (Server Farm), 4 (The Vault), 5 (Training Facility), 6 (Penthouse)
  */
 
 import { test, expect } from '@playwright/test'
@@ -67,27 +68,71 @@ test('Canary level 0 (Warehouse) uses modular AI', async ({ page }) => {
 
 /**
  * Test: Non-canary level uses legacy AI
+ * Step 3: Server Farm (level 2) is now the legacy baseline
  */
-test('Non-canary level 1 (Labs) uses legacy AI by default', async ({ page }) => {
+test('Non-canary level 2 (Server Farm) uses legacy AI by default', async ({ page }) => {
   const { pageErrors, consoleErrors } = attachErrorCollectors(page)
   
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await expect(page.locator('canvas')).toHaveCount(1)
   
-  await startGameScene(page, 1) // Labs is level 1, not in canary list
+  await startGameScene(page, 2) // Server Farm is level 2, not in canary list
   await page.waitForTimeout(1500)
   
-  // Verify legacy AI is active for level 1
+  // Verify legacy AI is active for level 2
   const aiMode = await page.evaluate(() => {
     const scene = window.__ghostGame?.scene?.getScene('GameScene')
     return {
       mode: scene?._guardAIMode,
-      modularInitialized: scene?._modularGuardAI?.isInitialized
+      modularInitialized: scene?._modularGuardAI?.isInitialized,
+      levelName: scene?.currentLayout?.name
     }
   })
   
   expect(aiMode.mode).toBe('legacy')
   expect(aiMode.modularInitialized).toBeFalsy()
+  expect(aiMode.levelName).toBe('Server Farm')
+  
+  assertNoRuntimeCrashes(pageErrors, consoleErrors)
+})
+
+/**
+ * Test: Step 3 - Labs (level 1) now uses modular AI
+ */
+test('Canary level 1 (Labs) uses modular AI (Step 3 expansion)', async ({ page }) => {
+  const { pageErrors, consoleErrors } = attachErrorCollectors(page)
+  
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('canvas')).toHaveCount(1)
+  
+  await startGameScene(page, 1) // Labs is now a canary level (Step 3)
+  await page.waitForTimeout(1500)
+  
+  // Verify modular AI is active for level 1
+  const aiMode = await page.evaluate(() => {
+    const scene = window.__ghostGame?.scene?.getScene('GameScene')
+    return {
+      mode: scene?._guardAIMode,
+      modularInitialized: scene?._modularGuardAI?.isInitialized,
+      levelName: scene?.currentLayout?.name
+    }
+  })
+  
+  expect(aiMode.mode).toBe('modular')
+  expect(aiMode.modularInitialized).toBe(true)
+  expect(aiMode.levelName).toBe('Labs')
+  
+  // Let guard run for a bit
+  await page.waitForTimeout(2000)
+  
+  // Verify guard is moving
+  const guardMoving = await page.evaluate(() => {
+    const scene = window.__ghostGame?.scene?.getScene('GameScene')
+    const vel = scene?.guard?.body?.velocity
+    return Math.hypot(vel?.x || 0, vel?.y || 0) > 0.1
+  })
+  
+  expect(guardMoving).toBe(true)
   
   assertNoRuntimeCrashes(pageErrors, consoleErrors)
 })

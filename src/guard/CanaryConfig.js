@@ -10,12 +10,14 @@
 /**
  * Canary rollout configuration
  * 
+ * Step 3: Expanded canary to include Labs level.
+ * 
  * Levels using modular AI:
  * - 0: Warehouse (simple layout, good baseline)
+ * - 1: Labs (medium complexity, test expansion)
  * - 3: Comms Tower (moderate complexity)
  * 
  * Levels remaining on legacy:
- * - 1: Labs
  * - 2: Server Farm
  * - 4: The Vault
  * - 5: Training Facility
@@ -26,7 +28,8 @@ export const CANARY_CONFIG = {
   enabled: true,
   
   // Levels using modular guard AI (array of level indices)
-  canaryLevels: [0, 3],
+  // Step 3: Added Level 1 (Labs) to canary
+  canaryLevels: [0, 1, 3],
   
   // Percentage of sessions to enable canary (for future gradual rollout)
   // Currently at 100% for canary levels
