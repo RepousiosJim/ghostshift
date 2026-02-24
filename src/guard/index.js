@@ -65,6 +65,15 @@ export {
   setDiagnosticsEnabled
 } from './GuardDiagnostics.js';
 
+// Canary Metrics Logger (observability)
+export {
+  CanaryMetricsLogger,
+  CANARY_METRICS_CONFIG,
+  ANOMALY_TYPES,
+  SEVERITY,
+  getCanaryMetricsLogger
+} from './CanaryMetricsLogger.js';
+
 /**
  * Create a guard AI instance with default configuration
  * @param {Object} options - Configuration options
