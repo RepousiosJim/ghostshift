@@ -120,6 +120,207 @@ export function clearPlacementFailures() {
   OBJECTIVE_FALLBACKS.placementFailures = [];
 }
 
+// ==================== PATROL POINT VALIDATION SYSTEM ====================
+// Prevents patrol points from creating stuck scenarios near objectives/corners
+
+const PATROL_VALIDATION_CONFIG = {
+  // Minimum distance from patrol point to any objective (Manhattan distance)
+  minObjectiveDistance: 2,
+  
+  // Minimum wall clearance for patrol points (check radius in tiles)
+  wallClearanceRadius: 1,
+  
+  // Minimum corridor width near patrol points (tiles)
+  minCorridorWidth: 2
+};
+
+/**
+ * Validate and fix patrol points to prevent stuck scenarios
+ * @param {Object} level - Level configuration
+ * @param {Array} obstacles - Obstacle array
+ * @returns {Array} Validated patrol points
+ */
+function validatePatrolPoints(level, obstacles) {
+  const objectives = [
+    level.dataCore,
+    level.keyCard,
+    level.hackTerminal,
+    level.relayTerminal,
+    level.playerStart,
+    level.exitZone
+  ].filter(obj => obj && Number.isFinite(obj.x) && Number.isFinite(obj.y));
+  
+  const patrolPoints = level.guardPatrol || [];
+  const validatedPoints = [];
+  const warnings = [];
+  
+  for (let i = 0; i < patrolPoints.length; i++) {
+    const point = patrolPoints[i];
+    
+    if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) {
+      warnings.push(`Patrol point ${i} invalid, skipping`);
+      continue;
+    }
+    
+    // Check if on obstacle
+    const isOnObstacle = obstacles.some(obs => obs.x === point.x && obs.y === point.y);
+    if (isOnObstacle) {
+      warnings.push(`Patrol point ${i} at (${point.x}, ${point.y}) is on obstacle, relocating`);
+      const relocated = findNearestWalkable(point, obstacles, objectives, 3);
+      if (relocated) {
+        validatedPoints.push(relocated);
+        console.log(`[PatrolValidation] ${level.name}: patrol[${i}] relocated from (${point.x},${point.y}) to (${relocated.x},${relocated.y})`);
+      }
+      continue;
+    }
+    
+    // Check distance to objectives
+    let tooCloseToObjective = false;
+    let nearestObjective = null;
+    
+    for (const obj of objectives) {
+      const dist = Math.abs(point.x - obj.x) + Math.abs(point.y - obj.y);
+      if (dist < PATROL_VALIDATION_CONFIG.minObjectiveDistance) {
+        tooCloseToObjective = true;
+        nearestObjective = obj;
+        break;
+      }
+    }
+    
+    if (tooCloseToObjective) {
+      warnings.push(`Patrol point ${i} at (${point.x}, ${point.y}) too close to objective at (${nearestObjective.x}, ${nearestObjective.y})`);
+      const relocated = findNearestWalkable(point, obstacles, objectives, 3);
+      if (relocated) {
+        validatedPoints.push(relocated);
+        console.log(`[PatrolValidation] ${level.name}: patrol[${i}] relocated from (${point.x},${point.y}) to (${relocated.x},${relocated.y}) due to objective proximity`);
+      } else {
+        // Keep original but log warning
+        validatedPoints.push(point);
+        console.warn(`[PatrolValidation] ${level.name}: could not relocate patrol[${i}], keeping original`);
+      }
+      continue;
+    }
+    
+    // Check wall clearance
+    const wallClearanceIssue = checkWallClearance(point, obstacles);
+    if (wallClearanceIssue) {
+      warnings.push(`Patrol point ${i} at (${point.x}, ${point.y}) has wall clearance issue: ${wallClearanceIssue}`);
+      // Try to move to better position
+      const relocated = findNearestWalkable(point, obstacles, objectives, 2);
+      if (relocated) {
+        validatedPoints.push(relocated);
+        console.log(`[PatrolValidation] ${level.name}: patrol[${i}] relocated from (${point.x},${point.y}) to (${relocated.x},${relocated.y}) due to wall clearance`);
+      } else {
+        validatedPoints.push(point);
+      }
+      continue;
+    }
+    
+    // Point is valid
+    validatedPoints.push(point);
+  }
+  
+  if (warnings.length > 0 && level.name) {
+    console.warn(`[PatrolValidation] ${level.name}: ${warnings.length} patrol point warnings`);
+  }
+  
+  return validatedPoints;
+}
+
+/**
+ * Find nearest walkable tile away from obstacles and objectives
+ * @param {Object} point - Starting point
+ * @param {Array} obstacles - Obstacle array
+ * @param {Array} objectives - Objectives to avoid
+ * @param {number} maxRadius - Maximum search radius
+ * @returns {Object|null} New position or null if not found
+ */
+function findNearestWalkable(point, obstacles, objectives, maxRadius = 3) {
+  for (let radius = 1; radius <= maxRadius; radius++) {
+    // Check in expanding spiral
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue;
+        
+        const newX = point.x + dx;
+        const newY = point.y + dy;
+        
+        // Bounds check
+        if (newX < 0 || newX >= MAP_WIDTH || newY < 0 || newY >= MAP_HEIGHT) continue;
+        
+        // Check not on obstacle
+        const isWalkable = !obstacles.some(obs => obs.x === newX && obs.y === newY);
+        if (!isWalkable) continue;
+        
+        // Check not too close to objectives
+        const tooClose = objectives.some(obj => {
+          const dist = Math.abs(newX - obj.x) + Math.abs(newY - obj.y);
+          return dist < PATROL_VALIDATION_CONFIG.minObjectiveDistance;
+        });
+        
+        if (tooClose) continue;
+        
+        // Check wall clearance
+        const hasClearance = checkWallClearance({x: newX, y: newY}, obstacles);
+        if (!hasClearance) {
+          return {x: newX, y: newY};
+        }
+      }
+    }
+  }
+  
+  return null;
+}
+
+/**
+ * Check if point has adequate wall clearance
+ * @param {Object} point - Point to check
+ * @param {Array} obstacles - Obstacle array
+ * @returns {string|null} Issue description or null if OK
+ */
+function checkWallClearance(point, obstacles) {
+  const radius = PATROL_VALIDATION_CONFIG.wallClearanceRadius;
+  let adjacentWalls = 0;
+  let wallDirection = null;
+  
+  // Check 4 cardinal directions
+  const directions = [
+    {dx: 1, dy: 0, name: 'right'},
+    {dx: -1, dy: 0, name: 'left'},
+    {dx: 0, dy: 1, name: 'down'},
+    {dx: 0, dy: -1, name: 'up'}
+  ];
+  
+  for (const dir of directions) {
+    const checkX = point.x + dir.dx;
+    const checkY = point.y + dir.dy;
+    
+    if (obstacles.some(obs => obs.x === checkX && obs.y === checkY)) {
+      adjacentWalls++;
+      wallDirection = dir.name;
+    }
+  }
+  
+  // Corner detection: walls in multiple directions
+  if (adjacentWalls >= 2) {
+    return `corner (${adjacentWalls} adjacent walls)`;
+  }
+  
+  // Single wall is OK for corridor navigation
+  return null;
+}
+
+/**
+ * Get patrol validation telemetry
+ * @returns {Object} Validation stats
+ */
+export function getPatrolValidationStats() {
+  return {
+    config: PATROL_VALIDATION_CONFIG,
+    timestamp: new Date().toISOString()
+  };
+}
+
 // Helper function to create room walls
 function createRoomWalls(x, y, width, height, doors = {}) {
   const obstacles = [];
@@ -175,110 +376,125 @@ function mergeObstacles(...arrays) {
 
 // Level layouts with rooms-and-corridors architecture
 const RAW_LEVEL_LAYOUTS = [
-  // Level 1: Warehouse V2 - 22x18 map (Relayout 2026-02-24)
-  // IMPROVEMENTS: Separated objectives, de-stacked vision cones, 2 staging pockets,
-  // tactical laser choices, clear room/corridor distinction
-  // Rooms: Spawn Room, Security Office (keycard), Server Room (terminal),
-  //        Main Warehouse (staging), Data Core Chamber, Exit Room
+  // Level 1: Warehouse V3 - 22x18 map (Dungeon Tile Refactor 2026-02-24)
+  // STRICT DUNGEON-ROOM RULES:
+  // - Each room: 5x5 minimum (3x3 walkable interior)
+  // - Rooms fully surrounded by walls
+  // - Doors are empty wall gaps (walkable tiles), not door objects
+  // - Open corridor connects all rooms through doorway gaps
+  // - Objectives in room interiors only
+  // - No non-functional hazards (lasers disabled)
+  //
+  // LAYOUT:
+  // ┌──────────────────────────────────────────────────┐ y=0
+  // │ ████████████████████████████████████████████████│
+  // │ █┌─────┐██████┌─────┐██████┌─────┐█████████████│
+  // │ █│KeyCd│█      │Term │█      │DataC│█            │
+  // │ █│Room │█      │Room │█      │Room │█            │
+  // │ █└─────┘█      └─────┘█      └─────┘█            │
+  // │ ████▀████      ████▀████      ████▀████          │ y=6 (door gaps)
+  // │                                                  │
+  // │              OPEN CORRIDOR                       │
+  // │                                                  │
+  // │ ████▄████      ████▄████      ████▄████          │ y=11 (door gaps)
+  // │ █┌─────┐█      ┌─────┐█      ┌─────┐█            │
+  // │ █│Spawn│█      │Stag │█      │Exit │█            │
+  // │ █│Room │█      │Room │█      │Room │█            │
+  // │ █└─────┘██████ └─────┘██████ └─────┘█████████████│
+  // │ ████████████████████████████████████████████████│ y=17
+  // └──────────────────────────────────────────────────┘
   {
     name: 'Warehouse',
     obstacles: mergeObstacles(
-      // === DISTINCT ROOMS WITH SEPARATED OBJECTIVES ===
+      // ==================== MAP BORDER ====================
+      Array.from({length: MAP_WIDTH}, (_, i) => ({x: i, y: 0})),
+      Array.from({length: MAP_WIDTH}, (_, i) => ({x: i, y: 17})),
+      Array.from({length: MAP_HEIGHT}, (_, i) => ({x: 0, y: i})),
+      Array.from({length: MAP_HEIGHT}, (_, i) => ({x: 21, y: i})),
+
+      // ==================== ROOM 1: SPAWN ROOM (5x5) ====================
+      // Location: x=1-5, y=12-16 (bottom-left)
+      // Walkable interior: x=2-4, y=13-15 (3x3)
+      // Door: top wall at x=3 (single tile gap)
+      createRoomWalls(1, 12, 5, 5, {topDoor: {offset: 2, width: 1}}),
+
+      // ==================== ROOM 2: KEYCARD ROOM (5x5) ====================
+      // Location: x=1-5, y=1-5 (top-left)
+      // Walkable interior: x=2-4, y=2-4 (3x3)
+      // Door: bottom wall at x=3 (single tile gap)
+      createRoomWalls(1, 1, 5, 5, {bottomDoor: {offset: 2, width: 1}}),
+
+      // ==================== ROOM 3: TERMINAL ROOM (5x5) ====================
+      // Location: x=8-12, y=1-5 (top-center)
+      // Walkable interior: x=9-11, y=2-4 (3x3)
+      // Door: bottom wall at x=10 (single tile gap)
+      createRoomWalls(8, 1, 5, 5, {bottomDoor: {offset: 2, width: 1}}),
+
+      // ==================== ROOM 4: DATA CORE ROOM (5x5) ====================
+      // Location: x=15-19, y=1-5 (top-right)
+      // Walkable interior: x=16-18, y=2-4 (3x3)
+      // Door: bottom wall at x=17 (single tile gap)
+      createRoomWalls(15, 1, 5, 5, {bottomDoor: {offset: 2, width: 1}}),
+
+      // ==================== ROOM 5: STAGING ROOM (5x5) ====================
+      // Location: x=8-12, y=12-16 (bottom-center)
+      // Walkable interior: x=9-11, y=13-15 (3x3)
+      // No objectives - pure staging/traversal room
+      // Door: top wall at x=10 (single tile gap)
+      createRoomWalls(8, 12, 5, 5, {topDoor: {offset: 2, width: 1}}),
+
+      // ==================== ROOM 6: EXIT ROOM (5x5) ====================
+      // Location: x=15-19, y=12-16 (bottom-right)
+      // Walkable interior: x=16-18, y=13-15 (3x3)
+      // Door: top wall at x=17 (single tile gap)
+      createRoomWalls(15, 12, 5, 5, {topDoor: {offset: 2, width: 1}}),
+
+      // ==================== HORIZONTAL DIVIDERS ====================
+      // Upper divider (y=6) - gaps at x=3, x=10, x=17 for room doors
+      [{x: 1, y: 6}, {x: 2, y: 6}, {x: 4, y: 6}, {x: 5, y: 6},
+       {x: 8, y: 6}, {x: 9, y: 6}, {x: 11, y: 6}, {x: 12, y: 6},
+       {x: 15, y: 6}, {x: 16, y: 6}, {x: 18, y: 6}, {x: 19, y: 6}],
       
-      // 1. Spawn Room (bottom-left, 4x4) - player entry point
-      createRoomWalls(1, 14, 4, 4, {topDoor: {offset: 1, width: 2}}),
+      // Lower divider (y=11) - gaps at x=3, x=10, x=17 for room doors
+      [{x: 1, y: 11}, {x: 2, y: 11}, {x: 4, y: 11}, {x: 5, y: 11},
+       {x: 8, y: 11}, {x: 9, y: 11}, {x: 11, y: 11}, {x: 12, y: 11},
+       {x: 15, y: 11}, {x: 16, y: 11}, {x: 18, y: 11}, {x: 19, y: 11}],
 
-      // 2. Security Office (top-left, 4x4) - KEYCARD location (distinct room)
-      // Positioned far from other objectives for clear separation
-      createRoomWalls(1, 1, 4, 4, {
-        bottomDoor: {offset: 1, width: 2}
-      }),
-
-      // 3. Server Room (center-left, 4x4) - TERMINAL location (distinct room)
-      // Separate from keycard and datacore
-      createRoomWalls(5, 5, 4, 4, {
-        leftDoor: {offset: 1, width: 2},
-        bottomDoor: {offset: 1, width: 2}
-      }),
-
-      // 4. Main Warehouse (center, 6x5) - STAGING AREA (no objectives)
-      // Pure traversal zone for timing and stealth planning
-      createRoomWalls(9, 6, 6, 5, {
-        leftDoor: {offset: 2, width: 2},
-        rightDoor: {offset: 2, width: 2}
-      }),
-      // Light cover crates (not blocking paths)
-      [{x: 11, y: 8}, {x: 12, y: 8}],
-
-      // 5. Data Core Chamber (top-right, 4x4) - DATACORE location (distinct room)
-      // Final objective, clearly separated from others
-      createRoomWalls(17, 1, 4, 4, {
-        bottomDoor: {offset: 1, width: 2}
-      }),
-
-      // 6. Exit Room (right side, 3x4) - extraction point
-      createRoomWalls(19, 12, 3, 4, {leftDoor: {offset: 1, width: 1}}),
-
-      // === CORRIDORS (2-3 tiles wide for clear traversal) ===
+      // ==================== VERTICAL DIVIDERS (between room columns) ====================
+      // Left divider (between column 1 and 2) - only in room areas, not corridor
+      [{x: 6, y: 1}, {x: 6, y: 2}, {x: 6, y: 3}, {x: 6, y: 4}, {x: 6, y: 5},
+       {x: 7, y: 1}, {x: 7, y: 2}, {x: 7, y: 3}, {x: 7, y: 4}, {x: 7, y: 5},
+       {x: 6, y: 12}, {x: 6, y: 13}, {x: 6, y: 14}, {x: 6, y: 15}, {x: 6, y: 16},
+       {x: 7, y: 12}, {x: 7, y: 13}, {x: 7, y: 14}, {x: 7, y: 15}, {x: 7, y: 16}],
       
-      // Horizontal main corridor (y=11-13)
-      // Top wall with gaps for room entrances and exit path
-      [{x: 5, y: 11}, {x: 6, y: 11}, {x: 7, y: 11},
-       {x: 13, y: 11}, {x: 14, y: 11},
-       {x: 17, y: 11}],
-      // Bottom wall with gap for exit room entrance (x=18)
-      [{x: 5, y: 13}, {x: 6, y: 13}, {x: 7, y: 13},
-       {x: 13, y: 13}, {x: 14, y: 13},
-       {x: 16, y: 13}, {x: 17, y: 13}],
-
-      // Vertical corridor to Data Core (x=15-16, y=5-10)
-      [{x: 15, y: 5}, {x: 15, y: 6}, {x: 15, y: 7}, {x: 15, y: 8}, {x: 15, y: 9}, {x: 15, y: 10}],
-      [{x: 17, y: 5}, {x: 17, y: 6}, {x: 17, y: 7}, {x: 17, y: 8}, {x: 17, y: 9}, {x: 17, y: 10}],
-
-      // Vertical corridor to Security Office (left side, x=5, y=5-10)
-      [{x: 5, y: 5}, {x: 5, y: 6}, {x: 5, y: 7}, {x: 5, y: 8}, {x: 5, y: 9}, {x: 5, y: 10}],
-      
-      // === STAGING POCKET WALLS (create safe alcoves) ===
-      // Pocket 1: Bottom corridor alcove (x=6-7, y=14-15)
-      [{x: 6, y: 14}, {x: 8, y: 14}],
-      
-      // Pocket 2: Upper corridor niche (x=10-12, y=4)
-      [{x: 10, y: 4}, {x: 11, y: 4}, {x: 12, y: 4}, {x: 13, y: 4}, {x: 14, y: 4}],
-      
-      // Pocket 3: Near spawn exit alcove (x=5, y=15)
-      [{x: 5, y: 15}]
+      // Right divider (between column 2 and 3)
+      [{x: 13, y: 1}, {x: 13, y: 2}, {x: 13, y: 3}, {x: 13, y: 4}, {x: 13, y: 5},
+       {x: 14, y: 1}, {x: 14, y: 2}, {x: 14, y: 3}, {x: 14, y: 4}, {x: 14, y: 5},
+       {x: 13, y: 12}, {x: 13, y: 13}, {x: 13, y: 14}, {x: 13, y: 15}, {x: 13, y: 16},
+       {x: 14, y: 12}, {x: 14, y: 13}, {x: 14, y: 14}, {x: 14, y: 15}, {x: 14, y: 16}]
     ),
 
-    // === DE-STACKED PATROL (no unfair crossfire overlap) ===
-    // Route uses x=16 corridor for vertical movement
+    // ==================== OBJECTIVES (room interiors only) ====================
+    playerStart: {x: 3, y: 14},       // Spawn room center
+    keyCard: {x: 3, y: 3},             // Keycard room center
+    hackTerminal: {x: 10, y: 3},       // Terminal room center
+    dataCore: {x: 17, y: 3},           // Data core room center
+    exitZone: {x: 17, y: 14},          // Exit room center
+
+    // ==================== GUARD PATROL (corridor only) ====================
     guardPatrol: [
-      {x: 8, y: 12},    // Main corridor left (threshold check)
-      {x: 16, y: 12},   // Corridor right (near exit approach)
-      {x: 16, y: 6},    // Vertical corridor (via x=16)
-      {x: 7, y: 6}      // Check server room entrance (upper corridor)
+      {x: 3, y: 8},
+      {x: 10, y: 8},
+      {x: 17, y: 8},
+      {x: 10, y: 9}
     ],
 
-    // === OBJECTIVES IN DISTINCT ROOM INTERIORS ===
-    playerStart: {x: 2, y: 16},       // Spawn room (centered, away from door)
-    keyCard: {x: 2, y: 3},            // Security Office (deeper in room, centered vertically)
-    hackTerminal: {x: 7, y: 7},       // Server Room (center of room)
-    dataCore: {x: 18, y: 3},          // Data Core Chamber (deeper in room, away from door)
-    exitZone: {x: 20, y: 13},         // Exit room (center of small room)
-
-    // === REPOSITIONED SENSORS (avoid objective clustering) ===
-    // Cameras watch corridors, not objective rooms
-    cameras: [{x: 8, y: 12}, {x: 16, y: 6}],
-    // Motion sensor at warehouse entrance (tactical awareness)
-    motionSensors: [{x: 12, y: 9}],
+    // ==================== SENSORS (corridor only) ====================
+    cameras: [{x: 10, y: 9}],
+    motionSensors: [],
     
-    // === TACTICAL LASER CHOICES (not hard tax lanes) ===
-    // Two lasers create meaningful route choices:
-    // - Upper route avoids both but is longer
-    // - Lower route faster but must time both lasers
-    laserGrids: [
-      {x: 8, y: 5, v: true},   // Blocks direct path to terminal (vertical)
-      {x: 14, y: 7, h: true}   // Blocks direct path to data core (horizontal)
-    ],
+    // ==================== NO LASERS (disabled) ====================
+    laserGrids: [],
 
     difficulty: 1
   },
@@ -751,6 +967,9 @@ const LEVEL_LAYOUTS = RAW_LEVEL_LAYOUTS.map(raw => {
   if (level.relayTerminal) {
     level.relayTerminal = validateObjectivePlacement(level, 'relayTerminal', level.obstacles);
   }
+
+  // Validate patrol points to prevent stuck scenarios
+  level.guardPatrol = validatePatrolPoints(level, level.obstacles);
 
   return level;
 });
