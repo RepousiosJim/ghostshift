@@ -26,7 +26,7 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Map dimensions (must match main.js)
-const MAP_WIDTH = 22;
+const MAP_WIDTH = 28;  // HORIZONTAL EXPANSION: 22 -> 28 (27.3% increase for Level 1)
 const MAP_HEIGHT = 23;  // VERTICAL EXPANSION: 18 -> 23 (27.8% increase)
 const TILE_SIZE = 48;
 
