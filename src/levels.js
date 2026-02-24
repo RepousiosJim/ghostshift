@@ -255,7 +255,7 @@ const RAW_LEVEL_LAYOUTS = [
       {x: 8, y: 12},    // Main corridor left (threshold check)
       {x: 14, y: 12},   // Before warehouse entrance
       {x: 14, y: 5},    // Upper corridor (via warehouse room edge)
-      {x: 8, y: 5}      // Check server room area (upper corridor)
+      {x: 9, y: 5}      // Upper corridor left (clear of server room)
     ],
 
     // === OBJECTIVES IN DISTINCT ROOM INTERIORS ===
