@@ -10,26 +10,28 @@
 /**
  * Canary rollout configuration
  * 
- * Step 3: Expanded canary to include Labs level.
+ * Step 4: Expanded canary to include Server Farm level.
  * 
  * Levels using modular AI:
  * - 0: Warehouse (simple layout, good baseline)
- * - 1: Labs (medium complexity, test expansion)
+ * - 1: Labs (medium complexity)
+ * - 2: Server Farm (difficulty 2, NEW in Step 4)
  * - 3: Comms Tower (moderate complexity)
  * 
  * Levels remaining on legacy:
- * - 2: Server Farm
  * - 4: The Vault
  * - 5: Training Facility
  * - 6: Penthouse
+ * 
+ * Coverage: 4 of 7 levels (57%)
  */
 export const CANARY_CONFIG = {
   // Master switch: set to false to disable all canary mode
   enabled: true,
   
   // Levels using modular guard AI (array of level indices)
-  // Step 3: Added Level 1 (Labs) to canary
-  canaryLevels: [0, 1, 3],
+  // Step 4: Added Level 2 (Server Farm) to canary
+  canaryLevels: [0, 1, 2, 3],
   
   // Percentage of sessions to enable canary (for future gradual rollout)
   // Currently at 100% for canary levels
