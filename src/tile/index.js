@@ -130,6 +130,21 @@ export {
   TILE_MOVEMENT_CONFIG
 } from './TileMovement.js';
 
+// ObjectiveSpawner module
+export {
+  ObjectiveSpawner,
+  OBJECTIVE_TYPES,
+  REQUIRED_OBJECTIVES,
+  OPTIONAL_OBJECTIVES,
+  DEFAULT_CONSTRAINTS,
+  SCORING_WEIGHTS,
+  detectRoomInteriors,
+  isRoomInterior,
+  getValidSpawnTiles,
+  validateAllLayouts,
+  isValidObjectivePosition
+} from './ObjectiveSpawner.js';
+
 // ==================== FACTORY FUNCTION ====================
 
 import { TileGrid } from './TileGrid.js';

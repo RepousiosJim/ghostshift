@@ -4,6 +4,8 @@ import { BackgroundComposer, BACKGROUND_IMAGE_PATHS } from './background-compose
 import { GuardAI, GUARD_STATES, GUARD_AI_CONFIG as MODULAR_GUARD_CONFIG } from './guard/index.js';
 // Step 2: Canary rollout configuration
 import { isCanaryLevel, getCanaryMetrics, getFallbackManager, CANARY_CONFIG } from './guard/CanaryConfig.js';
+// Phase B: Objective Spawner for room-aware placement validation
+import { ObjectiveSpawner, TileGrid, DEFAULT_CONSTRAINTS } from './tile/index.js';
 
 // Dynamic import of Phaser for better loading performance
 // This allows the smaller game.js to load first, then Phaser lazy-loads
@@ -1722,6 +1724,62 @@ function getValidLevelIndex(requestedIndex, { fallbackIndex = 0, allowRandom = f
   }
 
   return levelIndex;
+}
+
+// ==================== OBJECTIVE PLACEMENT VALIDATION ====================
+// Phase B: Room-aware objective placement validation with fallback relocation
+
+/**
+ * Validate and potentially relocate objectives for a level layout
+ * @param {Object} layout - Level layout to validate
+ * @param {number} levelIndex - Level index for logging
+ * @returns {{layout: Object, relocations: Array, warnings: string[]}}
+ */
+function validateAndRelocateObjectives(layout, levelIndex) {
+  const warnings = [];
+  const relocations = [];
+  
+  try {
+    const grid = new TileGrid(layout);
+    const spawner = new ObjectiveSpawner(grid, layout);
+    spawner.initialize();
+    
+    const validation = spawner.validateObjectives();
+    
+    // Log warnings for non-critical issues
+    for (const warning of validation.warnings) {
+      warnings.push(`Level ${levelIndex + 1} (${layout.name}): ${warning}`);
+      console.warn(`[ObjectiveValidation] ${warning}`);
+    }
+    
+    // If there are errors, attempt relocations
+    if (!validation.valid && validation.relocations.length > 0) {
+      // Apply relocations to a copy of the layout
+      const modifiedLayout = spawner.applyRelocations(validation.relocations);
+      
+      for (const relocation of validation.relocations) {
+        console.warn(
+          `[ObjectiveValidation] Relocated ${relocation.type} from ` +
+          `(${relocation.from.x}, ${relocation.from.y}) to ` +
+          `(${relocation.to.x}, ${relocation.to.y}) - ${relocation.reason}`
+        );
+        relocations.push(relocation);
+      }
+      
+      return { layout: modifiedLayout, relocations, warnings };
+    }
+    
+    // Log critical errors that couldn't be fixed
+    for (const error of validation.errors) {
+      console.error(`[ObjectiveValidation] Level ${levelIndex + 1} (${layout.name}): ${error}`);
+    }
+    
+  } catch (e) {
+    console.error(`[ObjectiveValidation] Validation failed for level ${levelIndex + 1}:`, e.message);
+    warnings.push(`Validation error: ${e.message}`);
+  }
+  
+  return { layout, relocations, warnings };
 }
 
 function prepareLevelStart(scene, data, source) {
@@ -5022,7 +5080,18 @@ class GameScene extends Phaser.Scene {
       source: 'GameScene.create'
     });
     this.currentLevelIndex = resolvedLevelIndex;
-    this.currentLayout = LEVEL_LAYOUTS[this.currentLevelIndex];
+    
+    // Phase B: Validate objective placements and apply relocations if needed
+    const originalLayout = LEVEL_LAYOUTS[this.currentLevelIndex];
+    const validationResult = validateAndRelocateObjectives(originalLayout, this.currentLevelIndex);
+    this.currentLayout = validationResult.layout;
+    
+    // Store relocation info for debugging
+    if (validationResult.relocations.length > 0) {
+      this._objectiveRelocations = validationResult.relocations;
+      console.log(`[Level] Applied ${validationResult.relocations.length} objective relocations`);
+    }
+    
     setRuntimePhase('level:create:layout', { sceneKey: this.scene.key, levelIndex: this.currentLevelIndex });
     _levelStartGuard.release();
     // Phase 4: Get difficulty settings for this level

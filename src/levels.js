@@ -1,8 +1,10 @@
 // ==================== LEVEL LAYOUTS ====================
-// Phase 4: Added Vault and Training Facility levels with improved balancing
-// Phase 11: Added Comms Tower (D2) bridge level with relay-hack variant
-// Phase 12: Added Penthouse (Level 7) with timed alarm mechanic
-// Phase 14: Expanded all maps by +6 tiles (width and height) - new dimensions 22x18
+// Phase 15: Rooms-and-Corridors Architecture Refactor
+// - All levels redesigned with clear room structures
+// - Objectives placed in room interiors (not corridors)
+// - Corridors are 2-3 tiles wide for clear traversal
+// - Patrol routes follow corridors, check room entrances
+// - Multiple routes between objectives for stealth flow
 
 const DEFAULT_LEVEL = {
   name: 'Unnamed',
@@ -21,21 +23,507 @@ const DEFAULT_LEVEL = {
   securityCode: null,
   powerCell: null,
   difficulty: 1,
-  alarmTimer: null  // Seconds until alarm triggers (null = no alarm)
+  alarmTimer: null
 };
 
-// Helper function - no shift (coordinates already valid for 19x15 map)
-// Preserve extra properties (e.g., laser grid direction flags)
-function shiftBy6(point) {
-  if (!point) return point;
-  return { ...point, x: point.x, y: point.y };
+// Map dimensions
+const MAP_WIDTH = 22;
+const MAP_HEIGHT = 18;
+
+// Helper function to create room walls
+function createRoomWalls(x, y, width, height, doors = {}) {
+  const obstacles = [];
+  const {
+    topDoor = null,      // {offset, width}
+    bottomDoor = null,
+    leftDoor = null,
+    rightDoor = null
+  } = doors;
+
+  // Top wall
+  for (let dx = 0; dx < width; dx++) {
+    if (topDoor && dx >= topDoor.offset && dx < topDoor.offset + topDoor.width) continue;
+    obstacles.push({x: x + dx, y: y});
+  }
+
+  // Bottom wall
+  for (let dx = 0; dx < width; dx++) {
+    if (bottomDoor && dx >= bottomDoor.offset && dx < bottomDoor.offset + bottomDoor.width) continue;
+    obstacles.push({x: x + dx, y: y + height - 1});
+  }
+
+  // Left wall
+  for (let dy = 0; dy < height; dy++) {
+    if (leftDoor && dy >= leftDoor.offset && dy < leftDoor.offset + leftDoor.width) continue;
+    obstacles.push({x: x, y: y + dy});
+  }
+
+  // Right wall
+  for (let dy = 0; dy < height; dy++) {
+    if (rightDoor && dy >= rightDoor.offset && dy < rightDoor.offset + rightDoor.width) continue;
+    obstacles.push({x: x + width - 1, y: y + dy});
+  }
+
+  return obstacles;
 }
 
-// Helper function - no shift
-function shiftArray6(arr) {
-  return arr.map(shiftBy6);
+// Helper to merge obstacle arrays
+function mergeObstacles(...arrays) {
+  const seen = new Set();
+  const merged = [];
+  for (const arr of arrays) {
+    for (const obs of arr) {
+      const key = `${obs.x},${obs.y}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        merged.push(obs);
+      }
+    }
+  }
+  return merged;
 }
 
+// Level layouts with rooms-and-corridors architecture
+const RAW_LEVEL_LAYOUTS = [
+  // Level 1: Warehouse - 22x18 map
+  // Rooms: Spawn Room, Storage Room, Main Warehouse, Office, Exit Room
+  {
+    name: 'Warehouse',
+    obstacles: mergeObstacles(
+      // Spawn Room (bottom-left, 4x4)
+      createRoomWalls(1, 13, 4, 4, {topDoor: {offset: 1, width: 2}}),
+      
+      // Storage Room (left, 4x4) with keyCard
+      createRoomWalls(1, 6, 4, 4, {
+        bottomDoor: {offset: 1, width: 2},
+        rightDoor: {offset: 1, width: 2}
+      }),
+      
+      // Main Warehouse (center, 6x6) - open area with obstacles inside
+      createRoomWalls(7, 5, 6, 6, {
+        leftDoor: {offset: 2, width: 2},
+        rightDoor: {offset: 2, width: 2}
+      }),
+      // Internal crates in warehouse
+      [{x: 9, y: 7}, {x: 10, y: 7}, {x: 9, y: 8}, {x: 10, y: 8}],
+      
+      // Office Room (top-right, 4x4) with dataCore
+      createRoomWalls(16, 1, 4, 4, {
+        bottomDoor: {offset: 1, width: 2}
+      }),
+
+      // Exit Room (far right, 3x3)
+      createRoomWalls(19, 1, 3, 3, {leftDoor: {offset: 1, width: 1}}),
+      
+      // Corridor walls (horizontal corridor from spawn to right)
+      // Top corridor wall
+      [{x: 5, y: 11}, {x: 6, y: 11}, {x: 13, y: 11}, {x: 14, y: 11}, 
+       {x: 15, y: 11}, {x: 16, y: 11}, {x: 17, y: 11}, {x: 18, y: 11}],
+      // Bottom corridor wall  
+      [{x: 5, y: 13}, {x: 6, y: 13}, {x: 13, y: 13}, {x: 14, y: 13},
+       {x: 15, y: 13}, {x: 16, y: 13}, {x: 17, y: 13}, {x: 18, y: 13}]
+    ),
+    
+    // Patrol follows main corridor
+    guardPatrol: [
+      {x: 5, y: 12},   // Corridor left
+      {x: 18, y: 12},  // Corridor right
+      {x: 18, y: 5},   // Check office entrance
+      {x: 5, y: 5}     // Check storage entrance
+    ],
+    
+    // Objectives in rooms
+    playerStart: {x: 2, y: 15},      // Spawn room center
+    keyCard: {x: 3, y: 8},            // Storage room (centered)
+    dataCore: {x: 17, y: 3},          // Office room (clear of walls)
+    hackTerminal: {x: 10, y: 9},      // Main warehouse (clear of crates)
+    exitZone: {x: 20, y: 2},          // Exit room center
+    
+    // Sensors in corridors and room entrances
+    cameras: [{x: 6, y: 12}, {x: 15, y: 12}],
+    motionSensors: [{x: 10, y: 12}],
+    laserGrids: [{x: 12, y: 5, h: true}],
+    
+    difficulty: 1
+  },
+
+  // Level 2: Labs - 22x18 map
+  // Rooms: Spawn, Equipment Lab, Server Room, Exit
+  {
+    name: 'Labs',
+    obstacles: mergeObstacles(
+      // Spawn Room (bottom-left, 4x4)
+      createRoomWalls(1, 13, 4, 4, {topDoor: {offset: 1, width: 2}}),
+      
+      // Equipment Lab (left, 5x5) with keyCard
+      createRoomWalls(1, 6, 5, 5, {
+        bottomDoor: {offset: 2, width: 2},
+        rightDoor: {offset: 2, width: 2}
+      }),
+      
+      // Server Room (center-right, 6x5) with dataCore
+      createRoomWalls(12, 5, 6, 5, {
+        leftDoor: {offset: 2, width: 2},
+        bottomDoor: {offset: 2, width: 2}
+      }),
+      
+      // Exit Room (top-right, 3x3)
+      createRoomWalls(19, 1, 3, 3, {leftDoor: {offset: 1, width: 1}}),
+      
+      // Horizontal corridor (main east-west)
+      [{x: 5, y: 11}, {x: 6, y: 11}, {x: 7, y: 11}, {x: 8, y: 11}, {x: 9, y: 11},
+       {x: 10, y: 11}, {x: 11, y: 11}, {x: 18, y: 11}, {x: 19, y: 11}],
+      [{x: 5, y: 13}, {x: 6, y: 13}, {x: 7, y: 13}, {x: 8, y: 13}, {x: 9, y: 13},
+       {x: 10, y: 13}, {x: 11, y: 13}, {x: 18, y: 13}, {x: 19, y: 13}],
+      
+      // Vertical corridor (connecting to exit)
+      [{x: 19, y: 4}, {x: 19, y: 5}, {x: 19, y: 6}, {x: 19, y: 7}, {x: 19, y: 8}, {x: 19, y: 9}, {x: 19, y: 10}],
+      [{x: 21, y: 4}, {x: 21, y: 5}, {x: 21, y: 6}, {x: 21, y: 7}, {x: 21, y: 8}, {x: 21, y: 9}, {x: 21, y: 10}]
+    ),
+    
+    guardPatrol: [
+      {x: 5, y: 12},   // Corridor left
+      {x: 18, y: 12},  // Corridor right
+      {x: 18, y: 7},   // Check server room
+      {x: 5, y: 7}     // Check lab room
+    ],
+    
+    playerStart: {x: 2, y: 15},
+    keyCard: {x: 3, y: 8},           // Equipment Lab (centered)
+    dataCore: {x: 15, y: 7},         // Server Room
+    hackTerminal: {x: 7, y: 8},      // Corridor junction (clear)
+    exitZone: {x: 20, y: 2},         // Exit room center
+
+    cameras: [{x: 7, y: 12}, {x: 16, y: 7}],
+    motionSensors: [{x: 14, y: 7}],
+    laserGrids: [{x: 11, y: 8, v: true}],
+
+    difficulty: 1
+  },
+
+  // Level 3: Server Farm - 22x18 map (Medium difficulty)
+  // Rooms: Spawn, Security Office, Server Hall, Exit
+  {
+    name: 'Server Farm',
+    obstacles: mergeObstacles(
+      // Spawn Room (bottom-left, 4x4)
+      createRoomWalls(1, 13, 4, 4, {topDoor: {offset: 1, width: 2}}),
+      
+      // Security Office (left, 4x4) with keyCard
+      createRoomWalls(1, 6, 4, 4, {
+        bottomDoor: {offset: 1, width: 2},
+        rightDoor: {offset: 1, width: 2}
+      }),
+      
+      // Server Hall (center, 8x6) with dataCore - larger room with internal racks
+      createRoomWalls(6, 4, 8, 6, {
+        leftDoor: {offset: 2, width: 2},
+        rightDoor: {offset: 2, width: 2}
+      }),
+      // Server rack obstacles inside
+      [{x: 8, y: 6}, {x: 9, y: 6}, {x: 11, y: 6}, {x: 12, y: 6}],
+      
+      // Exit Room (top-right, 3x3)
+      createRoomWalls(19, 1, 3, 3, {leftDoor: {offset: 1, width: 1}}),
+      
+      // Corridor walls
+      [{x: 5, y: 11}, {x: 14, y: 11}, {x: 15, y: 11}, {x: 16, y: 11}, {x: 17, y: 11}, {x: 18, y: 11}],
+      [{x: 5, y: 13}, {x: 14, y: 13}, {x: 15, y: 13}, {x: 16, y: 13}, {x: 17, y: 13}, {x: 18, y: 13}],
+      
+      // Vertical corridor to exit
+      [{x: 19, y: 4}, {x: 19, y: 5}, {x: 19, y: 6}, {x: 19, y: 7}, {x: 19, y: 8}, {x: 19, y: 9}, {x: 19, y: 10}],
+      [{x: 21, y: 4}, {x: 21, y: 5}, {x: 21, y: 6}, {x: 21, y: 7}, {x: 21, y: 8}, {x: 21, y: 9}, {x: 21, y: 10}]
+    ),
+    
+    guardPatrol: [
+      {x: 5, y: 12},
+      {x: 18, y: 12},
+      {x: 18, y: 5},
+      {x: 5, y: 5}
+    ],
+    
+    playerStart: {x: 2, y: 15},
+    keyCard: {x: 3, y: 8},           // Security Office (centered)
+    dataCore: {x: 10, y: 8},         // Server Hall center (clear of racks)
+    hackTerminal: {x: 7, y: 8},      // Server Hall entrance (clear)
+    exitZone: {x: 20, y: 2},         // Exit room center
+
+    cameras: [{x: 5, y: 12}, {x: 10, y: 5}, {x: 18, y: 12}],
+    motionSensors: [{x: 10, y: 9}],
+    laserGrids: [{x: 14, y: 7, v: true}],
+    
+    patrolDrones: [
+      {x: 10, y: 7, patrol: [{x: 8, y: 5}, {x: 12, y: 5}, {x: 12, y: 8}, {x: 8, y: 8}]}
+    ],
+    
+    difficulty: 2
+  },
+
+  // Level 4: Comms Tower - 22x18 map (Medium difficulty)
+  // Rooms: Spawn, Equipment Room, Comms Center (with relay), Exit
+  {
+    name: 'Comms Tower',
+    obstacles: mergeObstacles(
+      // Spawn Room (bottom-left, 4x4)
+      createRoomWalls(1, 13, 4, 4, {topDoor: {offset: 1, width: 2}}),
+      
+      // Equipment Room (left, 4x5) with keyCard
+      createRoomWalls(1, 5, 4, 5, {
+        bottomDoor: {offset: 1, width: 2},
+        rightDoor: {offset: 2, width: 2}
+      }),
+      
+      // Comms Center (center-right, 7x6) with dataCore and relay
+      createRoomWalls(10, 3, 7, 6, {
+        leftDoor: {offset: 2, width: 2},
+        bottomDoor: {offset: 3, width: 2}
+      }),
+      
+      // Exit Room (top-right, 3x3)
+      createRoomWalls(19, 1, 3, 3, {leftDoor: {offset: 1, width: 1}}),
+      
+      // Main corridor
+      [{x: 5, y: 11}, {x: 6, y: 11}, {x: 7, y: 11}, {x: 8, y: 11}, {x: 9, y: 11},
+       {x: 17, y: 11}, {x: 18, y: 11}],
+      [{x: 5, y: 13}, {x: 6, y: 13}, {x: 7, y: 13}, {x: 8, y: 13}, {x: 9, y: 13},
+       {x: 17, y: 13}, {x: 18, y: 13}],
+      
+      // Vertical corridor to exit
+      [{x: 19, y: 4}, {x: 19, y: 5}, {x: 19, y: 6}, {x: 19, y: 7}, {x: 19, y: 8}, {x: 19, y: 9}, {x: 19, y: 10}],
+      [{x: 21, y: 4}, {x: 21, y: 5}, {x: 21, y: 6}, {x: 21, y: 7}, {x: 21, y: 8}, {x: 21, y: 9}, {x: 21, y: 10}]
+    ),
+    
+    guardPatrol: [
+      {x: 5, y: 12},
+      {x: 18, y: 12},
+      {x: 18, y: 6},
+      {x: 5, y: 6}
+    ],
+    
+    playerStart: {x: 2, y: 15},
+    keyCard: {x: 3, y: 8},           // Equipment Room (centered)
+    dataCore: {x: 14, y: 6},         // Comms Center
+    hackTerminal: {x: 11, y: 7},     // Comms Center entrance (clear)
+    relayTerminal: {x: 15, y: 7},    // Comms Center (relay variant, clear of wall)
+    exitZone: {x: 20, y: 2},         // Exit room center
+
+    cameras: [{x: 6, y: 12}, {x: 14, y: 4}, {x: 18, y: 12}],
+    motionSensors: [{x: 13, y: 6}],
+    laserGrids: [{x: 9, y: 6, v: true}],
+    
+    patrolDrones: [
+      {x: 13, y: 6, patrol: [{x: 11, y: 5}, {x: 15, y: 5}, {x: 15, y: 7}, {x: 11, y: 7}]}
+    ],
+    
+    difficulty: 2
+  },
+
+  // Level 5: The Vault - 22x18 map (Hard difficulty)
+  // Rooms: Spawn, Security Checkpoint, Vault Chamber, Exit
+  {
+    name: 'The Vault',
+    obstacles: mergeObstacles(
+      // Spawn Room (bottom-left, 4x4)
+      createRoomWalls(1, 13, 4, 4, {topDoor: {offset: 1, width: 2}}),
+      
+      // Security Checkpoint (left, 4x5) with keyCard
+      createRoomWalls(1, 5, 4, 5, {
+        bottomDoor: {offset: 1, width: 2},
+        rightDoor: {offset: 2, width: 2}
+      }),
+      
+      // Vault Chamber (center-right, 8x6) with dataCore
+      createRoomWalls(10, 3, 8, 6, {
+        leftDoor: {offset: 2, width: 2},
+        bottomDoor: {offset: 3, width: 2}
+      }),
+      // Internal vault pillars
+      [{x: 12, y: 5}, {x: 15, y: 5}, {x: 12, y: 6}, {x: 15, y: 6}],
+      
+      // Exit Room (top-right, 3x3)
+      createRoomWalls(19, 1, 3, 3, {leftDoor: {offset: 1, width: 1}}),
+      
+      // Main corridor with security checkpoints
+      [{x: 5, y: 11}, {x: 6, y: 11}, {x: 7, y: 11}, {x: 8, y: 11}, {x: 9, y: 11},
+       {x: 18, y: 11}],
+      [{x: 5, y: 13}, {x: 6, y: 13}, {x: 7, y: 13}, {x: 8, y: 13}, {x: 9, y: 13},
+       {x: 18, y: 13}],
+      
+      // Vertical corridor to exit
+      [{x: 19, y: 4}, {x: 19, y: 5}, {x: 19, y: 6}, {x: 19, y: 7}, {x: 19, y: 8}, {x: 19, y: 9}, {x: 19, y: 10}],
+      [{x: 21, y: 4}, {x: 21, y: 5}, {x: 21, y: 6}, {x: 21, y: 7}, {x: 21, y: 8}, {x: 21, y: 9}, {x: 21, y: 10}],
+      
+      // Additional corridor walls for multi-route
+      [{x: 5, y: 2}, {x: 5, y: 3}, {x: 5, y: 4}],
+      [{x: 7, y: 2}, {x: 7, y: 3}, {x: 7, y: 4}],
+      [{x: 8, y: 2}, {x: 9, y: 2}]
+    ),
+    
+    guardPatrol: [
+      {x: 5, y: 12},
+      {x: 18, y: 12},
+      {x: 18, y: 5},
+      {x: 5, y: 5},
+      {x: 5, y: 3},  // Patrol upper corridor
+      {x: 8, y: 3}
+    ],
+    
+    playerStart: {x: 2, y: 15},
+    keyCard: {x: 3, y: 8},           // Security Checkpoint (centered)
+    dataCore: {x: 14, y: 7},         // Vault Chamber center (clear of pillars)
+    hackTerminal: {x: 11, y: 7},     // Vault entrance (clear)
+    exitZone: {x: 20, y: 2},         // Exit room center
+
+    cameras: [{x: 6, y: 12}, {x: 14, y: 4}, {x: 18, y: 12}, {x: 6, y: 3}],
+    motionSensors: [{x: 13, y: 7}, {x: 6, y: 3}],
+    laserGrids: [{x: 9, y: 5, v: true}, {x: 6, y: 9, h: true}],
+    
+    patrolDrones: [
+      {x: 14, y: 6, patrol: [{x: 12, y: 5}, {x: 16, y: 5}, {x: 16, y: 7}, {x: 12, y: 7}]}
+    ],
+    
+    difficulty: 3
+  },
+
+  // Level 6: Training Facility - 22x18 map (Hard difficulty)
+  // Rooms: Spawn, Training Hall, Control Room, Exit
+  {
+    name: 'Training Facility',
+    obstacles: mergeObstacles(
+      // Spawn Room (bottom-left, 4x4)
+      createRoomWalls(1, 13, 4, 4, {topDoor: {offset: 1, width: 2}}),
+      
+      // Training Hall (center-left, 6x6) with obstacles
+      createRoomWalls(1, 5, 6, 6, {
+        bottomDoor: {offset: 2, width: 2},
+        rightDoor: {offset: 2, width: 2}
+      }),
+      // Training obstacles
+      [{x: 3, y: 7}, {x: 4, y: 7}, {x: 3, y: 8}, {x: 4, y: 8}],
+      
+      // Control Room (right, 6x5) with dataCore
+      createRoomWalls(12, 4, 6, 5, {
+        leftDoor: {offset: 2, width: 2},
+        bottomDoor: {offset: 2, width: 2}
+      }),
+      
+      // Exit Room (top-right, 3x3)
+      createRoomWalls(19, 1, 3, 3, {leftDoor: {offset: 1, width: 1}}),
+      
+      // Main corridor
+      [{x: 7, y: 11}, {x: 8, y: 11}, {x: 9, y: 11}, {x: 10, y: 11}, {x: 11, y: 11},
+       {x: 18, y: 11}],
+      [{x: 7, y: 13}, {x: 8, y: 13}, {x: 9, y: 13}, {x: 10, y: 13}, {x: 11, y: 13},
+       {x: 18, y: 13}],
+      
+      // Vertical corridor to exit
+      [{x: 19, y: 4}, {x: 19, y: 5}, {x: 19, y: 6}, {x: 19, y: 7}, {x: 19, y: 8}, {x: 19, y: 9}, {x: 19, y: 10}],
+      [{x: 21, y: 4}, {x: 21, y: 5}, {x: 21, y: 6}, {x: 21, y: 7}, {x: 21, y: 8}, {x: 21, y: 9}, {x: 21, y: 10}],
+      
+      // Secondary corridor (upper)
+      [{x: 7, y: 2}, {x: 7, y: 3}, {x: 8, y: 3}, {x: 9, y: 3}],
+      [{x: 11, y: 2}, {x: 11, y: 3}]
+    ),
+    
+    guardPatrol: [
+      {x: 7, y: 12},
+      {x: 18, y: 12},
+      {x: 18, y: 6},
+      {x: 7, y: 6},
+      {x: 7, y: 3},  // Upper route
+      {x: 10, y: 3}
+    ],
+    
+    playerStart: {x: 2, y: 15},
+    keyCard: {x: 2, y: 6},           // Training Hall (clear of obstacles)
+    dataCore: {x: 15, y: 6},         // Control Room
+    hackTerminal: {x: 13, y: 7},     // Control Room entrance (clear)
+    exitZone: {x: 20, y: 2},         // Exit room center
+
+    cameras: [{x: 8, y: 12}, {x: 15, y: 5}, {x: 18, y: 12}],
+    motionSensors: [{x: 14, y: 6}, {x: 9, y: 3}],
+    laserGrids: [{x: 11, y: 6, v: true}, {x: 8, y: 9, h: true}],
+    
+    patrolDrones: [
+      {x: 15, y: 6, patrol: [{x: 13, y: 5}, {x: 17, y: 5}, {x: 17, y: 7}, {x: 13, y: 7}]}
+    ],
+    
+    difficulty: 3
+  },
+
+  // Level 7: Penthouse - 22x18 map (Hard difficulty)
+  // Rooms: Spawn, Lounge, VIP Suite, Exit
+  {
+    name: 'Penthouse',
+    obstacles: mergeObstacles(
+      // Spawn Room (bottom-left, 4x4)
+      createRoomWalls(1, 13, 4, 4, {topDoor: {offset: 1, width: 2}}),
+      
+      // Lounge (left-center, 5x5) with keyCard
+      createRoomWalls(1, 6, 5, 5, {
+        bottomDoor: {offset: 2, width: 2},
+        rightDoor: {offset: 2, width: 2}
+      }),
+      // Lounge furniture
+      [{x: 3, y: 8}, {x: 3, y: 9}],
+      
+      // VIP Suite (center-right, 7x6) with dataCore
+      createRoomWalls(10, 3, 7, 6, {
+        leftDoor: {offset: 2, width: 2},
+        bottomDoor: {offset: 3, width: 2}
+      }),
+      // VIP furniture
+      [{x: 13, y: 5}, {x: 14, y: 5}],
+      
+      // Exit Room (top-right, 3x3)
+      createRoomWalls(19, 1, 3, 3, {leftDoor: {offset: 1, width: 1}}),
+      
+      // Main corridor
+      [{x: 6, y: 11}, {x: 7, y: 11}, {x: 8, y: 11}, {x: 9, y: 11},
+       {x: 17, y: 11}, {x: 18, y: 11}],
+      [{x: 6, y: 13}, {x: 7, y: 13}, {x: 8, y: 13}, {x: 9, y: 13},
+       {x: 17, y: 13}, {x: 18, y: 13}],
+      
+      // Vertical corridor to exit
+      [{x: 19, y: 4}, {x: 19, y: 5}, {x: 19, y: 6}, {x: 19, y: 7}, {x: 19, y: 8}, {x: 19, y: 9}, {x: 19, y: 10}],
+      [{x: 21, y: 4}, {x: 21, y: 5}, {x: 21, y: 6}, {x: 21, y: 7}, {x: 21, y: 8}, {x: 21, y: 9}, {x: 21, y: 10}],
+      
+      // Upper corridor (alternative route)
+      [{x: 6, y: 2}, {x: 6, y: 3}, {x: 6, y: 4}, {x: 7, y: 4}, {x: 8, y: 4}],
+      [{x: 9, y: 2}]
+    ),
+    
+    guardPatrol: [
+      {x: 6, y: 12},
+      {x: 18, y: 12},
+      {x: 18, y: 5},
+      {x: 6, y: 5},
+      {x: 6, y: 3},  // Upper route
+      {x: 8, y: 3}
+    ],
+    
+    playerStart: {x: 2, y: 15},
+    keyCard: {x: 4, y: 8},           // Lounge (clear of furniture)
+    dataCore: {x: 14, y: 7},         // VIP Suite (clear of furniture)
+    hackTerminal: {x: 11, y: 7},     // VIP entrance (clear)
+    exitZone: {x: 20, y: 2},         // Exit room center
+
+    cameras: [{x: 7, y: 12}, {x: 14, y: 4}, {x: 18, y: 12}, {x: 7, y: 3}],
+    motionSensors: [{x: 13, y: 7}, {x: 7, y: 3}],
+    laserGrids: [{x: 9, y: 6, v: true}, {x: 6, y: 9, h: true}],
+    
+    patrolDrones: [
+      {x: 14, y: 6, patrol: [{x: 12, y: 5}, {x: 16, y: 5}, {x: 16, y: 7}, {x: 12, y: 7}]}
+    ],
+    
+    difficulty: 3,
+    alarmTimer: 45  // Alarm triggers after 45 seconds
+  }
+];
+
+// ==================== LEVEL CONFIGURATION ====================
+
+// Helper functions for normalization
 function normalizeLaserGrid(grid) {
   if (!grid || typeof grid !== 'object') return null;
   if (!Number.isFinite(grid.x) || !Number.isFinite(grid.y)) return null;
@@ -63,272 +551,21 @@ function normalizeLaserGrids(laserGrids, levelName) {
   return normalized;
 }
 
-// Level layouts - all coordinates shifted by +6 for expanded 22x18 maps
-// Base coordinates designed to fit within 22x18 after +6 shift (max x=15, max y=11)
-const RAW_LEVEL_LAYOUTS = [
-  // Level 1: Warehouse - 22x18 map
-  {
-    name: 'Warehouse',
-    obstacles: shiftArray6([
-      // West storage racks
-      {x:2,y:3},{x:3,y:3},{x:2,y:4},{x:3,y:4},{x:2,y:5},{x:3,y:5},{x:2,y:6},{x:3,y:6},
-      {x:2,y:10},{x:3,y:10},{x:2,y:11},{x:3,y:11},{x:2,y:12},{x:3,y:12},
-      {x:5,y:4},{x:5,y:5},{x:5,y:10},{x:5,y:11},
-      // Central container stacks
-      {x:8,y:5},{x:9,y:5},{x:8,y:6},{x:9,y:6},
-      {x:8,y:9},{x:9,y:9},{x:8,y:10},{x:9,y:10},
-      {x:11,y:7},{x:12,y:7},{x:11,y:8},{x:12,y:8},
-      {x:11,y:11},{x:12,y:11},{x:11,y:12},{x:12,y:12},
-      // East office enclosure (door gap at x=16,y:4)
-      {x:15,y:2},{x:16,y:2},{x:17,y:2},
-      {x:15,y:3},{x:17,y:3},
-      {x:15,y:4},{x:17,y:4},
-      {x:15,y:5},{x:17,y:5},
-      {x:15,y:6},{x:16,y:6},{x:17,y:6},
-      // Loading bay barricades
-      {x:13,y:14},{x:17,y:14},{x:13,y:15},{x:17,y:15},
-      // Upper-right crates
-      {x:19,y:5},{x:19,y:6}
-    ]),
-    guardPatrol: shiftArray6([
-      {x:5,y:7},{x:14,y:7},{x:14,y:12},{x:5,y:12}
-    ]),
-    dataCore: shiftBy6({x:10,y:2}),
-    keyCard: shiftBy6({x:5,y:2}),
-    hackTerminal: shiftBy6({x:10,y:3}),
-    playerStart: shiftBy6({x:2,y:14}),
-    exitZone: shiftBy6({x:20,y:2}),
-    cameras: shiftArray6([{x:6,y:2},{x:18,y:10}]),
-    motionSensors: shiftArray6([{x:10,y:14}]),
-    laserGrids: shiftArray6([{x:12,y:5,h:true},{x:14,y:9,v:true}]),
-    patrolDrones: [
-      {x:18,y:11,patrol:shiftArray6([{x:14,y:9},{x:18,y:9},{x:18,y:14},{x:14,y:14}])}
-    ],
-    securityCode: shiftBy6({x:6,y:4}),
-    powerCell: shiftBy6({x:18,y:14}),
-    difficulty: 1
-  },
-
-// Level 2: Labs - 22x18 map
-  { name: 'Labs', obstacles: shiftArray6([
-      // Lab equipment rows (left side)
-      {x:4,y:2},{x:4,y:3},{x:4,y:4},
-      // Central work area
-      {x:7,y:6},{x:8,y:6},{x:9,y:6},
-      {x:7,y:7},{x:9,y:7},
-      {x:7,y:8},{x:9,y:8},
-      // Right-side storage
-      {x:12,y:2},{x:13,y:2},
-      // Lower corridor
-      {x:2,y:9},{x:3,y:9},{x:4,y:9},
-      {x:6,y:11},{x:7,y:11}
-    ]),
-    guardPatrol:shiftArray6([{x:11,y:4},{x:5,y:4},{x:5,y:11},{x:11,y:11}]),
-    dataCore:shiftBy6({x:14,y:5}), keyCard:shiftBy6({x:2,y:2}), hackTerminal:shiftBy6({x:6,y:4}), playerStart:shiftBy6({x:2,y:11}), exitZone:shiftBy6({x:15,y:2}), cameras:shiftArray6([{x:7,y:2},{x:2,y:6},{x:12,y:11}]), motionSensors:shiftArray6([{x:9,y:4},{x:5,y:9}]), laserGrids:shiftArray6([{x:6,y:5,h:true},{x:11,y:7,v:true}]), patrolDrones:[{x:7+6,y:5+6,patrol:shiftArray6([{x:7,y:5},{x:11,y:5},{x:11,y:3},{x:7,y:3}])}], securityCode:shiftBy6({x:5,y:2}), powerCell:shiftBy6({x:13,y:10}), difficulty: 1 },
-  
-  // Level 3: Server Farm - 22x18 map
-  { name: 'Server Farm', obstacles: shiftArray6([{x:3,y:2},{x:4,y:2},{x:7,y:2},{x:8,y:2},{x:3,y:4},{x:8,y:4},{x:3,y:6},{x:4,y:6},{x:7,y:6},{x:8,y:6},{x:5,y:8},{x:6,y:8},{x:3,y:10},{x:5,y:10},{x:9,y:10},{x:13,y:10},{x:2,y:11},{x:3,y:11}]), guardPatrol:shiftArray6([{x:2,y:8},{x:15,y:8},{x:15,y:4},{x:2,y:4}]), dataCore:shiftBy6({x:15,y:11}), keyCard:shiftBy6({x:6,y:4}), hackTerminal:shiftBy6({x:11,y:8}), playerStart:shiftBy6({x:2,y:2}), exitZone:shiftBy6({x:15,y:6}), cameras:shiftArray6([{x:2,y:4},{x:14,y:10},{x:8,y:2}]), motionSensors:shiftArray6([{x:5,y:6},{x:9,y:4}]), laserGrids:shiftArray6([{x:4,y:4,v:true},{x:9,y:8,h:true}]), patrolDrones:[{x:6+6,y:5+6,patrol:shiftArray6([{x:6,y:5},{x:11,y:5},{x:11,y:10},{x:6,y:10}])}], securityCode:shiftBy6({x:1,y:10}), powerCell:shiftBy6({x:15,y:2}), difficulty: 2 },
-  
-  // Level 4: Comms Tower - 22x18 map
-  // Two terminals must be hacked in sequence; dense drone corridor in center
-  { name: 'Comms Tower', obstacles: shiftArray6([
-      // Upper antenna array (top-left cluster) - expanded
-      {x:2,y:1},{x:3,y:1},{x:4,y:1},{x:2,y:2},{x:4,y:2},
-      // Central corridor walls - denser
-      {x:5,y:3},{x:6,y:3},{x:5,y:4},{x:6,y:4},
-      {x:5,y:5},{x:6,y:5},{x:5,y:6},{x:6,y:6},
-      // Right-side comms room - expanded further right
-      {x:9,y:2},{x:10,y:2},{x:11,y:2},{x:12,y:2},{x:9,y:3},{x:11,y:3},{x:12,y:3},
-      // Lower equipment bays - expanded 
-      {x:2,y:6},{x:3,y:6},{x:2,y:7},{x:3,y:7},
-      {x:9,y:7},{x:10,y:7},{x:11,y:7},{x:12,y:7},
-      // Bottom row extensions
-      {x:2,y:9},{x:3,y:9},{x:9,y:9},{x:10,y:9}
-    ]),
-    guardPatrol: shiftArray6([
-      {x:4,y:3},{x:8,y:3},{x:8,y:8},{x:4,y:8}
-    ]),
-    dataCore:shiftBy6({x:12,y:5}),
-    keyCard:shiftBy6({x:14,y:2}),
-    hackTerminal:shiftBy6({x:14,y:3}),
-    relayTerminal:shiftBy6({x:12,y:4}),
-    playerStart:shiftBy6({x:2,y:5}),
-    exitZone:shiftBy6({x:14,y:5}),
-    cameras:shiftArray6([
-      {x:4,y:1},{x:10,y:10},{x:12,y:5}
-    ]),
-    motionSensors:shiftArray6([
-      {x:7,y:5},{x:4,y:8},{x:10,y:8}
-    ]),
-    laserGrids:shiftArray6([
-      {x:4,y:5,h:true},{x:10,y:5,v:true}
-    ]),
-    patrolDrones:[
-      {x:7+6,y:4+6,patrol:shiftArray6([{x:7,y:4},{x:7,y:8},{x:4,y:8},{x:4,y:4}])},
-      {x:9+6,y:8+6,patrol:shiftArray6([{x:9,y:8},{x:9,y:10},{x:13,y:10},{x:13,y:8}])}
-    ],
-    securityCode:shiftBy6({x:11,y:10}),
-    powerCell:shiftBy6({x:1,y:1}),
-    difficulty: 2
-  },
-  
-  // Level 5: The Vault - 22x18 map
-  // High security bank vault
-  { name: 'The Vault', obstacles: shiftArray6([
-      {x:3,y:2},{x:4,y:2},{x:5,y:2},{x:8,y:2},{x:9,y:2},{x:10,y:2},
-      {x:3,y:4},{x:10,y:4},{x:3,y:6},{x:10,y:6},
-      {x:3,y:8},{x:4,y:8},{x:5,y:8},{x:8,y:8},{x:9,y:8},{x:10,y:8},
-      {x:3,y:10},{x:10,y:10},{x:5,y:11}
-    ]), 
-    guardPatrol: shiftArray6([
-      {x:5,y:3},{x:8,y:3},{x:8,y:7},{x:5,y:7},
-      {x:2,y:5},{x:14,y:5}
-    ]), 
-    dataCore:shiftBy6({x:12,y:2}), 
-    keyCard:shiftBy6({x:12,y:3}), 
-    hackTerminal:shiftBy6({x:12,y:5}), 
-    playerStart:shiftBy6({x:2,y:2}), 
-    exitZone:shiftBy6({x:15,y:5}), 
-    cameras:shiftArray6([
-      {x:6,y:1},{x:2,y:9},{x:13,y:9}
-    ]), 
-    motionSensors:shiftArray6([
-      {x:6,y:5},{x:11,y:3},{x:4,y:9}
-    ]), 
-    laserGrids:shiftArray6([
-      {x:6,y:3,h:true},{x:2,y:5,v:true},{x:10,y:5,v:true},{x:6,y:9,h:true}
-    ]), 
-    patrolDrones:[
-      {x:4+6,y:6+6,patrol:shiftArray6([{x:4,y:6},{x:9,y:6},{x:9,y:4},{x:4,y:4}])},
-      {x:12+6,y:8+6,patrol:shiftArray6([{x:12,y:8},{x:12,y:2},{x:15,y:2},{x:15,y:8}])}
-    ], 
-    securityCode:shiftBy6({x:6,y:11}), 
-    powerCell:shiftBy6({x:13,y:10}), 
-    difficulty: 3 
-  },
-  
-  // Level 6: Training Facility - 22x18 map
-  // Open area with multiple threats
-  { name: 'Training Facility', obstacles: shiftArray6([
-      {x:4,y:2},{x:5,y:2},{x:10,y:2},{x:11,y:2},
-      {x:2,y:5},{x:3,y:5},{x:13,y:5},{x:14,y:5},
-      {x:4,y:8},{x:5,y:8},{x:10,y:8},{x:11,y:8},
-      {x:4,y:11},{x:5,y:11},{x:10,y:11},{x:11,y:11},
-      {x:7,y:4},{x:8,y:4}
-    ]), 
-    guardPatrol: shiftArray6([
-      {x:2,y:3},{x:15,y:3},
-      {x:2,y:10},{x:15,y:10},
-      {x:8,y:1},{x:8,y:12}
-    ]), 
-    dataCore:shiftBy6({x:8,y:6}), 
-    keyCard:shiftBy6({x:2,y:11}), 
-    hackTerminal:shiftBy6({x:14,y:7}), 
-    playerStart:shiftBy6({x:2,y:2}), 
-    exitZone:shiftBy6({x:15,y:2}), 
-    cameras:shiftArray6([
-      {x:4,y:2},{x:12,y:2},{x:4,y:10},{x:12,y:10}
-    ]), 
-    motionSensors:shiftArray6([
-      {x:8,y:3},{x:8,y:8},{x:4,y:7},{x:12,y:7}
-    ]), 
-    laserGrids:shiftArray6([
-      {x:8,y:2,v:true},{x:8,y:11,v:true},{x:3,y:7,h:true},{x:13,y:7,h:true}
-    ]), 
-    patrolDrones:[
-      {x:6+6,y:3+6,patrol:shiftArray6([{x:6,y:3},{x:10,y:3},{x:10,y:10},{x:6,y:10}])},
-      {x:4+6,y:6+6,patrol:shiftArray6([{x:4,y:6},{x:4,y:7},{x:7,y:7},{x:7,y:6}])},
-      {x:12+6,y:6+6,patrol:shiftArray6([{x:12,y:6},{x:12,y:8},{x:9,y:8},{x:9,y:6}])}
-    ], 
-    securityCode:shiftBy6({x:2,y:3}), 
-    powerCell:shiftBy6({x:14,y:11}), 
-    difficulty: 3 
-  },
-  
-  // Level 7: Penthouse - 22x18 map
-  // Alarm triggers after 45 seconds, boosting guard speed and triggering alarm state
-  { name: 'Penthouse', obstacles: shiftArray6([
-      // Luxury suite furniture clusters
-      {x:3,y:2},{x:4,y:2},{x:5,y:2},
-      {x:3,y:4},{x:5,y:4},
-      {x:3,y:6},{x:4,y:6},{x:5,y:6},
-      // Central corridor pillars
-      {x:7,y:3},{x:8,y:3},{x:7,y:4},{x:8,y:4},
-      {x:7,y:7},{x:8,y:7},{x:7,y:8},{x:8,y:8},
-      // Right-side office complex
-      {x:10,y:2},{x:11,y:2},{x:12,y:2},
-      {x:10,y:4},{x:12,y:4},
-      {x:10,y:6},{x:11,y:6},{x:12,y:6},
-      // Lower lounge area
-      {x:2,y:9},{x:3,y:9},{x:4,y:9},
-      {x:10,y:9},{x:11,y:9},{x:12,y:9},
-      // VIP exit corridor
-      {x:14,y:5},{x:15,y:5}
-    ]), 
-    guardPatrol: shiftArray6([
-      {x:2,y:4},{x:5,y:5},{x:5,y:8},{x:2,y:8},
-      {x:9,y:4},{x:14,y:4},{x:14,y:8},{x:9,y:8},
-      {x:8,y:1},{x:8,y:11}
-    ]), 
-    dataCore:shiftBy6({x:15,y:2}), 
-    keyCard:shiftBy6({x:2,y:11}), 
-    hackTerminal:shiftBy6({x:14,y:2}), 
-    playerStart:shiftBy6({x:2,y:2}), 
-    exitZone:shiftBy6({x:15,y:7}), 
-    cameras:shiftArray6([
-      {x:4,y:1},{x:12,y:1},{x:4,y:10},{x:12,y:10},{x:8,y:6}
-    ]), 
-    motionSensors:shiftArray6([
-      {x:6,y:5},{x:10,y:5},{x:8,y:2},{x:8,y:9}
-    ]), 
-    laserGrids:shiftArray6([
-      {x:6,y:2,h:true},{x:10,y:3,h:true},
-      {x:6,y:10,h:true},{x:10,y:10,h:true}
-    ]), 
-    patrolDrones:[
-      {x:6+6,y:5+6,patrol:shiftArray6([{x:6,y:5},{x:10,y:5},{x:10,y:7},{x:6,y:7}])},
-      {x:9+6,y:5+6,patrol:shiftArray6([{x:9,y:5},{x:9,y:7},{x:6,y:7},{x:6,y:5}])},
-      {x:4+6,y:8+6,patrol:shiftArray6([{x:4,y:8},{x:6,y:8},{x:6,y:5},{x:4,y:5}])},
-      {x:11+6,y:8+6,patrol:shiftArray6([{x:11,y:8},{x:13,y:8},{x:13,y:5},{x:11,y:5}])}
-    ], 
-    securityCode:shiftBy6({x:3,y:11}), 
-    powerCell:shiftBy6({x:15,y:10}), 
-    difficulty: 3,
-    alarmTimer: 45  // Alarm triggers after 45 seconds
-  }
-];
-
-// ==================== LEVEL CONFIGURATION ====================
-
-// Generate the actual level objects by applying transformations
+// Generate the actual level objects
 const LEVEL_LAYOUTS = RAW_LEVEL_LAYOUTS.map(raw => {
   return {
     ...DEFAULT_LEVEL,
     ...raw,
-    // Ensure obstacles is an array
     obstacles: raw.obstacles || [],
-    // Ensure cameras is an array
     cameras: raw.cameras || [],
-    // Ensure motionSensors is an array
     motionSensors: raw.motionSensors || [],
-    // Ensure laserGrids is an array and normalize directions
     laserGrids: normalizeLaserGrids(raw.laserGrids, raw.name),
-    // Ensure guardPatrol is an array
     guardPatrol: raw.guardPatrol || [],
-    // Ensure patrolDrones is an array
     patrolDrones: raw.patrolDrones || []
   };
 });
 
-// Export for use in other modules
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { LEVEL_LAYOUTS, DEFAULT_LEVEL, validateLevelLayouts };
-}
-
-// ES Module export
-export { LEVEL_LAYOUTS, DEFAULT_LEVEL, validateLevelLayouts };
-
-// Helper functions for validation
+// Validation helper functions
 function ensureArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -413,3 +650,10 @@ function validateLevelLayouts(levels) {
 
   return { ok: errors.length === 0, errors };
 }
+
+// Exports
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = { LEVEL_LAYOUTS, DEFAULT_LEVEL, validateLevelLayouts };
+}
+
+export { LEVEL_LAYOUTS, DEFAULT_LEVEL, validateLevelLayouts };
