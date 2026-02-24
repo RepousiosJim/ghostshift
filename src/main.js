@@ -1277,7 +1277,7 @@ function saveSaveData(data) { saveManager.data = data; saveManager.save(); }
 // Phase 7: Increased scale for desktop/web - larger game canvas for better UI visibility
 const TILE_SIZE = 48; // Increased from 32 for better visibility
 const MAP_WIDTH = 22; // Expanded from 16 (+3 tiles for Phase 13, +3 more for Phase 14)
-const MAP_HEIGHT = 18; // Expanded from 12 (+3 tiles for Phase 13, +3 more for Phase 14)
+const MAP_HEIGHT = 23; // VERTICAL EXPANSION: 18 -> 23 (27.8% increase) - synced with levels.js
 const BASE_PLAYER_SPEED = 180;
 // Guard speed now scales with difficulty (base 65, max 90)
 const BASE_GUARD_SPEED = 65;

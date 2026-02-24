@@ -28,7 +28,7 @@ const DEFAULT_LEVEL = {
 
 // Map dimensions
 const MAP_WIDTH = 22;
-const MAP_HEIGHT = 23;  // VERTICAL EXPANSION: 18 -> 23 (27.8% increase)
+const MAP_HEIGHT = 18;
 
 // ==================== OBJECTIVE PLACEMENT FALLBACK SYSTEM ====================
 // Deterministic fallback for constrained rooms - never fails silently
@@ -376,14 +376,12 @@ function mergeObstacles(...arrays) {
 
 // Level layouts with rooms-and-corridors architecture
 const RAW_LEVEL_LAYOUTS = [
-  // Level 1: Warehouse V4 - 22x23 map (VERTICAL EXPANSION 2026-02-24)
-  // VERTICAL EXPANSION: 18 rows -> 23 rows (27.8% increase)
-  //
-  // ARCHITECTURE:
-  // - 3 VERTICAL ROOM BANDS (was 2)
-  // - 2 CORRIDORS (upper y=7-8, lower y=15-16)
-  // - VERTICAL SPINE CORRIDOR connecting all bands
-  // - Objectives distributed vertically: K (top) -> T (middle) -> D (bottom) -> Exit (bottom)
+  // Level 1: Warehouse V3 - 22x18 map (Dungeon Tile Refactor 2026-02-24)
+  // POLISH PASS 2026-02-24:
+  // - WIDENED CORRIDORS: Main corridor now 2-tile width (y=7-10)
+  // - REDUCED PRESSURE: Patrol routes avoid objective lanes (shifted to y=9)
+  // - SAFE STAGING: Room 5 (center-bottom) is guard-free safe pocket
+  // - IMPROVED FLOW: keycard(x=3) -> terminal(x=10) -> datacore(x=17) -> exit(x=17)
   //
   // STRICT DUNGEON-ROOM RULES:
   // - Each room: 5x5 minimum (3x3 walkable interior)
@@ -393,163 +391,114 @@ const RAW_LEVEL_LAYOUTS = [
   // - Objectives in room interiors only
   // - No non-functional hazards (lasers disabled)
   //
-  // VERTICAL FLOW:
-  // Spawn (y=19) -> Terminal (y=11) -> Keycard (y=3) -> Datacore (y=19) -> Exit (y=19)
-  // Players ascend to get keycard, then descend to datacore/exit
-  //
-  // LAYOUT (23 rows, vertical expansion):
+  // LAYOUT (polished):
   // ┌──────────────────────────────────────────────────┐ y=0
-  // │ ████████████████████████████████████████████████│ BORDER
+  // │ ████████████████████████████████████████████████│
   // │ █┌─────┐█    █┌─────┐█    █┌─────┐█████████████│
-  // │ █│[K] │█    █│     │█    █│     │█   K=Keycard │
-  // │ █│Key │█    █│Empty│█    █│Empty│█   T=Terminal│
-  // │ █└──┬──┘█    █└──┬──┘█    █└──┬──┘█  D=Datacore│
-  // │ ████▀████    ████▀████    ████▀████ S=Spawn    │
-  // │        ▀▀    ▀▀    ▀▀    ▀▀        X=Exit      │ y=6
-  // │              UPPER CORRIDOR (2-tile)           │ y=7-8
+  // │ █│[K] │█    █│[T] │█    █│[D] │█   LEGEND:     │
+  // │ █│Key │█    █│Term│█    █│Core│█   K=Keycard   │
+  // │ █└──┬──┘█    █└──┬──┘█    █└──┬──┘█  T=Terminal │
+  // │ ████▀████    ████▀████    ████▀████ D=Datacore │
+  // │        ▀▀    ▀▀    ▀▀    ▀▀        [X]=Exit    │
+  // │              2-TILE WIDE CORRIDOR   S=Spawn    │
   // │        ▄▄    ▄▄    ▄▄    ▄▄                     │
-  // │ ████▄████    ████▄████    ████▄████             │
+  // │ ████▄████    ████▄████    ████▄████             │ y=11
   // │ █┌─────┐█    █┌─────┐█    █┌─────┐█             │
-  // │ █│     │█    █│[T] │█    █│     │█   SAFE ROOM │ y=11
-  // │ █│Empty│█    █│Term│█    █│Empty│█   (no guard)│
+  // │ █│[S] │█    █│SAFE │█    █│[X] │█   SAFE ROOM  │
+  // │ █│Spawn█    █│Stag │█    █│Exit│█   (no guard) │
   // │ █└─────┘█    █└─────┘█    █└─────┘█             │
-  // │ ████████████████████████████████████████████████│ y=13
-  // │        ▀▀    ▀▀    ▀▀    ▀▀                     │
-  // │              LOWER CORRIDOR (2-tile)           │ y=15-16
-  // │        ▄▄    ▄▄    ▄▄    ▄▄                     │
-  // │ ████▄████    ████▄████    ████▄████             │
-  // │ █┌─────┐█    █┌─────┐█    █┌─────┐█             │
-  // │ █│[S] │█    █│SAFE │█    █│[D] │█   LEGEND     │ y=19
-  // │ █│Spawn█    █│Stag │█    █│Core│█              │
-  // │ █└─────┘█    █└─────┘█    █└──┬──┘█             │
-  // │ ████████████████████████████████████████████████│ y=22
-  // │                                    [X]=Exit     │
+  // │ ████████████████████████████████████████████████│ y=17
   // └──────────────────────────────────────────────────┘
   {
     name: 'Warehouse',
     obstacles: mergeObstacles(
       // ==================== MAP BORDER ====================
       Array.from({length: MAP_WIDTH}, (_, i) => ({x: i, y: 0})),
-      Array.from({length: MAP_WIDTH}, (_, i) => ({x: i, y: 22})),
+      Array.from({length: MAP_WIDTH}, (_, i) => ({x: i, y: 17})),
       Array.from({length: MAP_HEIGHT}, (_, i) => ({x: 0, y: i})),
       Array.from({length: MAP_HEIGHT}, (_, i) => ({x: 21, y: i})),
 
-      // ==================== TOP BAND ROOMS (y=1-5) ====================
-      
-      // ROOM 1: KEYCARD ROOM (5x5)
+      // ==================== ROOM 1: SPAWN ROOM (5x5) ====================
+      // Location: x=1-5, y=12-16 (bottom-left)
+      // Walkable interior: x=2-4, y=13-15 (3x3)
+      // Door: top wall with 2-tile wide gap for readability
+      createRoomWalls(1, 12, 5, 5, {topDoor: {offset: 1, width: 2}}),
+
+      // ==================== ROOM 2: KEYCARD ROOM (5x5) ====================
       // Location: x=1-5, y=1-5 (top-left)
       // Walkable interior: x=2-4, y=2-4 (3x3)
       // Door: bottom wall with 2-tile wide gap
       createRoomWalls(1, 1, 5, 5, {bottomDoor: {offset: 1, width: 2}}),
 
-      // ROOM 2: EMPTY ROOM (5x5)
+      // ==================== ROOM 3: TERMINAL ROOM (5x5) ====================
       // Location: x=8-12, y=1-5 (top-center)
       // Walkable interior: x=9-11, y=2-4 (3x3)
       // Door: bottom wall with 2-tile wide gap
       createRoomWalls(8, 1, 5, 5, {bottomDoor: {offset: 1, width: 2}}),
 
-      // ROOM 3: EMPTY ROOM (5x5)
+      // ==================== ROOM 4: DATA CORE ROOM (5x5) ====================
       // Location: x=15-19, y=1-5 (top-right)
       // Walkable interior: x=16-18, y=2-4 (3x3)
       // Door: bottom wall with 2-tile wide gap
       createRoomWalls(15, 1, 5, 5, {bottomDoor: {offset: 1, width: 2}}),
 
-      // ==================== MIDDLE BAND ROOMS (y=9-13) ====================
-      
-      // ROOM 4: EMPTY ROOM (5x5)
-      // Location: x=1-5, y=9-13 (middle-left)
-      // Walkable interior: x=2-4, y=10-12 (3x3)
-      // Door: top wall with 2-tile wide gap
-      createRoomWalls(1, 9, 5, 5, {topDoor: {offset: 1, width: 2}}),
-
-      // ROOM 5: TERMINAL ROOM (5x5)
-      // Location: x=8-12, y=9-13 (middle-center)
-      // Walkable interior: x=9-11, y=10-12 (3x3)
-      // Door: top wall with 2-tile wide gap
-      createRoomWalls(8, 9, 5, 5, {topDoor: {offset: 1, width: 2}}),
-
-      // ROOM 6: EMPTY ROOM (5x5)
-      // Location: x=15-19, y=9-13 (middle-right)
-      // Walkable interior: x=16-18, y=10-12 (3x3)
-      // Door: top wall with 2-tile wide gap
-      createRoomWalls(15, 9, 5, 5, {topDoor: {offset: 1, width: 2}}),
-
-      // ==================== BOTTOM BAND ROOMS (y=17-21) ====================
-      
-      // ROOM 7: SPAWN ROOM (5x5)
-      // Location: x=1-5, y=17-21 (bottom-left)
-      // Walkable interior: x=2-4, y=18-20 (3x3)
-      // Door: top wall with 2-tile wide gap
-      createRoomWalls(1, 17, 5, 5, {topDoor: {offset: 1, width: 2}}),
-
-      // ROOM 8: STAGING ROOM (5x5) - SAFE POCKET
-      // Location: x=8-12, y=17-21 (bottom-center)
-      // Walkable interior: x=9-11, y=18-20 (3x3)
+      // ==================== ROOM 5: STAGING ROOM (5x5) - SAFE POCKET ====================
+      // Location: x=8-12, y=12-16 (bottom-center)
+      // Walkable interior: x=9-11, y=13-15 (3x3)
       // No objectives - pure staging/reset room (GUARD-FREE SAFE ZONE)
       // Door: top wall with 2-tile wide gap
-      createRoomWalls(8, 17, 5, 5, {topDoor: {offset: 1, width: 2}}),
+      createRoomWalls(8, 12, 5, 5, {topDoor: {offset: 1, width: 2}}),
 
-      // ROOM 9: DATACORE + EXIT ROOM (5x5)
-      // Location: x=15-19, y=17-21 (bottom-right)
-      // Walkable interior: x=16-18, y=18-20 (3x3)
+      // ==================== ROOM 6: EXIT ROOM (5x5) ====================
+      // Location: x=15-19, y=12-16 (bottom-right)
+      // Walkable interior: x=16-18, y=13-15 (3x3)
       // Door: top wall with 2-tile wide gap
-      createRoomWalls(15, 17, 5, 5, {topDoor: {offset: 1, width: 2}}),
+      createRoomWalls(15, 12, 5, 5, {topDoor: {offset: 1, width: 2}}),
 
       // ==================== HORIZONTAL DIVIDERS - 2-TILE GAPS ====================
-      // Upper divider (y=6) - 2-tile gaps at doors
+      // Upper divider (y=6) - 2-tile gaps at doors for wider corridors
       [{x: 1, y: 6}, {x: 4, y: 6}, {x: 5, y: 6},
        {x: 8, y: 6}, {x: 11, y: 6}, {x: 12, y: 6},
        {x: 15, y: 6}, {x: 18, y: 6}, {x: 19, y: 6}],
       
-      // Middle-upper divider (y=14) - 2-tile gaps at doors
-      [{x: 1, y: 14}, {x: 4, y: 14}, {x: 5, y: 14},
-       {x: 8, y: 14}, {x: 11, y: 14}, {x: 12, y: 14},
-       {x: 15, y: 14}, {x: 18, y: 14}, {x: 19, y: 14}],
+      // Lower divider (y=11) - 2-tile gaps at doors
+      [{x: 1, y: 11}, {x: 4, y: 11}, {x: 5, y: 11},
+       {x: 8, y: 11}, {x: 11, y: 11}, {x: 12, y: 11},
+       {x: 15, y: 11}, {x: 18, y: 11}, {x: 19, y: 11}],
 
       // ==================== VERTICAL DIVIDERS (between room columns) ====================
-      // Left divider (between column 1 and 2) - in all room bands
-      // Top band
+      // Left divider (between column 1 and 2) - only in room areas, not corridor
       [{x: 6, y: 1}, {x: 6, y: 2}, {x: 6, y: 3}, {x: 6, y: 4}, {x: 6, y: 5},
-       {x: 7, y: 1}, {x: 7, y: 2}, {x: 7, y: 3}, {x: 7, y: 4}, {x: 7, y: 5}],
-      // Middle band
-      [{x: 6, y: 9}, {x: 6, y: 10}, {x: 6, y: 11}, {x: 6, y: 12}, {x: 6, y: 13},
-       {x: 7, y: 9}, {x: 7, y: 10}, {x: 7, y: 11}, {x: 7, y: 12}, {x: 7, y: 13}],
-      // Bottom band
-      [{x: 6, y: 17}, {x: 6, y: 18}, {x: 6, y: 19}, {x: 6, y: 20}, {x: 6, y: 21},
-       {x: 7, y: 17}, {x: 7, y: 18}, {x: 7, y: 19}, {x: 7, y: 20}, {x: 7, y: 21}],
+       {x: 7, y: 1}, {x: 7, y: 2}, {x: 7, y: 3}, {x: 7, y: 4}, {x: 7, y: 5},
+       {x: 6, y: 12}, {x: 6, y: 13}, {x: 6, y: 14}, {x: 6, y: 15}, {x: 6, y: 16},
+       {x: 7, y: 12}, {x: 7, y: 13}, {x: 7, y: 14}, {x: 7, y: 15}, {x: 7, y: 16}],
       
       // Right divider (between column 2 and 3)
-      // Top band
       [{x: 13, y: 1}, {x: 13, y: 2}, {x: 13, y: 3}, {x: 13, y: 4}, {x: 13, y: 5},
-       {x: 14, y: 1}, {x: 14, y: 2}, {x: 14, y: 3}, {x: 14, y: 4}, {x: 14, y: 5}],
-      // Middle band
-      [{x: 13, y: 9}, {x: 13, y: 10}, {x: 13, y: 11}, {x: 13, y: 12}, {x: 13, y: 13},
-       {x: 14, y: 9}, {x: 14, y: 10}, {x: 14, y: 11}, {x: 14, y: 12}, {x: 14, y: 13}],
-      // Bottom band
-      [{x: 13, y: 17}, {x: 13, y: 18}, {x: 13, y: 19}, {x: 13, y: 20}, {x: 13, y: 21},
-       {x: 14, y: 17}, {x: 14, y: 18}, {x: 14, y: 19}, {x: 14, y: 20}, {x: 14, y: 21}]
+       {x: 14, y: 1}, {x: 14, y: 2}, {x: 14, y: 3}, {x: 14, y: 4}, {x: 14, y: 5},
+       {x: 13, y: 12}, {x: 13, y: 13}, {x: 13, y: 14}, {x: 13, y: 15}, {x: 13, y: 16},
+       {x: 14, y: 12}, {x: 14, y: 13}, {x: 14, y: 14}, {x: 14, y: 15}, {x: 14, y: 16}]
     ),
 
     // ==================== OBJECTIVES (room interiors only) ====================
-    // VERTICAL FLOW: Spawn -> Terminal -> Keycard -> Datacore -> Exit
-    playerStart: {x: 3, y: 19},       // Spawn room center (bottom-left)
-    hackTerminal: {x: 10, y: 11},     // Terminal room center (middle-center)
-    keyCard: {x: 3, y: 3},            // Keycard room center (top-left)
-    dataCore: {x: 17, y: 19},         // Data core room center (bottom-right)
-    exitZone: {x: 17, y: 20},         // Exit near datacore (bottom-right, same room)
+    playerStart: {x: 3, y: 14},       // Spawn room center
+    keyCard: {x: 3, y: 3},             // Keycard room center
+    hackTerminal: {x: 10, y: 3},       // Terminal room center
+    dataCore: {x: 17, y: 3},           // Data core room center
+    exitZone: {x: 17, y: 14},          // Exit room center
 
-    // ==================== GUARD PATROL (corridors only - REDUCED PRESSURE) ====================
-    // Patrol in upper corridor (y=7-8) to avoid spawn area
-    // Players must pass through patrol to reach keycard
+    // ==================== GUARD PATROL (corridor only - REDUCED PRESSURE) ====================
+    // Patrol shifted to y=9 (away from objective room doors at y=6 and y=11)
+    // Avoids patrol/objective overlap for smoother gameplay
     guardPatrol: [
-      {x: 5, y: 7},     // Left corridor upper
-      {x: 10, y: 7},    // Center corridor upper
-      {x: 17, y: 7},    // Right corridor upper
-      {x: 10, y: 8}     // Center corridor lower
+      {x: 5, y: 9},     // Left corridor (shifted from y=8)
+      {x: 10, y: 9},    // Center corridor
+      {x: 17, y: 9},    // Right corridor (shifted from y=8)
+      {x: 10, y: 8}     // Brief check near center
     ],
 
     // ==================== SENSORS (corridor only - reduced overlap) ====================
-    // Camera positioned to watch upper corridor mid-point
+    // Camera positioned to watch corridor mid-point, not objective rooms
     cameras: [{x: 10, y: 8}],
     motionSensors: [],
     

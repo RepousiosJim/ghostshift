@@ -12,7 +12,7 @@
 // These should match main.js values
 export const TILE_SIZE = 48;
 export const MAP_WIDTH = 22;
-export const MAP_HEIGHT = 18;
+export const MAP_HEIGHT = 23; // VERTICAL EXPANSION: 18 -> 23 (27.8% increase) - synced with main.js
 
 // Tile type identifiers
 export const TILE_TYPES = {

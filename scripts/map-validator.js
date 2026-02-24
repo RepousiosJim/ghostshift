@@ -27,7 +27,7 @@ const __dirname = path.dirname(__filename);
 
 // Map dimensions (must match main.js)
 const MAP_WIDTH = 22;
-const MAP_HEIGHT = 18;
+const MAP_HEIGHT = 23;  // VERTICAL EXPANSION: 18 -> 23 (27.8% increase)
 const TILE_SIZE = 48;
 
 // Configuration
@@ -373,6 +373,158 @@ function validatePosition(audit, grid, level, fieldName, entity, autoFix = false
   return { valid: true, fixed: false };
 }
 
+// ==================== VERTICAL EXPANSION VALIDATION ====================
+// Travel-time sanity checks and route clarity for taller maps
+
+/**
+ * Calculate path distance (BFS with distance tracking) between two points
+ * Returns the number of tiles in the shortest path, or -1 if no path exists
+ */
+export function calculatePathDistance(grid, from, to) {
+  const startTx = Math.floor(from.x);
+  const startTy = Math.floor(from.y);
+  const endTx = Math.floor(to.x);
+  const endTy = Math.floor(to.y);
+  
+  if (!isWalkable(grid, startTx, startTy) || !isWalkable(grid, endTx, endTy)) {
+    return -1;
+  }
+  
+  if (startTx === endTx && startTy === endTy) return 0;
+  
+  const visited = Array(MAP_HEIGHT).fill(null).map(() => Array(MAP_WIDTH).fill(false));
+  const queue = [{x: startTx, y: startTy, dist: 0}];
+  visited[startTy][startTx] = true;
+  
+  while (queue.length > 0) {
+    const {x, y, dist} = queue.shift();
+    
+    const neighbors = [
+      {x: x + 1, y}, {x: x - 1, y},
+      {x, y: y + 1}, {x, y: y - 1}
+    ];
+    
+    for (const n of neighbors) {
+      if (n.x === endTx && n.y === endTy && isWalkable(grid, endTx, endTy)) {
+        return dist + 1;
+      }
+      
+      if (n.x >= 0 && n.x < MAP_WIDTH && n.y >= 0 && n.y < MAP_HEIGHT) {
+        if (!visited[n.y][n.x] && grid[n.y][n.x]) {
+          visited[n.y][n.x] = true;
+          queue.push({x: n.x, y: n.y, dist: dist + 1});
+        }
+      }
+    }
+  }
+  
+  return -1; // No path found
+}
+
+/**
+ * Calculate travel-time sanity for a level
+ * Ensures the level isn't too long or frustrating for the map size
+ */
+function checkTravelTimeSanity(level, grid, audit) {
+  const BASE_SPEED_TILES_PER_SECOND = 4; // Approximate player speed
+  const MAX_REASONABLE_SECONDS = 120; // 2 minutes max for simple traversal
+  const MAX_REASONABLE_TILES = BASE_SPEED_TILES_PER_SECOND * MAX_REASONABLE_SECONDS;
+  
+  // Calculate distances between key points
+  const distances = {};
+  const start = level.playerStart;
+  const exit = level.exitZone;
+  const dataCore = level.dataCore;
+  const keyCard = level.keyCard;
+  const hackTerminal = level.hackTerminal;
+  
+  if (start && exit) {
+    distances.startToExit = calculatePathDistance(grid, start, exit);
+  }
+  
+  if (start && dataCore) {
+    distances.startToDataCore = calculatePathDistance(grid, start, dataCore);
+  }
+  
+  if (start && keyCard) {
+    distances.startToKeyCard = calculatePathDistance(grid, start, keyCard);
+  }
+  
+  if (start && hackTerminal) {
+    distances.startToTerminal = calculatePathDistance(grid, start, hackTerminal);
+  }
+  
+  // Check if any path is too long
+  let hasExcessiveDistance = false;
+  for (const [name, dist] of Object.entries(distances)) {
+    if (dist > MAX_REASONABLE_TILES) {
+      audit.warn(`[travel-time] ${name}: ${dist} tiles (${Math.round(dist/BASE_SPEED_TILES_PER_SECOND)}s) - may be frustrating`);
+      hasExcessiveDistance = true;
+    }
+  }
+  
+  // Store travel time stats
+  audit.travelTimeStats = {
+    distances,
+    maxReasonableTiles: MAX_REASONABLE_TILES,
+    excessiveDistance: hasExcessiveDistance
+  };
+  
+  return !hasExcessiveDistance;
+}
+
+/**
+ * Check route clarity for taller maps
+ * Ensures objectives are distributed well vertically
+ */
+function checkRouteClarity(level, grid, audit) {
+  const objectives = [
+    { name: 'playerStart', pos: level.playerStart },
+    { name: 'exitZone', pos: level.exitZone },
+    { name: 'dataCore', pos: level.dataCore },
+    { name: 'keyCard', pos: level.keyCard },
+    { name: 'hackTerminal', pos: level.hackTerminal }
+  ].filter(o => o.pos && Number.isFinite(o.pos.y));
+  
+  if (objectives.length < 2) {
+    return true; // Not enough objectives to check distribution
+  }
+  
+  const yPositions = objectives.map(o => o.pos.y);
+  const minY = Math.min(...yPositions);
+  const maxY = Math.max(...yPositions);
+  const verticalSpan = maxY - minY;
+  
+  // For taller maps, check vertical distribution
+  const expectedSpan = Math.floor(MAP_HEIGHT * 0.4); // Expect at least 40% vertical coverage
+  
+  // Check if all objectives are clustered in one area
+  const topHalfCount = objectives.filter(o => o.pos.y < MAP_HEIGHT / 2).length;
+  const bottomHalfCount = objectives.filter(o => o.pos.y >= MAP_HEIGHT / 2).length;
+  
+  const isClustered = topHalfCount === 0 || bottomHalfCount === 0;
+  const isTooNarrow = verticalSpan < expectedSpan;
+  
+  if (isClustered && objectives.length >= 3) {
+    audit.warn(`[route-clarity] Objectives clustered in ${topHalfCount === 0 ? 'bottom' : 'top'} half - consider better vertical distribution`);
+  }
+  
+  if (isTooNarrow && MAP_HEIGHT >= 20) {
+    audit.warn(`[route-clarity] Vertical span only ${verticalSpan} tiles (expected >= ${expectedSpan}) - taller maps should use full height`);
+  }
+  
+  audit.routeClarityStats = {
+    verticalSpan,
+    expectedSpan,
+    topHalfCount,
+    bottomHalfCount,
+    isClustered,
+    isTooNarrow
+  };
+  
+  return !isClustered || objectives.length < 3;
+}
+
 /**
  * Audit a single level
  */
@@ -481,6 +633,13 @@ export function auditLevel(level, index, autoFix = false) {
   } else {
     audit.error(`[reachability] Cannot check - playerStart is not on valid tile`);
   }
+  
+  // ==================== VERTICAL EXPANSION VALIDATION ====================
+  // Travel-time sanity checks for taller maps
+  checkTravelTimeSanity(level, grid, audit);
+  
+  // Route clarity checks for vertical distribution
+  checkRouteClarity(level, grid, audit);
   
   return audit;
 }
@@ -592,9 +751,10 @@ export function auditAllLevels(levels, options = {}) {
  */
 export { CONFIG, MAP_WIDTH, MAP_HEIGHT, TILE_SIZE };
 
-// CLI execution
-const isMainModule = import.meta.url === `file://${process.argv[1]}` || 
-                     process.argv[1].endsWith('map-validator.js');
+// CLI execution - safe check for import scenarios
+const isMainModule = typeof process !== 'undefined' && process.argv && process.argv[1] && 
+                     (import.meta.url === `file://${process.argv[1]}` || 
+                      process.argv[1].endsWith('map-validator.js'));
 
 if (isMainModule) {
   const args = process.argv.slice(2);
