@@ -87,6 +87,46 @@ function reportRuntimeError(error, data = {}) {
   console.error('[RuntimeContext]', { ...runtimeErrorContext.snapshot(), ...data });
 }
 
+// ==================== ENEMY NAME GENERATOR ====================
+// Generates unique display names for enemy AI entities
+const ENEMY_NAMES = {
+  guard: {
+    callsigns: ['ALPHA', 'BRAVO', 'CHARLIE', 'DELTA', 'ECHO', 'FOXTROT', 'GOLF', 'HOTEL'],
+    titles: ['SGT', 'CPL', 'PVT', 'LT', 'CPT'],
+    suffixes: ['-1', '-2', '-3', '-X', '-PRIME']
+  },
+  drone: {
+    prefixes: ['RX', 'TX', 'NX', 'AX', 'BX', 'CX'],
+    designations: ['SCOUT', 'WATCH', 'SENTINEL', 'PATROL', 'GUARD']
+  }
+};
+
+let _enemyNameCounter = 0;
+
+function generateEnemyName(type, index = 0) {
+  _enemyNameCounter++;
+  const seed = (_enemyNameCounter * 17 + index * 31) % 1000;
+  
+  if (type === 'guard') {
+    const callsign = ENEMY_NAMES.guard.callsigns[seed % ENEMY_NAMES.guard.callsigns.length];
+    const title = ENEMY_NAMES.guard.titles[(seed >> 3) % ENEMY_NAMES.guard.titles.length];
+    return `${title} ${callsign}`;
+  } else if (type === 'scanner') {
+    const prefix = ENEMY_NAMES.drone.prefixes[seed % ENEMY_NAMES.drone.prefixes.length];
+    return `${prefix}-EYE`;
+  } else if (type === 'patrol') {
+    const prefix = ENEMY_NAMES.drone.prefixes[(seed + index) % ENEMY_NAMES.drone.prefixes.length];
+    const num = ((seed + index * 7) % 9) + 1;
+    return `${prefix}-${num.toString().padStart(2, '0')}`;
+  }
+  return `UNIT-${_enemyNameCounter}`;
+}
+
+// Reset name counter for new game session
+function resetEnemyNames() {
+  _enemyNameCounter = 0;
+}
+
 function attachSceneGuard(scene, label) {
   if (scene.__guard) {
     const guard = scene.__guard;
@@ -5360,6 +5400,10 @@ class GameScene extends Phaser.Scene {
     // Phase 14: Motion sensor proximity warning for fairness
     this.motionSensorWarning = null; // Visual warning when near motion sensor
     this.isNearMotionSensor = false; // Track if player is near a motion sensor
+    // Enemy nameplate system
+    this.guardNameLabel = null;
+    this.scannerDroneLabel = null;
+    this.patrolDroneLabels = [];
     this.scannerAngle = 0; this.applySpeedBoost = false; this.applyStealth = false;
     this.hasWon = false;
     this._restarted = false;
@@ -5524,6 +5568,21 @@ class GameScene extends Phaser.Scene {
       this.guardGlow.destroy();
       this.guardGlow = null;
     }
+    // Clean up enemy nameplates
+    if (this.guardNameLabel) {
+      this.guardNameLabel.destroy();
+      this.guardNameLabel = null;
+    }
+    if (this.scannerDroneLabel) {
+      this.scannerDroneLabel.destroy();
+      this.scannerDroneLabel = null;
+    }
+    if (this.patrolDroneLabels) {
+      this.patrolDroneLabels.forEach(label => {
+        if (label) label.destroy();
+      });
+      this.patrolDroneLabels = [];
+    }
     // Clean up camera graphics arrays
     if (this.cameras) {
       this.cameras.forEach(cam => {
@@ -5684,6 +5743,18 @@ class GameScene extends Phaser.Scene {
     this.guardAwarenessIndicator = this.add.graphics();
     this.guardAwarenessIndicator.setDepth(50); // Above guard
 
+    // Enemy nameplates - create labels for all enemies
+    resetEnemyNames();
+    const guardName = generateEnemyName('guard');
+    this.guardNameLabel = this.add.text(this.guard.x, this.guard.y - TILE_SIZE / 2 - 22, guardName, {
+      fontSize: '10px',
+      fill: '#ff6666',
+      fontFamily: 'Courier New',
+      fontStyle: 'bold',
+      backgroundColor: '#1a1a2e',
+      padding: { x: 4, y: 2 }
+    }).setOrigin(0.5).setDepth(51);
+
     this.createScannerDrone();
     this.createCameras();
     this.createMotionSensors();
@@ -5824,8 +5895,9 @@ class GameScene extends Phaser.Scene {
   
   createPatrolDrones() {
     this.patrolDrones = [];
+    this.patrolDroneLabels = [];
     if (!this.currentLayout.patrolDrones) return;
-    this.currentLayout.patrolDrones.forEach(config => {
+    this.currentLayout.patrolDrones.forEach((config, idx) => {
       const drone = this.add.rectangle(config.x * TILE_SIZE, config.y * TILE_SIZE, TILE_SIZE - 6, TILE_SIZE - 6, 0xff00ff);
       drone.setStrokeStyle(2, 0xff88ff);
       this.physics.add.existing(drone);
@@ -5838,6 +5910,18 @@ class GameScene extends Phaser.Scene {
         patrolIndex: 0,
         speed: 60
       });
+      
+      // Patrol drone nameplate
+      const droneName = generateEnemyName('patrol', idx);
+      const label = this.add.text(drone.x, drone.y - TILE_SIZE / 2 - 14, droneName, {
+        fontSize: '9px',
+        fill: '#ff88ff',
+        fontFamily: 'Courier New',
+        fontStyle: 'bold',
+        backgroundColor: '#1a1a2e',
+        padding: { x: 3, y: 1 }
+      }).setOrigin(0.5).setDepth(51);
+      this.patrolDroneLabels.push(label);
     });
   }
 
@@ -5886,6 +5970,17 @@ class GameScene extends Phaser.Scene {
     this.scannerPatrolIndex = 0;
     this.scannerAngle = 0;
     this.scannerBeam = this.add.graphics();
+    
+    // Scanner drone nameplate
+    const droneName = generateEnemyName('scanner');
+    this.scannerDroneLabel = this.add.text(this.scannerDrone.x, this.scannerDrone.y - TILE_SIZE / 2 - 14, droneName, {
+      fontSize: '9px',
+      fill: '#cc66ff',
+      fontFamily: 'Courier New',
+      fontStyle: 'bold',
+      backgroundColor: '#1a1a2e',
+      padding: { x: 3, y: 1 }
+    }).setOrigin(0.5).setDepth(51);
   }
 
   createCameras() {
@@ -6435,6 +6530,9 @@ class GameScene extends Phaser.Scene {
     
     // Phase 13: Update guard awareness system
     this.updateGuardAwareness();
+    
+    // Update enemy nameplate positions
+    this.updateEnemyNameplates();
     
     perfManager.endMarker('checkDetection');
     
@@ -8122,6 +8220,30 @@ class GameScene extends Phaser.Scene {
     this.isPreAlerting = false;
     this.preAlertTimer = 0;
     this.guardAwareness = 0;
+  }
+
+  // Update enemy nameplate positions to follow their respective entities
+  updateEnemyNameplates() {
+    // Update guard nameplate
+    if (this.guardNameLabel && this.guard) {
+      this.guardNameLabel.setPosition(this.guard.x, this.guard.y - TILE_SIZE / 2 - 22);
+    }
+    
+    // Update scanner drone nameplate
+    if (this.scannerDroneLabel && this.scannerDrone) {
+      this.scannerDroneLabel.setPosition(this.scannerDrone.x, this.scannerDrone.y - TILE_SIZE / 2 - 14);
+    }
+    
+    // Update patrol drone nameplates
+    if (this.patrolDroneLabels && this.patrolDrones) {
+      for (let i = 0; i < this.patrolDroneLabels.length && i < this.patrolDrones.length; i++) {
+        const label = this.patrolDroneLabels[i];
+        const drone = this.patrolDrones[i];
+        if (label && drone && drone.sprite) {
+          label.setPosition(drone.sprite.x, drone.sprite.y - TILE_SIZE / 2 - 14);
+        }
+      }
+    }
   }
 
   // Phase 16: Tile-based Line of Sight using DDA-like algorithm
