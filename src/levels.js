@@ -377,30 +377,36 @@ function mergeObstacles(...arrays) {
 // Level layouts with rooms-and-corridors architecture
 const RAW_LEVEL_LAYOUTS = [
   // Level 1: Warehouse V3 - 22x18 map (Dungeon Tile Refactor 2026-02-24)
+  // POLISH PASS 2026-02-24:
+  // - WIDENED CORRIDORS: Main corridor now 2-tile width (y=7-10)
+  // - REDUCED PRESSURE: Patrol routes avoid objective lanes (shifted to y=9)
+  // - SAFE STAGING: Room 5 (center-bottom) is guard-free safe pocket
+  // - IMPROVED FLOW: keycard(x=3) -> terminal(x=10) -> datacore(x=17) -> exit(x=17)
+  //
   // STRICT DUNGEON-ROOM RULES:
   // - Each room: 5x5 minimum (3x3 walkable interior)
   // - Rooms fully surrounded by walls
-  // - Doors are empty wall gaps (walkable tiles), not door objects
-  // - Open corridor connects all rooms through doorway gaps
+  // - Doors are 2-tile wide gaps for readability (walkable tiles)
+  // - 2-tile wide corridors for clear traversal
   // - Objectives in room interiors only
   // - No non-functional hazards (lasers disabled)
   //
-  // LAYOUT:
+  // LAYOUT (polished):
   // ┌──────────────────────────────────────────────────┐ y=0
   // │ ████████████████████████████████████████████████│
-  // │ █┌─────┐██████┌─────┐██████┌─────┐█████████████│
-  // │ █│KeyCd│█      │Term │█      │DataC│█            │
-  // │ █│Room │█      │Room │█      │Room │█            │
-  // │ █└─────┘█      └─────┘█      └─────┘█            │
-  // │ ████▀████      ████▀████      ████▀████          │ y=6 (door gaps)
-  // │                                                  │
-  // │              OPEN CORRIDOR                       │
-  // │                                                  │
-  // │ ████▄████      ████▄████      ████▄████          │ y=11 (door gaps)
-  // │ █┌─────┐█      ┌─────┐█      ┌─────┐█            │
-  // │ █│Spawn│█      │Stag │█      │Exit │█            │
-  // │ █│Room │█      │Room │█      │Room │█            │
-  // │ █└─────┘██████ └─────┘██████ └─────┘█████████████│
+  // │ █┌─────┐█    █┌─────┐█    █┌─────┐█████████████│
+  // │ █│[K] │█    █│[T] │█    █│[D] │█   LEGEND:     │
+  // │ █│Key │█    █│Term│█    █│Core│█   K=Keycard   │
+  // │ █└──┬──┘█    █└──┬──┘█    █└──┬──┘█  T=Terminal │
+  // │ ████▀████    ████▀████    ████▀████ D=Datacore │
+  // │        ▀▀    ▀▀    ▀▀    ▀▀        [X]=Exit    │
+  // │              2-TILE WIDE CORRIDOR   S=Spawn    │
+  // │        ▄▄    ▄▄    ▄▄    ▄▄                     │
+  // │ ████▄████    ████▄████    ████▄████             │ y=11
+  // │ █┌─────┐█    █┌─────┐█    █┌─────┐█             │
+  // │ █│[S] │█    █│SAFE │█    █│[X] │█   SAFE ROOM  │
+  // │ █│Spawn█    █│Stag │█    █│Exit│█   (no guard) │
+  // │ █└─────┘█    █└─────┘█    █└─────┘█             │
   // │ ████████████████████████████████████████████████│ y=17
   // └──────────────────────────────────────────────────┘
   {
@@ -415,50 +421,50 @@ const RAW_LEVEL_LAYOUTS = [
       // ==================== ROOM 1: SPAWN ROOM (5x5) ====================
       // Location: x=1-5, y=12-16 (bottom-left)
       // Walkable interior: x=2-4, y=13-15 (3x3)
-      // Door: top wall at x=3 (single tile gap)
-      createRoomWalls(1, 12, 5, 5, {topDoor: {offset: 2, width: 1}}),
+      // Door: top wall with 2-tile wide gap for readability
+      createRoomWalls(1, 12, 5, 5, {topDoor: {offset: 1, width: 2}}),
 
       // ==================== ROOM 2: KEYCARD ROOM (5x5) ====================
       // Location: x=1-5, y=1-5 (top-left)
       // Walkable interior: x=2-4, y=2-4 (3x3)
-      // Door: bottom wall at x=3 (single tile gap)
-      createRoomWalls(1, 1, 5, 5, {bottomDoor: {offset: 2, width: 1}}),
+      // Door: bottom wall with 2-tile wide gap
+      createRoomWalls(1, 1, 5, 5, {bottomDoor: {offset: 1, width: 2}}),
 
       // ==================== ROOM 3: TERMINAL ROOM (5x5) ====================
       // Location: x=8-12, y=1-5 (top-center)
       // Walkable interior: x=9-11, y=2-4 (3x3)
-      // Door: bottom wall at x=10 (single tile gap)
-      createRoomWalls(8, 1, 5, 5, {bottomDoor: {offset: 2, width: 1}}),
+      // Door: bottom wall with 2-tile wide gap
+      createRoomWalls(8, 1, 5, 5, {bottomDoor: {offset: 1, width: 2}}),
 
       // ==================== ROOM 4: DATA CORE ROOM (5x5) ====================
       // Location: x=15-19, y=1-5 (top-right)
       // Walkable interior: x=16-18, y=2-4 (3x3)
-      // Door: bottom wall at x=17 (single tile gap)
-      createRoomWalls(15, 1, 5, 5, {bottomDoor: {offset: 2, width: 1}}),
+      // Door: bottom wall with 2-tile wide gap
+      createRoomWalls(15, 1, 5, 5, {bottomDoor: {offset: 1, width: 2}}),
 
-      // ==================== ROOM 5: STAGING ROOM (5x5) ====================
+      // ==================== ROOM 5: STAGING ROOM (5x5) - SAFE POCKET ====================
       // Location: x=8-12, y=12-16 (bottom-center)
       // Walkable interior: x=9-11, y=13-15 (3x3)
-      // No objectives - pure staging/traversal room
-      // Door: top wall at x=10 (single tile gap)
-      createRoomWalls(8, 12, 5, 5, {topDoor: {offset: 2, width: 1}}),
+      // No objectives - pure staging/reset room (GUARD-FREE SAFE ZONE)
+      // Door: top wall with 2-tile wide gap
+      createRoomWalls(8, 12, 5, 5, {topDoor: {offset: 1, width: 2}}),
 
       // ==================== ROOM 6: EXIT ROOM (5x5) ====================
       // Location: x=15-19, y=12-16 (bottom-right)
       // Walkable interior: x=16-18, y=13-15 (3x3)
-      // Door: top wall at x=17 (single tile gap)
-      createRoomWalls(15, 12, 5, 5, {topDoor: {offset: 2, width: 1}}),
+      // Door: top wall with 2-tile wide gap
+      createRoomWalls(15, 12, 5, 5, {topDoor: {offset: 1, width: 2}}),
 
-      // ==================== HORIZONTAL DIVIDERS ====================
-      // Upper divider (y=6) - gaps at x=3, x=10, x=17 for room doors
-      [{x: 1, y: 6}, {x: 2, y: 6}, {x: 4, y: 6}, {x: 5, y: 6},
-       {x: 8, y: 6}, {x: 9, y: 6}, {x: 11, y: 6}, {x: 12, y: 6},
-       {x: 15, y: 6}, {x: 16, y: 6}, {x: 18, y: 6}, {x: 19, y: 6}],
+      // ==================== HORIZONTAL DIVIDERS - 2-TILE GAPS ====================
+      // Upper divider (y=6) - 2-tile gaps at doors for wider corridors
+      [{x: 1, y: 6}, {x: 4, y: 6}, {x: 5, y: 6},
+       {x: 8, y: 6}, {x: 11, y: 6}, {x: 12, y: 6},
+       {x: 15, y: 6}, {x: 18, y: 6}, {x: 19, y: 6}],
       
-      // Lower divider (y=11) - gaps at x=3, x=10, x=17 for room doors
-      [{x: 1, y: 11}, {x: 2, y: 11}, {x: 4, y: 11}, {x: 5, y: 11},
-       {x: 8, y: 11}, {x: 9, y: 11}, {x: 11, y: 11}, {x: 12, y: 11},
-       {x: 15, y: 11}, {x: 16, y: 11}, {x: 18, y: 11}, {x: 19, y: 11}],
+      // Lower divider (y=11) - 2-tile gaps at doors
+      [{x: 1, y: 11}, {x: 4, y: 11}, {x: 5, y: 11},
+       {x: 8, y: 11}, {x: 11, y: 11}, {x: 12, y: 11},
+       {x: 15, y: 11}, {x: 18, y: 11}, {x: 19, y: 11}],
 
       // ==================== VERTICAL DIVIDERS (between room columns) ====================
       // Left divider (between column 1 and 2) - only in room areas, not corridor
@@ -481,16 +487,19 @@ const RAW_LEVEL_LAYOUTS = [
     dataCore: {x: 17, y: 3},           // Data core room center
     exitZone: {x: 17, y: 14},          // Exit room center
 
-    // ==================== GUARD PATROL (corridor only) ====================
+    // ==================== GUARD PATROL (corridor only - REDUCED PRESSURE) ====================
+    // Patrol shifted to y=9 (away from objective room doors at y=6 and y=11)
+    // Avoids patrol/objective overlap for smoother gameplay
     guardPatrol: [
-      {x: 3, y: 8},
-      {x: 10, y: 8},
-      {x: 17, y: 8},
-      {x: 10, y: 9}
+      {x: 5, y: 9},     // Left corridor (shifted from y=8)
+      {x: 10, y: 9},    // Center corridor
+      {x: 17, y: 9},    // Right corridor (shifted from y=8)
+      {x: 10, y: 8}     // Brief check near center
     ],
 
-    // ==================== SENSORS (corridor only) ====================
-    cameras: [{x: 10, y: 9}],
+    // ==================== SENSORS (corridor only - reduced overlap) ====================
+    // Camera positioned to watch corridor mid-point, not objective rooms
+    cameras: [{x: 10, y: 8}],
     motionSensors: [],
     
     // ==================== NO LASERS (disabled) ====================

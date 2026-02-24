@@ -5641,6 +5641,24 @@ class GameScene extends Phaser.Scene {
         this[name] = null;
       }
     });
+    // Clean up objective identity icons (polish pass)
+    const objectiveIcons = ['dataCoreIcon', 'keyCardIcon', 'hackTerminalIcon', 'exitLockIcon'];
+    objectiveIcons.forEach(name => {
+      if (this[name]) {
+        this[name].destroy();
+        this[name] = null;
+      }
+    });
+    // Clean up exit zone frame (polish pass)
+    if (this.exitZoneFrame) {
+      this.exitZoneFrame.destroy();
+      this.exitZoneFrame = null;
+    }
+    // Clean up exit zone glow
+    if (this.exitZoneGlow) {
+      this.exitZoneGlow.destroy();
+      this.exitZoneGlow = null;
+    }
     // Clean up zones
     const zones = ['hackTerminalArea', 'relayTerminalArea'];
     zones.forEach(name => {
@@ -5743,17 +5761,18 @@ class GameScene extends Phaser.Scene {
     this.guardAwarenessIndicator = this.add.graphics();
     this.guardAwarenessIndicator.setDepth(50); // Above guard
 
-    // Enemy nameplates - create labels for all enemies
+    // ==================== POLISH: ENEMY NAMEPLATES (reduced visual noise) ====================
+    // Smaller size, lower opacity, proximity-based visibility
     resetEnemyNames();
     const guardName = generateEnemyName('guard');
     this.guardNameLabel = this.add.text(this.guard.x, this.guard.y - TILE_SIZE / 2 - 22, guardName, {
-      fontSize: '10px',
+      fontSize: '8px',        // Reduced from 10px
       fill: '#ff6666',
       fontFamily: 'Courier New',
       fontStyle: 'bold',
       backgroundColor: '#1a1a2e',
-      padding: { x: 4, y: 2 }
-    }).setOrigin(0.5).setDepth(51);
+      padding: { x: 3, y: 1 }  // Reduced padding
+    }).setOrigin(0.5).setDepth(51).setAlpha(0.6);  // Lower base opacity
 
     this.createScannerDrone();
     this.createCameras();
@@ -5766,22 +5785,41 @@ class GameScene extends Phaser.Scene {
     const levelName = this.currentLayout.name || `Level ${this.currentLevelIndex + 1}`;
     this.add.text(20, 12, levelName.toUpperCase(), { fontSize: '14px', fill: '#667788', fontFamily: 'Courier New', fontStyle: 'bold' });
 
+    // ==================== POLISH: OBJECTIVE IDENTITY MARKERS ====================
+    // Each objective has distinct shape + icon marker for clarity
+    
+    // Data Core - DIAMOND shape with "D" marker
     const dcPos = this.currentLayout.dataCore;
     this.dataCore = this.add.rectangle(dcPos.x * TILE_SIZE, dcPos.y * TILE_SIZE, TILE_SIZE - 4, TILE_SIZE - 4, 0xffaa00);
     this.dataCore.setStrokeStyle(2, 0xffdd44);
+    this.dataCore.setRotation(Math.PI / 4); // Diamond orientation
     this.physics.add.existing(this.dataCore, true);
     this.tweens.add({ targets: this.dataCore, alpha: 0.6, duration: 500, yoyo: true, repeat: -1 });
+    // Identity marker
+    this.dataCoreIcon = this.add.text(dcPos.x * TILE_SIZE, dcPos.y * TILE_SIZE, 'D', { 
+      fontSize: '14px', fill: '#ffffff', fontFamily: 'Courier New', fontStyle: 'bold' 
+    }).setOrigin(0.5).setDepth(30);
 
+    // Keycard - CARD shape with "K" marker
     const kcPos = this.currentLayout.keyCard;
-    this.keyCard = this.add.rectangle(kcPos.x * TILE_SIZE, kcPos.y * TILE_SIZE, TILE_SIZE - 8, TILE_SIZE - 8, 0x00aaff);
+    this.keyCard = this.add.rectangle(kcPos.x * TILE_SIZE, kcPos.y * TILE_SIZE, TILE_SIZE - 6, TILE_SIZE - 10, 0x00aaff);
     this.keyCard.setStrokeStyle(2, 0x66ddff);
     this.physics.add.existing(this.keyCard, true);
     this.tweens.add({ targets: this.keyCard, alpha: 0.5, duration: 300, yoyo: true, repeat: -1 });
+    // Identity marker
+    this.keyCardIcon = this.add.text(kcPos.x * TILE_SIZE, kcPos.y * TILE_SIZE, 'K', { 
+      fontSize: '12px', fill: '#ffffff', fontFamily: 'Courier New', fontStyle: 'bold' 
+    }).setOrigin(0.5).setDepth(30);
 
+    // Hack Terminal - TERMINAL shape with "T" marker
     const htPos = this.currentLayout.hackTerminal;
-    this.hackTerminal = this.add.rectangle(htPos.x * TILE_SIZE, htPos.y * TILE_SIZE, TILE_SIZE, TILE_SIZE, 0x00ff88);
+    this.hackTerminal = this.add.rectangle(htPos.x * TILE_SIZE, htPos.y * TILE_SIZE, TILE_SIZE - 2, TILE_SIZE - 6, 0x00ff88);
     this.hackTerminal.setStrokeStyle(2, 0x88ffbb);
     this.physics.add.existing(this.hackTerminal, true);
+    // Identity marker
+    this.hackTerminalIcon = this.add.text(htPos.x * TILE_SIZE, htPos.y * TILE_SIZE, 'T', { 
+      fontSize: '14px', fill: '#ffffff', fontFamily: 'Courier New', fontStyle: 'bold' 
+    }).setOrigin(0.5).setDepth(30);
     this.hackTerminalArea = this.add.zone(htPos.x * TILE_SIZE, htPos.y * TILE_SIZE, TILE_SIZE * 2, TILE_SIZE * 2);
 
     // Phase 11: Relay Terminal (optional second hack point)
@@ -5818,14 +5856,33 @@ class GameScene extends Phaser.Scene {
     }
 
     const exitPos = this.currentLayout.exitZone;
-    // Exit zone with enhanced glow - Phase 6 improved
+    // ==================== POLISH: IMPROVED LOCKED-DOOR READABILITY ====================
+    // Clear frame + lock state visibility with distinct visual states
+    
+    // Exit zone frame (clear border)
+    this.exitZoneFrame = this.add.rectangle(exitPos.x * TILE_SIZE, exitPos.y * TILE_SIZE, TILE_SIZE * 2 + 24, TILE_SIZE * 3 + 24, 0x000000, 0);
+    this.exitZoneFrame.setStrokeStyle(4, 0x888899);
+    
+    // Exit zone glow (contextual color based on state)
     this.exitZoneGlow = this.add.rectangle(exitPos.x * TILE_SIZE, exitPos.y * TILE_SIZE, TILE_SIZE * 2 + 20, TILE_SIZE * 3 + 20, 0x222222, 0.2);
+    
+    // Exit zone body
     this.exitZone = this.add.rectangle(exitPos.x * TILE_SIZE, exitPos.y * TILE_SIZE, TILE_SIZE * 2, TILE_SIZE * 3, 0x222222, 0.6);
     this.exitZone.setStrokeStyle(3, 0x666677);
     this.physics.add.existing(this.exitZone, true);
-    this.exitText = this.add.text(exitPos.x * TILE_SIZE, exitPos.y * TILE_SIZE, 'LOCKED', { fontSize: '12px', fill: '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
-    // Phase 6: Exit zone pulsing glow animation
-    this.tweens.add({ targets: this.exitZoneGlow, alpha: 0.4, duration: 800, yoyo: true, repeat: -1 });
+    
+    // Lock state indicator - clear red lock icon when locked
+    this.exitLockIcon = this.add.text(exitPos.x * TILE_SIZE, exitPos.y * TILE_SIZE - TILE_SIZE, '🔒', { 
+      fontSize: '18px' 
+    }).setOrigin(0.5).setDepth(31);
+    
+    // Exit text (shows LOCKED or OPEN)
+    this.exitText = this.add.text(exitPos.x * TILE_SIZE, exitPos.y * TILE_SIZE, 'LOCKED', { 
+      fontSize: '12px', fill: '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' 
+    }).setOrigin(0.5).setDepth(30);
+    
+    // Phase 6: Exit zone pulsing glow animation (slower, less distracting)
+    this.tweens.add({ targets: this.exitZoneGlow, alpha: 0.4, duration: 1200, yoyo: true, repeat: -1 });
 
     this.ghost = this.add.rectangle(-100, -100, TILE_SIZE - 8, TILE_SIZE - 8, 0x44ffaa);
     this.ghost.setAlpha(GHOST_ALPHA);
@@ -5911,16 +5968,16 @@ class GameScene extends Phaser.Scene {
         speed: 60
       });
       
-      // Patrol drone nameplate
+      // Patrol drone nameplate (reduced visual noise)
       const droneName = generateEnemyName('patrol', idx);
       const label = this.add.text(drone.x, drone.y - TILE_SIZE / 2 - 14, droneName, {
-        fontSize: '9px',
+        fontSize: '7px',        // Reduced from 9px
         fill: '#ff88ff',
         fontFamily: 'Courier New',
         fontStyle: 'bold',
         backgroundColor: '#1a1a2e',
-        padding: { x: 3, y: 1 }
-      }).setOrigin(0.5).setDepth(51);
+        padding: { x: 2, y: 1 }  // Reduced padding
+      }).setOrigin(0.5).setDepth(51).setAlpha(0.5);  // Lower base opacity
       this.patrolDroneLabels.push(label);
     });
   }
@@ -5971,16 +6028,16 @@ class GameScene extends Phaser.Scene {
     this.scannerAngle = 0;
     this.scannerBeam = this.add.graphics();
     
-    // Scanner drone nameplate
+    // Scanner drone nameplate (reduced visual noise)
     const droneName = generateEnemyName('scanner');
     this.scannerDroneLabel = this.add.text(this.scannerDrone.x, this.scannerDrone.y - TILE_SIZE / 2 - 14, droneName, {
-      fontSize: '9px',
+      fontSize: '7px',        // Reduced from 9px
       fill: '#cc66ff',
       fontFamily: 'Courier New',
       fontStyle: 'bold',
       backgroundColor: '#1a1a2e',
-      padding: { x: 3, y: 1 }
-    }).setOrigin(0.5).setDepth(51);
+      padding: { x: 2, y: 1 }  // Reduced padding
+    }).setOrigin(0.5).setDepth(51).setAlpha(0.5);  // Lower base opacity
   }
 
   createCameras() {
@@ -6353,6 +6410,7 @@ class GameScene extends Phaser.Scene {
       this.hasKeyCard = true;
       keyCard.setVisible(false);
       if (keyCard.body) keyCard.body.enable = false;
+      if (this.keyCardIcon) this.keyCardIcon.setVisible(false);
       sfx.collect();
       this.objectiveText.setText('[+] Key Card');
       this.objectiveText.setFill('#00ff00');
@@ -6367,6 +6425,7 @@ class GameScene extends Phaser.Scene {
       this.hasDataCore = true;
       dataCore.setVisible(false);
       if (dataCore.body) dataCore.body.enable = false;
+      if (this.dataCoreIcon) this.dataCoreIcon.setVisible(false);
       sfx.collect();
       this.objectiveText3.setText('[+] Data Core');
       this.objectiveText3.setFill('#00ff00');
@@ -6379,8 +6438,15 @@ class GameScene extends Phaser.Scene {
       if (this.exitZoneGlow) {
         this.exitZoneGlow.setFillStyle(0x22ff66, 0.2);
       }
+      // Update lock state visuals - clear unlocked indication
       this.exitText.setText('OPEN');
       this.exitText.setFill('#22ff66');
+      if (this.exitLockIcon) {
+        this.exitLockIcon.setText('🔓'); // Unlocked icon
+      }
+      if (this.exitZoneFrame) {
+        this.exitZoneFrame.setStrokeStyle(4, 0x22ff66); // Green frame when unlocked
+      }
       if (this.cameras?.main) this.cameras.main.flash(200, 0, 255, 100);
     }
   }
@@ -8223,24 +8289,58 @@ class GameScene extends Phaser.Scene {
   }
 
   // Update enemy nameplate positions to follow their respective entities
+  // POLISH: Proximity-based visibility - more visible when player is nearby
   updateEnemyNameplates() {
-    // Update guard nameplate
-    if (this.guardNameLabel && this.guard) {
+    const PROXIMITY_THRESHOLD = 200;  // Distance in pixels for full visibility
+    const MIN_ALPHA = 0.4;            // Minimum alpha when far
+    const MAX_ALPHA = 0.9;            // Maximum alpha when close
+    
+    // Update guard nameplate with proximity-based visibility
+    if (this.guardNameLabel && this.guard && this.player) {
       this.guardNameLabel.setPosition(this.guard.x, this.guard.y - TILE_SIZE / 2 - 22);
+      
+      // Calculate distance to player
+      const dist = Phaser.Math.Distance.Between(
+        this.player.x, this.player.y,
+        this.guard.x, this.guard.y
+      );
+      
+      // Adjust alpha based on proximity
+      const alpha = Phaser.Math.Linear(MAX_ALPHA, MIN_ALPHA, 
+        Phaser.Math.Clamp(dist / PROXIMITY_THRESHOLD, 0, 1));
+      this.guardNameLabel.setAlpha(alpha);
     }
     
-    // Update scanner drone nameplate
-    if (this.scannerDroneLabel && this.scannerDrone) {
+    // Update scanner drone nameplate with proximity-based visibility
+    if (this.scannerDroneLabel && this.scannerDrone && this.player) {
       this.scannerDroneLabel.setPosition(this.scannerDrone.x, this.scannerDrone.y - TILE_SIZE / 2 - 14);
+      
+      const dist = Phaser.Math.Distance.Between(
+        this.player.x, this.player.y,
+        this.scannerDrone.x, this.scannerDrone.y
+      );
+      
+      const alpha = Phaser.Math.Linear(MAX_ALPHA, MIN_ALPHA, 
+        Phaser.Math.Clamp(dist / PROXIMITY_THRESHOLD, 0, 1));
+      this.scannerDroneLabel.setAlpha(alpha);
     }
     
-    // Update patrol drone nameplates
-    if (this.patrolDroneLabels && this.patrolDrones) {
+    // Update patrol drone nameplates with proximity-based visibility
+    if (this.patrolDroneLabels && this.patrolDrones && this.player) {
       for (let i = 0; i < this.patrolDroneLabels.length && i < this.patrolDrones.length; i++) {
         const label = this.patrolDroneLabels[i];
         const drone = this.patrolDrones[i];
         if (label && drone && drone.sprite) {
           label.setPosition(drone.sprite.x, drone.sprite.y - TILE_SIZE / 2 - 14);
+          
+          const dist = Phaser.Math.Distance.Between(
+            this.player.x, this.player.y,
+            drone.sprite.x, drone.sprite.y
+          );
+          
+          const alpha = Phaser.Math.Linear(MAX_ALPHA, MIN_ALPHA, 
+            Phaser.Math.Clamp(dist / PROXIMITY_THRESHOLD, 0, 1));
+          label.setAlpha(alpha);
         }
       }
     }
