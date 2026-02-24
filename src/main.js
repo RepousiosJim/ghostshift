@@ -2,6 +2,8 @@ import { LEVEL_LAYOUTS, validateLevelLayouts } from './levels.js';
 import { BackgroundComposer, BACKGROUND_IMAGE_PATHS } from './background-composer.js';
 // Phase P1: Modular Guard AI - optional runtime integration
 import { GuardAI, GUARD_STATES, GUARD_AI_CONFIG as MODULAR_GUARD_CONFIG } from './guard/index.js';
+// Step 2: Canary rollout configuration
+import { isCanaryLevel, getCanaryMetrics, getFallbackManager, CANARY_CONFIG } from './guard/CanaryConfig.js';
 
 // Dynamic import of Phaser for better loading performance
 // This allows the smaller game.js to load first, then Phaser lazy-loads
@@ -1414,16 +1416,18 @@ const GUARD_AI_CONFIG = {
 };
 
 // ==================== MODULAR GUARD AI FEATURE FLAG ====================
-// Phase P1: Runtime toggle for modular guard AI system
-// Set to true to use the new modular GuardAI components, false for legacy inline AI
-// Default: false (legacy) for maximum stability during rollout
-const USE_MODULAR_GUARD_AI = typeof window !== 'undefined' && (
-  window.GHOSTSHIFT_MODULAR_GUARD_AI === true ||
-  window.location?.search?.includes('modularGuard=1')
-);
+// Step 2: Canary rollout with level-based enablement
+// Uses CanaryConfig.isCanaryLevel() for per-level control
+// Override options:
+//   - window.GHOSTSHIFT_MODULAR_GUARD_AI = true/false (all levels)
+//   - URL param: modularGuard=all or modularGuard=none
+// Canary levels (from CanaryConfig): 0 (Warehouse), 3 (Comms Tower)
 
 // Debug flag for modular guard AI diagnostics
 const DEBUG_MODULAR_GUARD = typeof window !== 'undefined' && window.DEBUG_MODULAR_GUARD === true;
+
+// Canary mode is now determined per-level in GameScene.create()
+// Legacy global flag removed in favor of level-based canary system
 
 // ==================== AUDIO SYSTEM ====================
 class SFXManager {
@@ -5052,6 +5056,19 @@ class GameScene extends Phaser.Scene {
   
   // Cleanup listeners when scene is destroyed
   shutdown() {
+    // Step 2: Report canary metrics on scene end
+    if (this._canaryMetrics && CANARY_CONFIG.metrics.reportOnSceneEnd) {
+      const summary = this._canaryMetrics.end();
+      if (summary.sampleCount > 0) {
+        console.log('[CanaryMetrics] Level', summary.levelIndex, 
+                    'mode:', summary.aiMode,
+                    'samples:', summary.sampleCount,
+                    'stuckRate:', summary.stuckRate?.toFixed(3) || 'N/A',
+                    'avgVel:', summary.avgVelocity?.toFixed(1) || 'N/A',
+                    'errors:', summary.errorCount);
+      }
+    }
+    
     // Mark scene as shutting down to prevent callbacks from running
     this.isRunning = false;
     
@@ -5237,11 +5254,19 @@ class GameScene extends Phaser.Scene {
     this.guard.body.setCollideWorldBounds(true);
     this.guardPatrolPoints = this.currentLayout.guardPatrol.map(p => ({ x: p.x * TILE_SIZE, y: p.y * TILE_SIZE }));
 
-    // Phase P1: Modular Guard AI initialization
+    // Step 2: Canary-based Modular Guard AI initialization
     this._modularGuardAI = null;
-    if (USE_MODULAR_GUARD_AI) {
+    this._guardAIMode = 'legacy'; // Track which mode is active
+    this._canaryMetrics = getCanaryMetrics();
+    this._fallbackManager = getFallbackManager();
+    
+    // Determine if this level should use modular AI
+    const shouldUseModularAI = isCanaryLevel(this.currentLevelIndex) && 
+                                !this._fallbackManager.shouldFallback(this.currentLevelIndex);
+    
+    if (shouldUseModularAI) {
       try {
-        this._modularGuardAI = new GuardAI({ ...GUARD_AI_CONFIG, debug: DEBUG_MODULAR_GUARD });
+        this._modularGuardAI = new GuardAI({ ...MODULAR_GUARD_CONFIG, debug: DEBUG_MODULAR_GUARD });
         // Initialize with scene context
         this._modularGuardAI.initialize(
           this.guardPatrolPoints,
@@ -5250,14 +5275,20 @@ class GameScene extends Phaser.Scene {
           this.time.now,
           TILE_SIZE
         );
+        this._guardAIMode = 'modular';
         if (DEBUG_MODULAR_GUARD) {
-          console.log('[ModularGuardAI] Initialized successfully for level', this.currentLevelIndex);
+          console.log('[ModularGuardAI] Canary mode enabled for level', this.currentLevelIndex, 
+                      '(', this.currentLayout.name, ')');
         }
       } catch (e) {
         console.error('[ModularGuardAI] Initialization failed, falling back to legacy AI:', e);
         this._modularGuardAI = null;
+        this._fallbackManager.recordError(this.currentLevelIndex);
       }
     }
+    
+    // Start metrics collection
+    this._canaryMetrics.start(this.currentLevelIndex, this._guardAIMode);
 
     // Phase 13: Guard awareness indicator - shows guard's current awareness state
     this.guardAwarenessIndicator = this.add.graphics();
@@ -6167,6 +6198,18 @@ class GameScene extends Phaser.Scene {
   }
 
   updateGuard() {
+    // Step 2: Canary metrics collection
+    if (this._canaryMetrics && this.guard) {
+      this._canaryMetrics.sample({
+        guardX: this.guard.x,
+        guardY: this.guard.y,
+        velocity: Math.hypot(this.guard.body?.velocity?.x || 0, this.guard.body?.velocity?.y || 0),
+        state: this._guardState || this._modularGuardAI?.currentState || 'patrol',
+        isStuck: this._modularGuardAI?.isStuck || false,
+        awareness: this.guardAwareness
+      });
+    }
+    
     // Phase P1: Try modular guard AI first if enabled
     if (this._modularGuardAI && this._modularGuardAI.isInitialized) {
       try {
@@ -6175,6 +6218,11 @@ class GameScene extends Phaser.Scene {
       } catch (e) {
         console.error('[ModularGuardAI] Update failed, falling back to legacy:', e);
         this._modularGuardAI = null;  // Disable for future frames
+        this._guardAIMode = 'legacy';
+        // Record error for fallback manager
+        if (this._fallbackManager) {
+          this._fallbackManager.recordError(this.currentLevelIndex);
+        }
       }
     }
     
