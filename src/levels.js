@@ -8,6 +8,8 @@
 
 const DEFAULT_LEVEL = {
   name: 'Unnamed',
+  width: null,   // Per-level dimension support (null = use baseline)
+  height: null, // Per-level dimension support (null = use baseline)
   obstacles: [],
   guardPatrol: [],
   dataCore: null,
@@ -26,9 +28,9 @@ const DEFAULT_LEVEL = {
   alarmTimer: null
 };
 
-// Map dimensions
-const MAP_WIDTH = 28;  // HORIZONTAL EXPANSION: 22 -> 28 (27.3% increase for Level 1)
-const MAP_HEIGHT = 23;  // VERTICAL EXPANSION: 18 -> 23 (27.8% increase)
+// Map dimensions (baseline - individual levels may override)
+const MAP_WIDTH = 22;  // BASELINE: Default map width
+const MAP_HEIGHT = 18;  // BASELINE: Default map height
 
 // ==================== OBJECTIVE PLACEMENT FALLBACK SYSTEM ====================
 // Deterministic fallback for constrained rooms - never fails silently
@@ -425,12 +427,15 @@ const RAW_LEVEL_LAYOUTS = [
   // └────────────────────────────────────────────────────────────────────┘
   {
     name: 'Warehouse',
+    width: 28,   // HORIZONTAL EXPANSION: 22 -> 28 (27.3% increase)
+    height: 23,  // VERTICAL EXPANSION: 18 -> 23 (27.8% increase)
     obstacles: mergeObstacles(
       // ==================== MAP BORDER ====================
-      Array.from({length: MAP_WIDTH}, (_, i) => ({x: i, y: 0})),
-      Array.from({length: MAP_WIDTH}, (_, i) => ({x: i, y: 22})),
-      Array.from({length: MAP_HEIGHT}, (_, i) => ({x: 0, y: i})),
-      Array.from({length: MAP_HEIGHT}, (_, i) => ({x: 27, y: i})),
+      // Level 1 uses expanded dimensions: 28x23
+      Array.from({length: 28}, (_, i) => ({x: i, y: 0})),
+      Array.from({length: 28}, (_, i) => ({x: i, y: 22})),
+      Array.from({length: 23}, (_, i) => ({x: 0, y: i})),
+      Array.from({length: 23}, (_, i) => ({x: 27, y: i})),
 
       // ==================== MAIN OBJECTIVE BAND ROOMS (y=9-13) ====================
       // 5 rooms arranged horizontally with clear progression

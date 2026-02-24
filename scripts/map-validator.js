@@ -26,8 +26,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // Map dimensions (must match main.js)
-const MAP_WIDTH = 28;  // HORIZONTAL EXPANSION: 22 -> 28 (27.3% increase for Level 1)
-const MAP_HEIGHT = 23;  // VERTICAL EXPANSION: 18 -> 23 (27.8% increase)
+const MAP_WIDTH = 22;  // BASELINE: Default map width
+const MAP_HEIGHT = 18;  // BASELINE: Default map height
 const TILE_SIZE = 48;
 
 // Configuration
@@ -84,30 +84,38 @@ class AuditResult {
  * Build a 2D navigation grid from obstacles
  */
 export function buildNavGrid(level) {
-  const grid = Array(MAP_HEIGHT).fill(null).map(() => Array(MAP_WIDTH).fill(true));
-  
+  // Use per-level dimensions if available, otherwise fall back to baseline
+  const width = level.width || MAP_WIDTH;
+  const height = level.height || MAP_HEIGHT;
+
+  const grid = Array(height).fill(null).map(() => Array(width).fill(true));
+
   if (level.obstacles && Array.isArray(level.obstacles)) {
     for (const obs of level.obstacles) {
       if (obs && Number.isFinite(obs.x) && Number.isFinite(obs.y)) {
         const tx = Math.floor(obs.x);
         const ty = Math.floor(obs.y);
-        if (tx >= 0 && tx < MAP_WIDTH && ty >= 0 && ty < MAP_HEIGHT) {
+        if (tx >= 0 && tx < width && ty >= 0 && ty < height) {
           grid[ty][tx] = false;
         }
       }
     }
   }
-  
+
   return grid;
 }
 
 /**
  * Check if a tile coordinate is walkable
+ * Note: grid dimensions are determined by the level that built it
  */
 export function isWalkable(grid, x, y) {
   const tx = Math.floor(x);
   const ty = Math.floor(y);
-  if (tx < 0 || tx >= MAP_WIDTH || ty < 0 || ty >= MAP_HEIGHT) return false;
+  if (!grid || !grid[0]) return false;
+  const height = grid.length;
+  const width = grid[0].length;
+  if (tx < 0 || tx >= width || ty < 0 || ty >= height) return false;
   return grid[ty][tx];
 }
 
@@ -206,34 +214,36 @@ function findNearestWithClearance(grid, x, y, radius = CONFIG.clearanceRadius, m
  * Find connected components using flood fill
  */
 export function findConnectedComponents(grid) {
-  const visited = Array(MAP_HEIGHT).fill(null).map(() => Array(MAP_WIDTH).fill(false));
+  const height = grid.length;
+  const width = grid[0] ? grid[0].length : 0;
+  const visited = Array(height).fill(null).map(() => Array(width).fill(false));
   const regions = [];
-  
+
   function floodFill(startX, startY) {
     const region = [];
     const stack = [{x: startX, y: startY}];
-    
+
     while (stack.length > 0) {
       const {x, y} = stack.pop();
-      
-      if (x < 0 || x >= MAP_WIDTH || y < 0 || y >= MAP_HEIGHT) continue;
+
+      if (x < 0 || x >= width || y < 0 || y >= height) continue;
       if (visited[y][x]) continue;
       if (!grid[y][x]) continue;
-      
+
       visited[y][x] = true;
       region.push({x, y});
-      
+
       stack.push({x: x + 1, y});
       stack.push({x: x - 1, y});
       stack.push({x, y: y + 1});
       stack.push({x, y: y - 1});
     }
-    
+
     return region;
   }
-  
-  for (let y = 0; y < MAP_HEIGHT; y++) {
-    for (let x = 0; x < MAP_WIDTH; x++) {
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
       if (!visited[y][x] && grid[y][x]) {
         const region = floodFill(x, y);
         if (region.length > 0) {
@@ -242,7 +252,7 @@ export function findConnectedComponents(grid) {
       }
     }
   }
-  
+
   regions.sort((a, b) => b.length - a.length);
   return regions;
 }
@@ -255,27 +265,29 @@ export function hasPath(grid, from, to) {
   const startTy = Math.floor(from.y);
   const endTx = Math.floor(to.x);
   const endTy = Math.floor(to.y);
-  
+
   if (!isWalkable(grid, startTx, startTy) || !isWalkable(grid, endTx, endTy)) {
     return false;
   }
-  
-  const visited = Array(MAP_HEIGHT).fill(null).map(() => Array(MAP_WIDTH).fill(false));
+
+  const height = grid.length;
+  const width = grid[0] ? grid[0].length : 0;
+  const visited = Array(height).fill(null).map(() => Array(width).fill(false));
   const queue = [{x: startTx, y: startTy}];
   visited[startTy][startTx] = true;
-  
+
   while (queue.length > 0) {
     const {x, y} = queue.shift();
-    
+
     if (x === endTx && y === endTy) return true;
-    
+
     const neighbors = [
       {x: x + 1, y}, {x: x - 1, y},
       {x, y: y + 1}, {x, y: y - 1}
     ];
-    
+
     for (const n of neighbors) {
-      if (n.x >= 0 && n.x < MAP_WIDTH && n.y >= 0 && n.y < MAP_HEIGHT) {
+      if (n.x >= 0 && n.x < width && n.y >= 0 && n.y < height) {
         if (!visited[n.y][n.x] && grid[n.y][n.x]) {
           visited[n.y][n.x] = true;
           queue.push(n);
@@ -283,7 +295,7 @@ export function hasPath(grid, from, to) {
       }
     }
   }
-  
+
   return false;
 }
 
@@ -301,19 +313,23 @@ function findRegionForPoint(point, regions) {
  */
 function validatePosition(audit, grid, level, fieldName, entity, autoFix = false) {
   if (!entity) return { valid: true, fixed: false };
-  
+
   const originalX = entity.x;
   const originalY = entity.y;
-  
+
+  // Get level dimensions (use per-level if available)
+  const levelWidth = level.width || MAP_WIDTH;
+  const levelHeight = level.height || MAP_HEIGHT;
+
   // Check bounds
   if (!Number.isFinite(originalX) || !Number.isFinite(originalY)) {
     audit.error(`[${fieldName}]: invalid coordinates (${originalX}, ${originalY})`);
     return { valid: false, fixed: false };
   }
-  
-  if (originalX < 0 || originalX >= MAP_WIDTH || originalY < 0 || originalY >= MAP_HEIGHT) {
-    audit.error(`[${fieldName}]: out of bounds (${originalX}, ${originalY})`);
-    
+
+  if (originalX < 0 || originalX >= levelWidth || originalY < 0 || originalY >= levelHeight) {
+    audit.error(`[${fieldName}]: out of bounds (${originalX}, ${originalY}) for ${levelWidth}x${levelHeight} map`);
+
     if (autoFix) {
       const nearest = findNearestWalkable(grid, originalX, originalY);
       if (nearest) {
@@ -478,6 +494,8 @@ function checkTravelTimeSanity(level, grid, audit) {
  * Ensures objectives are distributed well vertically
  */
 function checkRouteClarity(level, grid, audit) {
+  const levelHeight = level.height || MAP_HEIGHT;
+
   const objectives = [
     { name: 'playerStart', pos: level.playerStart },
     { name: 'exitZone', pos: level.exitZone },
@@ -485,34 +503,34 @@ function checkRouteClarity(level, grid, audit) {
     { name: 'keyCard', pos: level.keyCard },
     { name: 'hackTerminal', pos: level.hackTerminal }
   ].filter(o => o.pos && Number.isFinite(o.pos.y));
-  
+
   if (objectives.length < 2) {
     return true; // Not enough objectives to check distribution
   }
-  
+
   const yPositions = objectives.map(o => o.pos.y);
   const minY = Math.min(...yPositions);
   const maxY = Math.max(...yPositions);
   const verticalSpan = maxY - minY;
-  
+
   // For taller maps, check vertical distribution
-  const expectedSpan = Math.floor(MAP_HEIGHT * 0.4); // Expect at least 40% vertical coverage
-  
+  const expectedSpan = Math.floor(levelHeight * 0.4); // Expect at least 40% vertical coverage
+
   // Check if all objectives are clustered in one area
-  const topHalfCount = objectives.filter(o => o.pos.y < MAP_HEIGHT / 2).length;
-  const bottomHalfCount = objectives.filter(o => o.pos.y >= MAP_HEIGHT / 2).length;
-  
+  const topHalfCount = objectives.filter(o => o.pos.y < levelHeight / 2).length;
+  const bottomHalfCount = objectives.filter(o => o.pos.y >= levelHeight / 2).length;
+
   const isClustered = topHalfCount === 0 || bottomHalfCount === 0;
   const isTooNarrow = verticalSpan < expectedSpan;
-  
+
   if (isClustered && objectives.length >= 3) {
     audit.warn(`[route-clarity] Objectives clustered in ${topHalfCount === 0 ? 'bottom' : 'top'} half - consider better vertical distribution`);
   }
-  
-  if (isTooNarrow && MAP_HEIGHT >= 20) {
+
+  if (isTooNarrow && levelHeight >= 20) {
     audit.warn(`[route-clarity] Vertical span only ${verticalSpan} tiles (expected >= ${expectedSpan}) - taller maps should use full height`);
   }
-  
+
   audit.routeClarityStats = {
     verticalSpan,
     expectedSpan,
@@ -521,7 +539,7 @@ function checkRouteClarity(level, grid, audit) {
     isClustered,
     isTooNarrow
   };
-  
+
   return !isClustered || objectives.length < 3;
 }
 
@@ -530,22 +548,29 @@ function checkRouteClarity(level, grid, audit) {
  */
 export function auditLevel(level, index, autoFix = false) {
   const audit = new AuditResult(level.name || `Level ${index + 1}`, index);
-  
+
+  // Get per-level dimensions
+  const levelWidth = level.width || MAP_WIDTH;
+  const levelHeight = level.height || MAP_HEIGHT;
+
   audit.info(`\n${'═'.repeat(60)}`);
   audit.info(`AUDIT: ${audit.levelName}`);
   audit.info(`${'═'.repeat(60)}`);
-  
+  audit.info(`Map dimensions: ${levelWidth}x${levelHeight}`);
+
   // Build navigation grid
   const grid = buildNavGrid(level);
   const walkableCount = grid.flat().filter(Boolean).length;
-  const totalTiles = MAP_WIDTH * MAP_HEIGHT;
-  
+  const totalTiles = levelWidth * levelHeight;
+
   audit.navGridStats = {
     walkable: walkableCount,
     total: totalTiles,
-    percentage: ((walkableCount / totalTiles) * 100).toFixed(1)
+    percentage: ((walkableCount / totalTiles) * 100).toFixed(1),
+    width: levelWidth,
+    height: levelHeight
   };
-  
+
   audit.info(`Nav grid: ${walkableCount}/${totalTiles} walkable (${audit.navGridStats.percentage}%)`);
   
   // Check for isolated regions
@@ -649,12 +674,12 @@ export function auditLevel(level, index, autoFix = false) {
  */
 function generateAuditReport(audits, options = {}) {
   const lines = [];
-  
+
   lines.push('╔' + '═'.repeat(70) + '╗');
   lines.push('║' + 'GHOSTSHIFT MAP TILING AUDIT REPORT v2.0'.padEnd(70) + '║');
   lines.push('╚' + '═'.repeat(70) + '╝');
   lines.push('');
-  lines.push(`Map dimensions: ${MAP_WIDTH}x${MAP_HEIGHT} (${MAP_WIDTH * MAP_HEIGHT} tiles)`);
+  lines.push(`Baseline dimensions: ${MAP_WIDTH}x${MAP_HEIGHT} (individual levels may differ)`);
   lines.push(`Tile size: ${TILE_SIZE}px`);
   lines.push(`Clearance radius: ${CONFIG.clearanceRadius} tiles`);
   lines.push(`Auto-fix: ${options.autoFix ? 'ENABLED' : 'DISABLED'}`);

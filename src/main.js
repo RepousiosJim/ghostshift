@@ -1276,8 +1276,8 @@ function saveSaveData(data) { saveManager.data = data; saveManager.save(); }
 // Phase 4: Improved balancing with difficulty scaling
 // Phase 7: Increased scale for desktop/web - larger game canvas for better UI visibility
 const TILE_SIZE = 48; // Increased from 32 for better visibility
-const MAP_WIDTH = 28; // HORIZONTAL EXPANSION: 22 -> 28 (27.3% increase for Level 1)
-const MAP_HEIGHT = 23; // VERTICAL EXPANSION: 18 -> 23 (27.8% increase) - synced with levels.js
+const MAP_WIDTH = 22; // BASELINE: Default map width (Level 1 overrides to 28)
+const MAP_HEIGHT = 18; // BASELINE: Default map height (Level 1 overrides to 23)
 const BASE_PLAYER_SPEED = 180;
 // Guard speed now scales with difficulty (base 65, max 90)
 const BASE_GUARD_SPEED = 65;
@@ -5448,6 +5448,19 @@ class GameScene extends Phaser.Scene {
       this._objectiveRelocations = validationResult.relocations;
       console.log(`[Level] Applied ${validationResult.relocations.length} objective relocations`);
     }
+
+    // PER-LEVEL DIMENSION SUPPORT
+    // Get level dimensions (fallback to baseline if not specified)
+    const levelWidth = this.currentLayout.width || MAP_WIDTH;
+    const levelHeight = this.currentLayout.height || MAP_HEIGHT;
+    this.levelWidth = levelWidth;
+    this.levelHeight = levelHeight;
+
+    // Update physics world bounds to match level dimensions
+    this.physics.world.setBounds(0, 0, levelWidth * TILE_SIZE, levelHeight * TILE_SIZE);
+
+    // Update camera bounds to match level dimensions
+    this.cameras.main.setBounds(0, 0, levelWidth * TILE_SIZE, levelHeight * TILE_SIZE);
     
     setRuntimePhase('level:create:layout', { sceneKey: this.scene.key, levelIndex: this.currentLevelIndex });
     _levelStartGuard.release();

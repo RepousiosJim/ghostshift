@@ -11,8 +11,8 @@
 // Re-export from main.js constants for consistency
 // These should match main.js values
 export const TILE_SIZE = 48;
-export const MAP_WIDTH = 28;  // HORIZONTAL EXPANSION: 22 -> 28 (27.3% increase for Level 1)
-export const MAP_HEIGHT = 23; // VERTICAL EXPANSION: 18 -> 23 (27.8% increase) - synced with main.js
+export const MAP_WIDTH = 22;  // BASELINE: Default map width (Level 1 overrides to 28)
+export const MAP_HEIGHT = 18; // BASELINE: Default map height (Level 1 overrides to 23)
 
 // Tile type identifiers
 export const TILE_TYPES = {
@@ -147,14 +147,15 @@ export class TileGrid {
    */
   constructor(levelLayout) {
     this.layout = levelLayout;
-    this.width = MAP_WIDTH;
-    this.height = MAP_HEIGHT;
-    
+    // Use per-level dimensions if available, otherwise fall back to baseline
+    this.width = levelLayout.width || MAP_WIDTH;
+    this.height = levelLayout.height || MAP_HEIGHT;
+
     // Tile metadata cache (populated by TileMetadata module) - initialize FIRST
     this._metadataCache = new Map();
-    
+
     // Initialize tile type map
-    this.tiles = new Uint8Array(MAP_WIDTH * MAP_HEIGHT);
+    this.tiles = new Uint8Array(this.width * this.height);
     this._initializeTiles();
   }
   
@@ -165,15 +166,15 @@ export class TileGrid {
   _initializeTiles() {
     // Fill with floor tiles first
     this.tiles.fill(TILE_TYPES.FLOOR);
-    
-    // Mark border walls
-    for (let x = 0; x < MAP_WIDTH; x++) {
+
+    // Mark border walls (use per-level dimensions)
+    for (let x = 0; x < this.width; x++) {
       this.setTileType(x, 0, TILE_TYPES.WALL);
-      this.setTileType(x, MAP_HEIGHT - 1, TILE_TYPES.WALL);
+      this.setTileType(x, this.height - 1, TILE_TYPES.WALL);
     }
-    for (let y = 0; y < MAP_HEIGHT; y++) {
+    for (let y = 0; y < this.height; y++) {
       this.setTileType(0, y, TILE_TYPES.WALL);
-      this.setTileType(MAP_WIDTH - 1, y, TILE_TYPES.WALL);
+      this.setTileType(this.width - 1, y, TILE_TYPES.WALL);
     }
     
     // Mark obstacles from level layout
@@ -216,7 +217,7 @@ export class TileGrid {
    * @returns {number} Array index
    */
   _getIndex(tx, ty) {
-    return ty * MAP_WIDTH + tx;
+    return ty * this.width + tx;
   }
   
   /**
@@ -397,8 +398,8 @@ export class TileGrid {
    */
   getAllWalkableTiles(entityType = 'enemy') {
     const walkable = [];
-    for (let ty = 0; ty < MAP_HEIGHT; ty++) {
-      for (let tx = 0; tx < MAP_WIDTH; tx++) {
+    for (let ty = 0; ty < this.height; ty++) {
+      for (let tx = 0; tx < this.width; tx++) {
         if (this.isWalkable(tx, ty, entityType)) {
           walkable.push({ tx, ty });
         }
