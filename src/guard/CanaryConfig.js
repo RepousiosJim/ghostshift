@@ -4,34 +4,42 @@
  * Step 2: Controlled rollout of modular guard AI to selected levels.
  * Enables A/B comparison between legacy and modular AI implementations.
  * 
+ * Step 5: Integrated CanaryMetricsLogger for observability.
+ * 
  * @module guard/CanaryConfig
  */
+
+import { 
+  CanaryMetricsLogger, 
+  getCanaryMetricsLogger,
+  ANOMALY_TYPES 
+} from './CanaryMetricsLogger.js';
 
 /**
  * Canary rollout configuration
  * 
- * Step 4: Expanded canary to include Server Farm level.
+ * Step 5: Expanded canary to include The Vault level.
  * 
  * Levels using modular AI:
  * - 0: Warehouse (simple layout, good baseline)
  * - 1: Labs (medium complexity)
- * - 2: Server Farm (difficulty 2, NEW in Step 4)
+ * - 2: Server Farm (difficulty 2)
  * - 3: Comms Tower (moderate complexity)
+ * - 4: The Vault (high security, NEW in Step 5)
  * 
  * Levels remaining on legacy:
- * - 4: The Vault
  * - 5: Training Facility
  * - 6: Penthouse
  * 
- * Coverage: 4 of 7 levels (57%)
+ * Coverage: 5 of 7 levels (71%)
  */
 export const CANARY_CONFIG = {
   // Master switch: set to false to disable all canary mode
   enabled: true,
   
   // Levels using modular guard AI (array of level indices)
-  // Step 4: Added Level 2 (Server Farm) to canary
-  canaryLevels: [0, 1, 2, 3],
+  // Step 5: Added Level 4 (The Vault) to canary
+  canaryLevels: [0, 1, 2, 3, 4],
   
   // Percentage of sessions to enable canary (for future gradual rollout)
   // Currently at 100% for canary levels
@@ -95,7 +103,8 @@ export function isCanaryLevel(levelIndex, options = {}) {
 
 /**
  * Canary metrics collector
- * Collects performance and behavior metrics for comparison
+ * Collects performance and behavior metrics for comparison.
+ * Integrates with CanaryMetricsLogger for structured observability.
  */
 export class CanaryMetrics {
   constructor(config = CANARY_CONFIG.metrics) {
@@ -103,23 +112,35 @@ export class CanaryMetrics {
     this.samples = [];
     this.startTime = null;
     this.levelIndex = null;
+    this.levelName = null;
     this.aiMode = null; // 'modular' or 'legacy'
     this.errorCount = 0;
     this.lastSampleTime = 0;
+    
+    // Reference to structured metrics logger
+    this._metricsLogger = null;
+    this._lastState = null;
   }
   
   /**
    * Start metrics collection for a level
    * @param {number} levelIndex - Level index
    * @param {string} aiMode - 'modular' or 'legacy'
+   * @param {string} levelName - Optional level name
    */
-  start(levelIndex, aiMode) {
+  start(levelIndex, aiMode, levelName = null) {
     this.samples = [];
     this.startTime = Date.now();
     this.levelIndex = levelIndex;
+    this.levelName = levelName;
     this.aiMode = aiMode;
     this.errorCount = 0;
     this.lastSampleTime = 0;
+    this._lastState = null;
+    
+    // Start structured logging
+    this._metricsLogger = getCanaryMetricsLogger();
+    this._metricsLogger.startLevel(levelIndex, levelName || `Level ${levelIndex}`, aiMode);
   }
   
   /**
@@ -143,6 +164,33 @@ export class CanaryMetrics {
     if (this.samples.length > this.config.maxSamples) {
       this.samples.shift();
     }
+    
+    // Record to structured logger
+    if (this._metricsLogger) {
+      this._metricsLogger.sample(this.levelIndex, {
+        velocity: data.velocity,
+        isStuck: data.isStuck,
+        state: data.state,
+        guardPosition: data.guardX !== undefined ? { x: data.guardX, y: data.guardY } : null
+      });
+      
+      // Track state transitions
+      if (data.state && data.state !== this._lastState) {
+        if (this._lastState !== null) {
+          this._metricsLogger.recordStateTransition(this.levelIndex, this._lastState, data.state);
+        }
+        this._lastState = data.state;
+      }
+      
+      // Track stuck events
+      if (data.isStuck && !this._lastStuckState) {
+        this._metricsLogger.recordStuckEvent(this.levelIndex, {
+          position: { x: data.guardX, y: data.guardY },
+          velocity: data.velocity
+        });
+      }
+      this._lastStuckState = data.isStuck;
+    }
   }
   
   /**
@@ -153,6 +201,16 @@ export class CanaryMetrics {
   }
   
   /**
+   * Record a fallback trigger
+   * @param {string} reason - Fallback reason
+   */
+  recordFallbackTrigger(reason = 'error_threshold') {
+    if (this._metricsLogger) {
+      this._metricsLogger.recordFallbackTrigger(this.levelIndex, reason);
+    }
+  }
+  
+  /**
    * Get summary statistics
    * @returns {object}
    */
@@ -160,6 +218,7 @@ export class CanaryMetrics {
     if (this.samples.length === 0) {
       return { 
         levelIndex: this.levelIndex, 
+        levelName: this.levelName,
         aiMode: this.aiMode,
         sampleCount: 0,
         errorCount: this.errorCount 
@@ -190,6 +249,7 @@ export class CanaryMetrics {
     
     return {
       levelIndex: this.levelIndex,
+      levelName: this.levelName,
       aiMode: this.aiMode,
       sampleCount: this.samples.length,
       durationMs: this.samples[this.samples.length - 1]?.time || 0,
@@ -207,8 +267,25 @@ export class CanaryMetrics {
    */
   end() {
     const summary = this.getSummary();
+    
+    // End structured logging
+    if (this._metricsLogger) {
+      this._metricsLogger.endLevel(this.levelIndex);
+    }
+    
     this.startTime = null;
     return summary;
+  }
+  
+  /**
+   * Get rollback recommendation for current level
+   * @returns {{recommended: boolean, reason: string|null}}
+   */
+  getRollbackRecommendation() {
+    if (!this._metricsLogger) {
+      return { recommended: false, reason: null };
+    }
+    return this._metricsLogger.getRollbackRecommendation(this.levelIndex);
   }
 }
 
@@ -303,5 +380,7 @@ export default {
   CanaryMetrics,
   getCanaryMetrics,
   CanaryFallbackManager,
-  getFallbackManager
+  getFallbackManager,
+  getCanaryMetricsLogger,
+  ANOMALY_TYPES
 };

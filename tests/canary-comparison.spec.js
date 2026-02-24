@@ -1,11 +1,11 @@
 /**
  * Canary Comparison Tests
  * 
- * Step 4: Validates modular guard AI behavior against legacy baseline.
- * Canary levels: 0 (Warehouse), 1 (Labs), 2 (Server Farm), 3 (Comms Tower)
- * Legacy levels: 4 (The Vault), 5 (Training Facility), 6 (Penthouse)
+ * Step 5: Validates modular guard AI behavior against legacy baseline.
+ * Canary levels: 0 (Warehouse), 1 (Labs), 2 (Server Farm), 3 (Comms Tower), 4 (The Vault)
+ * Legacy levels: 5 (Training Facility), 6 (Penthouse)
  * 
- * Coverage: 4 of 7 levels (57%)
+ * Coverage: 5 of 7 levels (71%)
  */
 
 import { test, expect } from '@playwright/test'
@@ -151,19 +151,60 @@ test('Canary level 1 (Labs) uses modular AI (Step 3 expansion)', async ({ page }
 })
 
 /**
- * Test: Non-canary level uses legacy AI
- * Step 4: The Vault (level 4) is the legacy baseline
+ * Test: Step 5 - The Vault (level 4) now uses modular AI
  */
-test('Non-canary level 4 (The Vault) uses legacy AI by default', async ({ page }) => {
+test('Canary level 4 (The Vault) uses modular AI (Step 5 expansion)', async ({ page }) => {
   const { pageErrors, consoleErrors } = attachErrorCollectors(page)
   
   await page.goto('/', { waitUntil: 'domcontentloaded' })
   await expect(page.locator('canvas')).toHaveCount(1)
   
-  await startGameScene(page, 4) // The Vault is level 4, not in canary list
+  await startGameScene(page, 4) // The Vault is now a canary level (Step 5)
   await page.waitForTimeout(1500)
   
-  // Verify legacy AI is active for level 4
+  // Verify modular AI is active for level 4
+  const aiMode = await page.evaluate(() => {
+    const scene = window.__ghostGame?.scene?.getScene('GameScene')
+    return {
+      mode: scene?._guardAIMode,
+      modularInitialized: scene?._modularGuardAI?.isInitialized,
+      levelName: scene?.currentLayout?.name
+    }
+  })
+  
+  expect(aiMode.mode).toBe('modular')
+  expect(aiMode.modularInitialized).toBe(true)
+  expect(aiMode.levelName).toBe('The Vault')
+  
+  // Let guard run for a bit
+  await page.waitForTimeout(2000)
+  
+  // Verify guard is moving
+  const guardMoving = await page.evaluate(() => {
+    const scene = window.__ghostGame?.scene?.getScene('GameScene')
+    const vel = scene?.guard?.body?.velocity
+    return Math.hypot(vel?.x || 0, vel?.y || 0) > 0.1
+  })
+  
+  expect(guardMoving).toBe(true)
+  
+  assertNoRuntimeCrashes(pageErrors, consoleErrors)
+})
+
+/**
+ * Test: Non-canary level uses legacy AI
+ * Step 5: Training Facility (level 5) is the legacy baseline
+ */
+test('Non-canary level 5 (Training Facility) uses legacy AI by default', async ({ page }) => {
+  const { pageErrors, consoleErrors } = attachErrorCollectors(page)
+  
+  await page.goto('/', { waitUntil: 'domcontentloaded' })
+  await expect(page.locator('canvas')).toHaveCount(1)
+  
+  await startGameScene(page, 5) // Training Facility is level 5, not in canary list
+  await page.waitForTimeout(1500)
+  
+  // Verify legacy AI is active for level 5
   const aiMode = await page.evaluate(() => {
     const scene = window.__ghostGame?.scene?.getScene('GameScene')
     return {
@@ -175,7 +216,7 @@ test('Non-canary level 4 (The Vault) uses legacy AI by default', async ({ page }
   
   expect(aiMode.mode).toBe('legacy')
   expect(aiMode.modularInitialized).toBeFalsy()
-  expect(aiMode.levelName).toBe('The Vault')
+  expect(aiMode.levelName).toBe('Training Facility')
   
   assertNoRuntimeCrashes(pageErrors, consoleErrors)
 })
