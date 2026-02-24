@@ -175,68 +175,107 @@ function mergeObstacles(...arrays) {
 
 // Level layouts with rooms-and-corridors architecture
 const RAW_LEVEL_LAYOUTS = [
-  // Level 1: Warehouse - 22x18 map
-  // Rooms: Spawn Room, Storage Room, Main Warehouse, Office, Exit Room
+  // Level 1: Warehouse V2 - 22x18 map (Relayout 2026-02-24)
+  // IMPROVEMENTS: Separated objectives, de-stacked vision cones, 2 staging pockets,
+  // tactical laser choices, clear room/corridor distinction
+  // Rooms: Spawn Room, Security Office (keycard), Server Room (terminal),
+  //        Main Warehouse (staging), Data Core Chamber, Exit Room
   {
     name: 'Warehouse',
     obstacles: mergeObstacles(
-      // Spawn Room (bottom-left, 4x4)
-      createRoomWalls(1, 13, 4, 4, {topDoor: {offset: 1, width: 2}}),
+      // === DISTINCT ROOMS WITH SEPARATED OBJECTIVES ===
+      
+      // 1. Spawn Room (bottom-left, 4x4) - player entry point
+      createRoomWalls(1, 14, 4, 4, {topDoor: {offset: 1, width: 2}}),
 
-      // Storage Room (left, 4x4) with keyCard
-      createRoomWalls(1, 6, 4, 4, {
-        bottomDoor: {offset: 1, width: 2},
-        rightDoor: {offset: 1, width: 2}
-      }),
-
-      // Main Warehouse (center, 6x6) - open area with obstacles inside
-      createRoomWalls(7, 5, 6, 6, {
-        leftDoor: {offset: 2, width: 2},
-        rightDoor: {offset: 2, width: 2}
-      }),
-      // Internal crates in warehouse
-      [{x: 9, y: 7}, {x: 10, y: 7}, {x: 9, y: 8}, {x: 10, y: 8}],
-
-      // Office Room (top-right, 4x4) with dataCore - positioned at x=16-19, y=1-4
-      createRoomWalls(16, 1, 4, 4, {
+      // 2. Security Office (top-left, 4x4) - KEYCARD location (distinct room)
+      // Positioned far from other objectives for clear separation
+      createRoomWalls(1, 1, 4, 4, {
         bottomDoor: {offset: 1, width: 2}
       }),
 
-      // Exit Room (far right, 3x4) - positioned at x=19-21, y=5-8
-      createRoomWalls(19, 5, 3, 4, {leftDoor: {offset: 1, width: 1}}),
+      // 3. Server Room (center-left, 4x4) - TERMINAL location (distinct room)
+      // Separate from keycard and datacore
+      createRoomWalls(5, 5, 4, 4, {
+        leftDoor: {offset: 1, width: 2},
+        bottomDoor: {offset: 1, width: 2}
+      }),
 
-      // Corridor walls (horizontal corridor from spawn to right)
-      // Top corridor wall (with gap for vertical corridor at x=15)
-      [{x: 5, y: 11}, {x: 6, y: 11}, {x: 13, y: 11}, {x: 14, y: 11},
-       {x: 16, y: 11}, {x: 17, y: 11}, {x: 18, y: 11}],
-      // Bottom corridor wall
-      [{x: 5, y: 13}, {x: 6, y: 13}, {x: 13, y: 13}, {x: 14, y: 13},
-       {x: 16, y: 13}, {x: 17, y: 13}, {x: 18, y: 13}],
+      // 4. Main Warehouse (center, 6x5) - STAGING AREA (no objectives)
+      // Pure traversal zone for timing and stealth planning
+      createRoomWalls(9, 6, 6, 5, {
+        leftDoor: {offset: 2, width: 2},
+        rightDoor: {offset: 2, width: 2}
+      }),
+      // Light cover crates (not blocking paths)
+      [{x: 11, y: 8}, {x: 12, y: 8}],
 
-      // Vertical corridor (from main corridor up to office/exit area)
-      [{x: 14, y: 5}, {x: 14, y: 6}, {x: 14, y: 7}, {x: 14, y: 8}, {x: 14, y: 9}, {x: 14, y: 10}],
-      [{x: 16, y: 5}, {x: 16, y: 6}, {x: 16, y: 7}, {x: 16, y: 8}, {x: 16, y: 9}, {x: 16, y: 10}]
+      // 5. Data Core Chamber (top-right, 4x4) - DATACORE location (distinct room)
+      // Final objective, clearly separated from others
+      createRoomWalls(17, 1, 4, 4, {
+        bottomDoor: {offset: 1, width: 2}
+      }),
+
+      // 6. Exit Room (right side, 3x4) - extraction point
+      createRoomWalls(19, 12, 3, 4, {leftDoor: {offset: 1, width: 1}}),
+
+      // === CORRIDORS (2-3 tiles wide for clear traversal) ===
+      
+      // Horizontal main corridor (y=11-13)
+      // Top wall with gaps for room entrances and exit path
+      [{x: 5, y: 11}, {x: 6, y: 11}, {x: 7, y: 11},
+       {x: 13, y: 11}, {x: 14, y: 11},
+       {x: 16, y: 11}, {x: 17, y: 11}],
+      // Bottom wall with gap for exit room entrance (x=18)
+      [{x: 5, y: 13}, {x: 6, y: 13}, {x: 7, y: 13},
+       {x: 13, y: 13}, {x: 14, y: 13},
+       {x: 16, y: 13}, {x: 17, y: 13}],
+
+      // Vertical corridor to Data Core (x=15-16, y=5-10)
+      [{x: 15, y: 5}, {x: 15, y: 6}, {x: 15, y: 7}, {x: 15, y: 8}, {x: 15, y: 9}, {x: 15, y: 10}],
+      [{x: 17, y: 5}, {x: 17, y: 6}, {x: 17, y: 7}, {x: 17, y: 8}, {x: 17, y: 9}, {x: 17, y: 10}],
+
+      // Vertical corridor to Security Office (left side, x=5, y=5-10)
+      [{x: 5, y: 5}, {x: 5, y: 6}, {x: 5, y: 7}, {x: 5, y: 8}, {x: 5, y: 9}, {x: 5, y: 10}],
+      
+      // === STAGING POCKET WALLS (create safe alcoves) ===
+      // Pocket 1: Bottom corridor alcove (x=6-7, y=14-15)
+      [{x: 6, y: 14}, {x: 8, y: 14}],
+      
+      // Pocket 2: Upper corridor niche (x=10-12, y=4)
+      [{x: 10, y: 4}, {x: 11, y: 4}, {x: 12, y: 4}, {x: 13, y: 4}, {x: 14, y: 4}]
     ),
 
-    // Patrol follows main corridor
+    // === DE-STACKED PATROL (no unfair crossfire overlap) ===
+    // Simplified route that doesn't cluster near objectives
     guardPatrol: [
-      {x: 5, y: 12},   // Corridor left
-      {x: 18, y: 12},  // Corridor right
-      {x: 15, y: 6},   // Check vertical corridor
-      {x: 5, y: 5}     // Check storage entrance
+      {x: 7, y: 12},    // Main corridor (avoiding spawn)
+      {x: 16, y: 12},   // Corridor right (near exit approach)
+      {x: 16, y: 7},    // Vertical corridor mid-point
+      {x: 8, y: 7}      // Check server room entrance area
     ],
 
-    // Objectives in rooms
-    playerStart: {x: 2, y: 15},      // Spawn room center
-    keyCard: {x: 3, y: 8},            // Storage room (centered)
-    dataCore: {x: 17, y: 2},          // Office room (clear of walls)
-    hackTerminal: {x: 10, y: 9},      // Main warehouse (clear of crates)
-    exitZone: {x: 20, y: 6},          // Exit room center
+    // === OBJECTIVES IN DISTINCT ROOMS ===
+    playerStart: {x: 2, y: 16},       // Spawn room (centered)
+    keyCard: {x: 3, y: 2},            // Security Office (top-left room)
+    hackTerminal: {x: 7, y: 7},       // Server Room (center-left room)
+    dataCore: {x: 18, y: 2},          // Data Core Chamber (top-right room)
+    exitZone: {x: 20, y: 13},         // Exit room (right side)
 
-    // Sensors in corridors and room entrances
-    cameras: [{x: 6, y: 12}, {x: 15, y: 12}],
-    motionSensors: [{x: 10, y: 12}],
-    laserGrids: [{x: 12, y: 5, h: true}],
+    // === REPOSITIONED SENSORS (avoid objective clustering) ===
+    // Cameras watch corridors, not objective rooms
+    cameras: [{x: 8, y: 12}, {x: 16, y: 6}],
+    // Motion sensor at warehouse entrance (tactical awareness)
+    motionSensors: [{x: 12, y: 9}],
+    
+    // === TACTICAL LASER CHOICES (not hard tax lanes) ===
+    // Two lasers create meaningful route choices:
+    // - Upper route avoids both but is longer
+    // - Lower route faster but must time both lasers
+    laserGrids: [
+      {x: 8, y: 5, v: true},   // Blocks direct path to terminal (vertical)
+      {x: 14, y: 7, h: true}   // Blocks direct path to data core (horizontal)
+    ],
 
     difficulty: 1
   },
