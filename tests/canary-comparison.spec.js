@@ -1,11 +1,13 @@
 /**
  * Canary Comparison Tests
  * 
- * Step 7: Full rollout complete - validates modular guard AI across all levels.
+ * Step 7 (2026-02-24): Full rollout complete - validates modular guard AI across all levels.
  * Canary levels: 0 (Warehouse), 1 (Labs), 2 (Server Farm), 3 (Comms Tower), 4 (The Vault), 5 (Training Facility), 6 (Penthouse)
- * Legacy levels: none
+ * Legacy levels: none (legacy is fallback only)
  * 
  * Coverage: 7 of 7 levels (100%)
+ * 
+ * ROLLBACK: See ROLLBACK_SWITCH.md for emergency rollback instructions.
  */
 
 import { test, expect } from '@playwright/test'
