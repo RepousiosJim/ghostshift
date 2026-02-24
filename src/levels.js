@@ -30,6 +30,96 @@ const DEFAULT_LEVEL = {
 const MAP_WIDTH = 22;
 const MAP_HEIGHT = 18;
 
+// ==================== OBJECTIVE PLACEMENT FALLBACK SYSTEM ====================
+// Deterministic fallback for constrained rooms - never fails silently
+
+const OBJECTIVE_FALLBACKS = {
+  // Default safe positions for each objective type (used when primary placement fails)
+  defaultPositions: {
+    playerStart: {x: 2, y: 15},
+    exitZone: {x: 20, y: 2},
+    dataCore: {x: 10, y: 9},
+    keyCard: {x: 5, y: 8},
+    hackTerminal: {x: 15, y: 8}
+  },
+
+  // Track placement failures for telemetry
+  placementFailures: []
+};
+
+/**
+ * Validate and fallback objective placement
+ * @param {Object} level - Level configuration
+ * @param {string} objectiveName - Name of objective field
+ * @param {Array} obstacles - Obstacle array
+ * @returns {Object} Validated/fallback position
+ */
+function validateObjectivePlacement(level, objectiveName, obstacles) {
+  const position = level[objectiveName];
+
+  if (!position || !Number.isFinite(position.x) || !Number.isFinite(position.y)) {
+    console.warn(`[ObjectivePlacement] ${level.name || 'Unknown'}: ${objectiveName} missing or invalid, using fallback`);
+    OBJECTIVE_FALLBACKS.placementFailures.push({
+      level: level.name,
+      objective: objectiveName,
+      reason: 'missing_or_invalid',
+      timestamp: new Date().toISOString()
+    });
+    return {...OBJECTIVE_FALLBACKS.defaultPositions[objectiveName] || {x: 1, y: 1}};
+  }
+
+  // Check if position is on an obstacle
+  const isBlocked = obstacles.some(obs => obs.x === position.x && obs.y === position.y);
+
+  if (isBlocked) {
+    console.warn(`[ObjectivePlacement] ${level.name}: ${objectiveName} at (${position.x}, ${position.y}) is blocked, relocating`);
+    OBJECTIVE_FALLBACKS.placementFailures.push({
+      level: level.name,
+      objective: objectiveName,
+      originalPosition: {...position},
+      reason: 'blocked_tile',
+      timestamp: new Date().toISOString()
+    });
+
+    // Spiral search for nearest walkable tile
+    for (let radius = 1; radius <= 5; radius++) {
+      for (let dy = -radius; dy <= radius; dy++) {
+        for (let dx = -radius; dx <= radius; dx++) {
+          if (Math.abs(dx) !== radius && Math.abs(dy) !== radius) continue;
+          const newX = position.x + dx;
+          const newY = position.y + dy;
+          const isWalkable = !obstacles.some(obs => obs.x === newX && obs.y === newY);
+          if (isWalkable && newX >= 0 && newX < MAP_WIDTH && newY >= 0 && newY < MAP_HEIGHT) {
+            console.log(`[ObjectivePlacement] ${level.name}: ${objectiveName} relocated to (${newX}, ${newY})`);
+            return {x: newX, y: newY};
+          }
+        }
+      }
+    }
+
+    // Ultimate fallback to default
+    console.error(`[ObjectivePlacement] ${level.name}: ${objectiveName} could not find walkable tile, using default`);
+    return {...OBJECTIVE_FALLBACKS.defaultPositions[objectiveName] || {x: 1, y: 1}};
+  }
+
+  return position;
+}
+
+/**
+ * Get placement failure telemetry
+ * @returns {Array} Array of placement failure records
+ */
+export function getPlacementFailures() {
+  return [...OBJECTIVE_FALLBACKS.placementFailures];
+}
+
+/**
+ * Clear placement failure telemetry
+ */
+export function clearPlacementFailures() {
+  OBJECTIVE_FALLBACKS.placementFailures = [];
+}
+
 // Helper function to create room walls
 function createRoomWalls(x, y, width, height, doors = {}) {
   const obstacles = [];
@@ -92,13 +182,13 @@ const RAW_LEVEL_LAYOUTS = [
     obstacles: mergeObstacles(
       // Spawn Room (bottom-left, 4x4)
       createRoomWalls(1, 13, 4, 4, {topDoor: {offset: 1, width: 2}}),
-      
+
       // Storage Room (left, 4x4) with keyCard
       createRoomWalls(1, 6, 4, 4, {
         bottomDoor: {offset: 1, width: 2},
         rightDoor: {offset: 1, width: 2}
       }),
-      
+
       // Main Warehouse (center, 6x6) - open area with obstacles inside
       createRoomWalls(7, 5, 6, 6, {
         leftDoor: {offset: 2, width: 2},
@@ -106,44 +196,48 @@ const RAW_LEVEL_LAYOUTS = [
       }),
       // Internal crates in warehouse
       [{x: 9, y: 7}, {x: 10, y: 7}, {x: 9, y: 8}, {x: 10, y: 8}],
-      
-      // Office Room (top-right, 4x4) with dataCore
+
+      // Office Room (top-right, 4x4) with dataCore - positioned at x=16-19, y=1-4
       createRoomWalls(16, 1, 4, 4, {
         bottomDoor: {offset: 1, width: 2}
       }),
 
-      // Exit Room (far right, 3x3)
-      createRoomWalls(19, 1, 3, 3, {leftDoor: {offset: 1, width: 1}}),
-      
+      // Exit Room (far right, 3x4) - positioned at x=19-21, y=5-8
+      createRoomWalls(19, 5, 3, 4, {leftDoor: {offset: 1, width: 1}}),
+
       // Corridor walls (horizontal corridor from spawn to right)
-      // Top corridor wall
-      [{x: 5, y: 11}, {x: 6, y: 11}, {x: 13, y: 11}, {x: 14, y: 11}, 
-       {x: 15, y: 11}, {x: 16, y: 11}, {x: 17, y: 11}, {x: 18, y: 11}],
-      // Bottom corridor wall  
+      // Top corridor wall (with gap for vertical corridor at x=15)
+      [{x: 5, y: 11}, {x: 6, y: 11}, {x: 13, y: 11}, {x: 14, y: 11},
+       {x: 16, y: 11}, {x: 17, y: 11}, {x: 18, y: 11}],
+      // Bottom corridor wall
       [{x: 5, y: 13}, {x: 6, y: 13}, {x: 13, y: 13}, {x: 14, y: 13},
-       {x: 15, y: 13}, {x: 16, y: 13}, {x: 17, y: 13}, {x: 18, y: 13}]
+       {x: 16, y: 13}, {x: 17, y: 13}, {x: 18, y: 13}],
+
+      // Vertical corridor (from main corridor up to office/exit area)
+      [{x: 14, y: 5}, {x: 14, y: 6}, {x: 14, y: 7}, {x: 14, y: 8}, {x: 14, y: 9}, {x: 14, y: 10}],
+      [{x: 16, y: 5}, {x: 16, y: 6}, {x: 16, y: 7}, {x: 16, y: 8}, {x: 16, y: 9}, {x: 16, y: 10}]
     ),
-    
+
     // Patrol follows main corridor
     guardPatrol: [
       {x: 5, y: 12},   // Corridor left
       {x: 18, y: 12},  // Corridor right
-      {x: 18, y: 5},   // Check office entrance
+      {x: 15, y: 6},   // Check vertical corridor
       {x: 5, y: 5}     // Check storage entrance
     ],
-    
+
     // Objectives in rooms
     playerStart: {x: 2, y: 15},      // Spawn room center
     keyCard: {x: 3, y: 8},            // Storage room (centered)
-    dataCore: {x: 17, y: 3},          // Office room (clear of walls)
+    dataCore: {x: 17, y: 2},          // Office room (clear of walls)
     hackTerminal: {x: 10, y: 9},      // Main warehouse (clear of crates)
-    exitZone: {x: 20, y: 2},          // Exit room center
-    
+    exitZone: {x: 20, y: 6},          // Exit room center
+
     // Sensors in corridors and room entrances
     cameras: [{x: 6, y: 12}, {x: 15, y: 12}],
     motionSensors: [{x: 10, y: 12}],
     laserGrids: [{x: 12, y: 5, h: true}],
-    
+
     difficulty: 1
   },
 
@@ -551,9 +645,9 @@ function normalizeLaserGrids(laserGrids, levelName) {
   return normalized;
 }
 
-// Generate the actual level objects
+// Generate the actual level objects with objective placement validation
 const LEVEL_LAYOUTS = RAW_LEVEL_LAYOUTS.map(raw => {
-  return {
+  const level = {
     ...DEFAULT_LEVEL,
     ...raw,
     obstacles: raw.obstacles || [],
@@ -563,6 +657,19 @@ const LEVEL_LAYOUTS = RAW_LEVEL_LAYOUTS.map(raw => {
     guardPatrol: raw.guardPatrol || [],
     patrolDrones: raw.patrolDrones || []
   };
+
+  // Validate and apply fallbacks for critical objectives
+  level.playerStart = validateObjectivePlacement(level, 'playerStart', level.obstacles);
+  level.exitZone = validateObjectivePlacement(level, 'exitZone', level.obstacles);
+  level.dataCore = validateObjectivePlacement(level, 'dataCore', level.obstacles);
+  level.keyCard = validateObjectivePlacement(level, 'keyCard', level.obstacles);
+  level.hackTerminal = validateObjectivePlacement(level, 'hackTerminal', level.obstacles);
+
+  if (level.relayTerminal) {
+    level.relayTerminal = validateObjectivePlacement(level, 'relayTerminal', level.obstacles);
+  }
+
+  return level;
 });
 
 // Validation helper functions
@@ -653,7 +760,13 @@ function validateLevelLayouts(levels) {
 
 // Exports
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { LEVEL_LAYOUTS, DEFAULT_LEVEL, validateLevelLayouts };
+  module.exports = {
+    LEVEL_LAYOUTS,
+    DEFAULT_LEVEL,
+    validateLevelLayouts,
+    getPlacementFailures,
+    clearPlacementFailures
+  };
 }
 
 export { LEVEL_LAYOUTS, DEFAULT_LEVEL, validateLevelLayouts };

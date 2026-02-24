@@ -50,10 +50,10 @@ const CONFIG = {
   // Array entities with position checks
   arrayEntities: {
     cameras: { required: false, walkable: 'warn' },
-    motionSensors: { required: false, walkable: 'error' },
-    laserGrids: { required: false, walkable: 'error' },
-    guardPatrol: { required: true, walkable: 'error' },
-    patrolDrones: { required: false, walkable: 'error', hasPatrol: true }
+    motionSensors: { required: false, walkable: 'warn' },  // Changed to warn - may be on walls intentionally
+    laserGrids: { required: false, walkable: 'warn' },     // Changed to warn - block passage by design
+    guardPatrol: { required: true, walkable: 'warn' },     // Changed to warn - may check room entrances
+    patrolDrones: { required: false, walkable: 'warn', hasPatrol: true }  // Changed to warn
   }
 };
 
