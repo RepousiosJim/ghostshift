@@ -2,7 +2,7 @@
 
 **Task**: Implement P1 gameplay stability hardening for GhostShift  
 **Completed**: 2026-02-23 20:30 UTC  
-**Commit**: `0011e17`  
+**Commit**: `180bf34`  
 **Version**: 0.7.2
 
 ---

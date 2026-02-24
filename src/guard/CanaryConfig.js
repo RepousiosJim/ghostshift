@@ -1,10 +1,14 @@
 /**
  * Guard AI Canary Configuration
  * 
- * Step 2: Controlled rollout of modular guard AI to selected levels.
- * Enables A/B comparison between legacy and modular AI implementations.
+ * Step 7 (2026-02-24): FULL ROLLOUT COMPLETE - 100% coverage.
+ * All 7 levels now use modular GuardAI. Legacy code is fallback only.
  * 
- * Step 5: Integrated CanaryMetricsLogger for observability.
+ * ╔═══════════════════════════════════════════════════════════════╗
+ * ║  ROLLBACK SWITCH: Set CANARY_CONFIG.enabled = false          ║
+ * ║  to revert ALL levels to legacy AI immediately.              ║
+ * ║  See ROLLBACK_SWITCH.md for detailed instructions.           ║
+ * ╚═══════════════════════════════════════════════════════════════╝
  * 
  * @module guard/CanaryConfig
  */
@@ -18,28 +22,29 @@ import {
 /**
  * Canary rollout configuration
  * 
- * Step 6: Expanded canary to include Training Facility level.
+ * Step 7: Full rollout complete - all levels now use modular AI.
  * 
- * Levels using modular AI:
+ * Levels using modular AI (ALL):
  * - 0: Warehouse (simple layout, good baseline)
  * - 1: Labs (medium complexity)
  * - 2: Server Farm (difficulty 2)
  * - 3: Comms Tower (moderate complexity)
  * - 4: The Vault (high security)
- * - 5: Training Facility (open spaces, NEW in Step 6)
+ * - 5: Training Facility (open spaces)
+ * - 6: Penthouse (final level)
  * 
- * Levels remaining on legacy:
- * - 6: Penthouse
- * 
- * Coverage: 6 of 7 levels (86%)
+ * Coverage: 7 of 7 levels (100%)
  */
 export const CANARY_CONFIG = {
-  // Master switch: set to false to disable all canary mode
+  // ═══════════════════════════════════════════════════════════════
+  // ⚠️ ROLLBACK SWITCH: Set to false to disable modular AI for ALL levels
+  // This is the master kill-switch for emergency rollback
+  // See ROLLBACK_SWITCH.md for complete instructions
+  // ═══════════════════════════════════════════════════════════════
   enabled: true,
   
-  // Levels using modular guard AI (array of level indices)
-  // Step 6: Added Level 5 (Training Facility) to canary
-  canaryLevels: [0, 1, 2, 3, 4, 5],
+  // All levels use modular guard AI (100% rollout)
+  canaryLevels: [0, 1, 2, 3, 4, 5, 6],
   
   // Percentage of sessions to enable canary (for future gradual rollout)
   // Currently at 100% for canary levels

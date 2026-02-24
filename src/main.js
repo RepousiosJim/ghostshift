@@ -1269,9 +1269,17 @@ function getMotionSensorCooldownForLevel(difficulty) {
 }
 
 // ==================== GUARD AI CONFIGURATION ====================
-// Tunable parameters for smarter guard movement
+// ⚠️ DEPRECATED: This configuration is for LEGACY FALLBACK ONLY.
+// The modular GuardAI system (src/guard/GuardAI.js) is now the primary implementation.
+// This config is kept for rollback safety during the 2026-02-24 cleanup transition.
+// See ROLLBACK_SWITCH.md for emergency rollback instructions.
+//
+// Legacy Status: Used only for Level 6 (Penthouse) and emergency fallback
+// Coverage: 86% of levels use modular GuardAI (6 of 7)
+//
 // Phase 15: Enhanced with vision occlusion, separation, and state machine
 // Phase 16: Robust anti-stuck system for chokepoints and corners
+// Phase P2 (2026-02-24): Marked deprecated, minimal fallback only
 const GUARD_AI_CONFIG = {
   // === MOVEMENT & PATHFINDING ===
   // Lookahead distance for obstacle detection (in pixels, relative to TILE_SIZE)
@@ -6302,6 +6310,10 @@ class GameScene extends Phaser.Scene {
   }
   
   // Phase 16: Legacy guard AI - the original inline implementation
+  // ⚠️ DEPRECATED (2026-02-24): This method is the FALLBACK ONLY.
+  // All levels now use modular GuardAI by default (100% rollout).
+  // This legacy code is kept for rollback safety during the transition window.
+  // See ROLLBACK_SWITCH.md for emergency rollback instructions.
   _updateGuardLegacy() {
     // === STATE MACHINE ===
     // Initialize state if not exists
