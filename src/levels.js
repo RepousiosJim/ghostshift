@@ -225,7 +225,7 @@ const RAW_LEVEL_LAYOUTS = [
       // Top wall with gaps for room entrances and exit path
       [{x: 5, y: 11}, {x: 6, y: 11}, {x: 7, y: 11},
        {x: 13, y: 11}, {x: 14, y: 11},
-       {x: 16, y: 11}, {x: 17, y: 11}],
+       {x: 17, y: 11}],
       // Bottom wall with gap for exit room entrance (x=18)
       [{x: 5, y: 13}, {x: 6, y: 13}, {x: 7, y: 13},
        {x: 13, y: 13}, {x: 14, y: 13},
@@ -250,12 +250,12 @@ const RAW_LEVEL_LAYOUTS = [
     ),
 
     // === DE-STACKED PATROL (no unfair crossfire overlap) ===
-    // Route goes around the Main Warehouse room, not through it
+    // Route uses x=16 corridor for vertical movement
     guardPatrol: [
       {x: 8, y: 12},    // Main corridor left (threshold check)
-      {x: 14, y: 12},   // Before warehouse entrance
-      {x: 14, y: 5},    // Upper corridor (via warehouse room edge)
-      {x: 9, y: 5}      // Upper corridor left (clear of server room)
+      {x: 16, y: 12},   // Corridor right (near exit approach)
+      {x: 16, y: 6},    // Vertical corridor (via x=16)
+      {x: 7, y: 6}      // Check server room entrance (upper corridor)
     ],
 
     // === OBJECTIVES IN DISTINCT ROOM INTERIORS ===
