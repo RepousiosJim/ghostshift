@@ -2201,152 +2201,287 @@ class MainMenuScene extends Phaser.Scene {
     this.input.on('pointerdown', () => sfx.init(), this);
   }
   
-  // ========== PHASE A: PROGRESSION PANEL (Left) ==========
+  // ========== PROGRESSION PANEL V2 (Left) ==========
+  // Redesigned with 3 clear blocks: summary, progress bar, level grid
   createProgressionPanel(x, y) {
     const panelWidth = 240;
-    const panelHeight = 380;
+    const panelHeight = 400;
     
     this.progressionPanelElements = [];
     
-    // Panel background with glow
-    const panelGlow = this.add.rectangle(x, y + panelHeight / 2, panelWidth + 10, panelHeight + 10, 0x4488ff, 0.05);
-    const panelBg = this.add.rectangle(x, y + panelHeight / 2, panelWidth, panelHeight, 0x0d1117, 0.92);
+    // Panel background with subtle glow
+    const panelGlow = this.add.rectangle(x, y + panelHeight / 2, panelWidth + 12, panelHeight + 12, 0x4488ff, 0.04);
+    const panelBg = this.add.rectangle(x, y + panelHeight / 2, panelWidth, panelHeight, 0x0d1117, 0.95);
     panelBg.setStrokeStyle(1, 0x2a3a4a);
     this.progressionPanelElements.push(panelGlow, panelBg);
     
     // Section title
-    const sectionTitle = this.add.text(x, y + 15, 'PROGRESSION', { 
-      fontSize: '11px', 
-      fill: '#667788', 
+    const sectionTitle = this.add.text(x, y + 14, 'PROGRESSION', { 
+      fontSize: '10px', 
+      fill: '#556677', 
       fontFamily: 'Courier New',
-      letterSpacing: 2
+      letterSpacing: 3
     }).setOrigin(0.5);
     this.progressionPanelElements.push(sectionTitle);
     
-    // Stars summary
+    // Calculate progress data
     const totalStars = saveManager.getTotalStars();
     const maxStars = saveManager.getMaxStars();
     const progress = maxStars > 0 ? totalStars / maxStars : 0;
     
-    // Star icon with glow
-    const starIcon = this.add.text(x - 60, y + 55, '★', { 
-      fontSize: '32px', 
+    // ============================================================
+    // BLOCK 1: STARS SUMMARY - Large, prominent, readable
+    // ============================================================
+    const summaryY = y + 50;
+    
+    // Large star icon with enhanced glow
+    const starIcon = this.add.text(x - 55, summaryY, '★', { 
+      fontSize: '42px', 
       fill: '#ffdd00', 
       fontFamily: 'Courier New'
     }).setOrigin(0.5);
-    starIcon.setShadow(0, 0, '#ffdd00', 8, true, true);
+    starIcon.setShadow(0, 0, '#ffdd00', 12, true, true);
     this.progressionPanelElements.push(starIcon);
     
-    // Phase B: Add sparkle effects around the star icon
-    this._createStarSparkles(x - 50, y + 45);
-    
-    // Star count
-    const starCount = this.add.text(x - 20, y + 45, `${totalStars}`, { 
-      fontSize: '28px', 
+    // Large star count - prominent typography
+    const starCount = this.add.text(x - 15, summaryY - 8, `${totalStars}`, { 
+      fontSize: '36px', 
       fill: '#ffffff', 
       fontFamily: 'Courier New',
       fontStyle: 'bold'
     }).setOrigin(0, 0.5);
-    const starMax = this.add.text(x - 20, y + 70, `/ ${maxStars} stars`, { 
-      fontSize: '12px', 
-      fill: '#667788', 
+    this.progressionPanelElements.push(starCount);
+    
+    // Total stars label
+    const starMax = this.add.text(x - 15, summaryY + 18, `/ ${maxStars} stars`, { 
+      fontSize: '13px', 
+      fill: '#8899aa', 
       fontFamily: 'Courier New'
     }).setOrigin(0, 0.5);
-    this.progressionPanelElements.push(starCount, starMax);
+    this.progressionPanelElements.push(starMax);
     
-    // Progress bar
-    const barWidth = 180;
-    const barHeight = 10;
-    const barY = y + 100;
-    const barX = x - barWidth / 2;
+    // Subtle sparkle effects (reduced noise)
+    this._createStarSparklesV2(x - 45, summaryY - 10);
     
-    const progressBg = this.add.rectangle(x, barY, barWidth, barHeight, 0x1a2030);
-    progressBg.setStrokeStyle(1, 0x2a3a4a);
+    // ============================================================
+    // BLOCK 2: PROGRESS BAR - Thicker, readable, with milestone
+    // ============================================================
+    const barBlockY = y + 105;
+    const barWidth = 200;
+    const barHeight = 18;  // Thicker for readability
+    
+    // Progress bar container
+    const progressContainer = this.add.rectangle(x, barBlockY, barWidth + 8, barHeight + 12, 0x151a22);
+    progressContainer.setStrokeStyle(1, 0x2a3a4a);
+    this.progressionPanelElements.push(progressContainer);
+    
+    // Progress bar background
+    const progressBg = this.add.rectangle(x, barBlockY, barWidth, barHeight, 0x1a2030);
     this.progressionPanelElements.push(progressBg);
     
+    // Progress fill with gradient effect
+    const fillWidth = Math.max(6, barWidth * progress);
     const progressFill = this.add.rectangle(
-      barX + (barWidth * progress) / 2,
-      barY,
-      Math.max(4, barWidth * progress),
-      barHeight - 2,
+      x - barWidth/2 + fillWidth/2,
+      barBlockY,
+      fillWidth,
+      barHeight - 4,
       0xffdd00,
-      0.9
+      1
     );
     this.progressionPanelElements.push(progressFill);
     
-    // Animate progress bar
+    // Highlight on progress fill
+    const progressHighlight = this.add.rectangle(
+      x - barWidth/2 + fillWidth/2,
+      barBlockY - 4,
+      fillWidth,
+      3,
+      0xffffaa,
+      0.6
+    );
+    this.progressionPanelElements.push(progressHighlight);
+    
+    // Animate progress bar on entrance
     progressFill.setScale(0.01, 1);
+    progressHighlight.setScale(0.01, 1);
     this.tweens.add({
-      targets: progressFill,
+      targets: [progressFill, progressHighlight],
       scaleX: 1,
-      duration: 1000,
+      duration: 800,
       ease: 'Quad.easeOut',
-      delay: 300
+      delay: 400
     });
     
-    // Percentage
-    const progressPct = this.add.text(x + barWidth / 2 + 8, barY, `${Math.round(progress * 100)}%`, { 
-      fontSize: '11px', 
-      fill: '#66aacc', 
-      fontFamily: 'Courier New'
+    // Percentage display - prominent
+    const progressPct = this.add.text(x + barWidth/2 + 12, barBlockY, `${Math.round(progress * 100)}%`, { 
+      fontSize: '14px', 
+      fill: '#66ccff', 
+      fontFamily: 'Courier New',
+      fontStyle: 'bold'
     }).setOrigin(0, 0.5);
     this.progressionPanelElements.push(progressPct);
     
-    // Level grid
-    const gridY = y + 140;
-    const cellWidth = 36;
-    const cellHeight = 28;
-    const cols = 5;
-    const gridStartX = x - (cols * cellWidth) / 2 + cellWidth / 2;
+    // Milestone text - encouraging progress
+    let milestoneText = 'Begin your journey';
+    if (progress >= 0.9) milestoneText = 'Almost complete!';
+    else if (progress >= 0.75) milestoneText = 'Master thief!';
+    else if (progress >= 0.5) milestoneText = 'Halfway there!';
+    else if (progress >= 0.25) milestoneText = 'Making progress';
+    else if (progress > 0) milestoneText = 'Just started';
     
-    LEVEL_LAYOUTS.forEach((level, index) => {
+    const milestone = this.add.text(x, barBlockY + 20, milestoneText, { 
+      fontSize: '11px', 
+      fill: '#6688aa', 
+      fontFamily: 'Courier New',
+      fontStyle: 'italic'
+    }).setOrigin(0.5);
+    this.progressionPanelElements.push(milestone);
+    
+    // ============================================================
+    // BLOCK 3: LEVEL GRID (1-7) - Clear state semantics
+    // ============================================================
+    const gridBlockY = y + 155;
+    const cardWidth = 28;
+    const cardHeight = 48;
+    const cardGap = 6;
+    const cols = 7;  // Always 7 columns for 7 levels
+    const gridStartX = x - ((cols * (cardWidth + cardGap)) / 2) + (cardWidth + cardGap) / 2 - cardGap/2;
+    
+    // Grid section label
+    const gridLabel = this.add.text(x, gridBlockY, 'LEVELS', { 
+      fontSize: '9px', 
+      fill: '#556677', 
+      fontFamily: 'Courier New',
+      letterSpacing: 2
+    }).setOrigin(0.5);
+    this.progressionPanelElements.push(gridLabel);
+    
+    // Store level card references for interaction
+    this._levelCards = [];
+    
+    // Render level cards (show up to 7)
+    const numLevels = Math.min(LEVEL_LAYOUTS.length, 7);
+    
+    for (let index = 0; index < numLevels; index++) {
+      const level = LEVEL_LAYOUTS[index];
       const isUnlocked = saveManager.isLevelUnlocked(index);
       const mastery = saveManager.getMastery(index);
       const stars = mastery?.stars || 0;
+      const isComplete = stars >= 5;
+      const isCurrent = isUnlocked && !isComplete;
       
-      const col = index % cols;
-      const row = Math.floor(index / cols);
-      const cellX = gridStartX + col * cellWidth;
-      const cellY = gridY + row * cellHeight;
+      const cellX = gridStartX + index * (cardWidth + cardGap);
+      const cellY = gridBlockY + 32;
       
-      // V3 Polish: Improved level badge readability with clearer number/star separation
-      const badge = this.add.rectangle(cellX, cellY, cellWidth - 4, cellHeight - 4,
-        isUnlocked ? 0x1a2a3a : 0x0a0c10, 0.9);
-      badge.setStrokeStyle(1, isUnlocked ? (stars >= 5 ? 0xffdd00 : 0x4488ff) : 0x252530);
-      this.progressionPanelElements.push(badge);
+      // Determine card state and styling
+      let bgColor, borderColor, textColor, starColor;
       
-      // Level number - V3: larger, centered above stars
-      const levelNum = this.add.text(cellX, cellY - 4, String(index + 1), { 
-        fontSize: '11px', 
-        fill: isUnlocked ? '#66aaff' : '#445566', 
+      if (!isUnlocked) {
+        // LOCKED state
+        bgColor = 0x0a0c10;
+        borderColor = 0x252530;
+        textColor = '#334455';
+        starColor = '#223344';
+      } else if (isComplete) {
+        // COMPLETE state (5 stars)
+        bgColor = 0x1a2a1a;
+        borderColor = 0xffdd00;
+        textColor = '#ffdd00';
+        starColor = '#ffdd00';
+      } else {
+        // CURRENT/UNLOCKED state
+        bgColor = 0x152535;
+        borderColor = 0x4488ff;
+        textColor = '#88ccff';
+        starColor = stars > 0 ? '#ffdd00' : '#556677';
+      }
+      
+      // Card background
+      const card = this.add.rectangle(cellX, cellY, cardWidth, cardHeight, bgColor, 0.95);
+      card.setStrokeStyle(isComplete ? 2 : 1, borderColor);
+      this.progressionPanelElements.push(card);
+      
+      // Level number - prominent
+      const levelNum = this.add.text(cellX, cellY - 12, String(index + 1), { 
+        fontSize: '14px', 
+        fill: textColor, 
         fontFamily: 'Courier New',
         fontStyle: 'bold'
       }).setOrigin(0.5);
       this.progressionPanelElements.push(levelNum);
       
-      // Stars - V3: below level number for better readability
-      const starText = this.add.text(cellX, cellY + 6, isUnlocked ? `${stars}★` : '🔒', { 
-        fontSize: '9px', 
-        fill: isUnlocked ? (stars > 0 ? '#ffdd00' : '#667788') : '#334455', 
-        fontFamily: 'Courier New'
-      }).setOrigin(0.5);
-      this.progressionPanelElements.push(starText);
+      // State indicator
+      let stateIndicator;
+      if (!isUnlocked) {
+        // Locked icon
+        stateIndicator = this.add.text(cellX, cellY + 8, '🔒', { 
+          fontSize: '12px'
+        }).setOrigin(0.5);
+      } else if (isComplete) {
+        // Checkmark for complete
+        stateIndicator = this.add.text(cellX, cellY + 8, '✓', { 
+          fontSize: '14px', 
+          fill: '#ffdd00', 
+          fontFamily: 'Courier New',
+          fontStyle: 'bold'
+        }).setOrigin(0.5);
+      } else {
+        // Star count for unlocked
+        stateIndicator = this.add.text(cellX, cellY + 8, `${stars}/5`, { 
+          fontSize: '10px', 
+          fill: starColor, 
+          fontFamily: 'Courier New'
+        }).setOrigin(0.5);
+      }
+      this.progressionPanelElements.push(stateIndicator);
       
-      // Glow for completed levels
-      if (stars >= 5) {
+      // Make unlocked cards interactive
+      if (isUnlocked) {
+        card.setInteractive({ useHandCursor: true });
+        
+        // Hover state
+        card.on('pointerover', () => {
+          card.setFillStyle(isComplete ? 0x2a4a2a : 0x1e3545);
+          card.setStrokeStyle(isComplete ? 3 : 2, isComplete ? 0xffee00 : 0x66aaff);
+          levelNum.setFill('#ffffff');
+          sfx.menuHover();
+        });
+        
+        card.on('pointerout', () => {
+          card.setFillStyle(bgColor, 0.95);
+          card.setStrokeStyle(isComplete ? 2 : 1, borderColor);
+          levelNum.setFill(textColor);
+        });
+        
+        // Click to go to level
+        card.on('pointerdown', () => {
+          sfx.click();
+          this.transitionTo('LevelSelectScene');
+        });
+        
+        // Store reference
+        this._levelCards.push({ card, levelNum, index, isComplete });
+      }
+      
+      // Pulse animation for complete levels
+      if (isComplete) {
         this.tweens.add({
-          targets: badge,
-          alpha: 0.7,
-          duration: 2000,
+          targets: card,
+          alpha: 0.75,
+          duration: 2500,
           yoyo: true,
           repeat: -1,
-          ease: 'Sine.easeInOut'
+          ease: 'Sine.easeInOut',
+          delay: index * 200
         });
       }
-    });
+    }
     
-    // Stats section
-    const statsY = gridY + Math.ceil(LEVEL_LAYOUTS.length / cols) * cellHeight + 20;
+    // ============================================================
+    // STATS SECTION - Clean, minimal
+    // ============================================================
+    const statsY = gridBlockY + 95;
     
     if (saveManager.hasSave()) {
       const runsText = this.add.text(x, statsY, `RUNS: ${saveManager.data.totalRuns}`, { 
@@ -2357,7 +2492,7 @@ class MainMenuScene extends Phaser.Scene {
       this.progressionPanelElements.push(runsText);
       
       if (saveManager.data.bestTime) {
-        const bestText = this.add.text(x, statsY + 18, `BEST: ${this.formatTime(saveManager.data.bestTime)}`, { 
+        const bestText = this.add.text(x, statsY + 16, `BEST: ${this.formatTime(saveManager.data.bestTime)}`, { 
           fontSize: '11px', 
           fill: '#66ccff', 
           fontFamily: 'Courier New'
@@ -2368,6 +2503,50 @@ class MainMenuScene extends Phaser.Scene {
     
     // Panel bounds for resize
     this._progressionPanelBounds = { x: x - panelWidth/2, y, width: panelWidth, height: panelHeight };
+  }
+  
+  // ========== V2: CLEANER STAR SPARKLE EFFECTS ==========
+  _createStarSparklesV2(centerX, centerY) {
+    // Reduced sparkle count for cleaner look
+    if (!this._starSparkles) this._starSparkles = [];
+    
+    const sparkleCount = 3;  // Reduced from 4
+    for (let i = 0; i < sparkleCount; i++) {
+      const angle = (Math.PI * 2 * i) / sparkleCount + Math.PI / 4;
+      const distance = 35 + Math.random() * 10;
+      const x = centerX + Math.cos(angle) * distance;
+      const y = centerY + Math.sin(angle) * distance;
+      
+      const sparkle = this.add.graphics();
+      sparkle.fillStyle(0xffdd00, 0.7);
+      sparkle.fillCircle(0, 0, 2);
+      sparkle.fillStyle(0xffffff, 0.9);
+      sparkle.fillCircle(0, 0, 1);
+      sparkle.x = x;
+      sparkle.y = y;
+      sparkle.setAlpha(0);
+      sparkle.setDepth(10);
+      
+      this._starSparkles.push({
+        graphics: sparkle,
+        baseX: x,
+        baseY: y,
+        phase: Math.random() * Math.PI * 2,
+        speed: 0.02 + Math.random() * 0.015
+      });
+    }
+    
+    // Animate sparkles
+    if (!this._sparkleTimer) {
+      this._sparkleTimer = this.time.addEvent({
+        delay: 40,
+        callback: () => {
+          this._updateCreditSparkles();
+          this._updateStarSparkles();
+        },
+        loop: true
+      });
+    }
   }
   
   // ========== PHASE A: UTILITY PANEL (Right) ==========
