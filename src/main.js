@@ -1275,9 +1275,13 @@ function saveSaveData(data) { saveManager.data = data; saveManager.save(); }
 // ==================== GAME CONSTANTS ====================
 // Phase 4: Improved balancing with difficulty scaling
 // Phase 7: Increased scale for desktop/web - larger game canvas for better UI visibility
+// Phase A: Optimized for fullscreen with aspect-safe fallback
 const TILE_SIZE = 48; // Increased from 32 for better visibility
 const MAP_WIDTH = 22; // BASELINE: Default map width (Level 1 overrides to 28)
 const MAP_HEIGHT = 18; // BASELINE: Default map height (Level 1 overrides to 23)
+// Phase A: Reference resolution for HUD scaling
+const REFERENCE_WIDTH = MAP_WIDTH * TILE_SIZE;
+const REFERENCE_HEIGHT = MAP_HEIGHT * TILE_SIZE;
 const BASE_PLAYER_SPEED = 180;
 // Guard speed now scales with difficulty (base 65, max 90)
 const BASE_GUARD_SPEED = 65;
@@ -5541,6 +5545,11 @@ class GameScene extends Phaser.Scene {
       this._hudBackground.destroy();
       this._hudBackground = null;
     }
+    // Phase B: Clean up room highlights
+    if (this._roomHighlights) {
+      this._roomHighlights.forEach(h => h.destroy());
+      this._roomHighlights = null;
+    }
     // Clean up frame recording timer
     if (this._frameTimer) {
       this._frameTimer.remove();
@@ -5593,6 +5602,24 @@ class GameScene extends Phaser.Scene {
     if (this.guardGlow) {
       this.guardGlow.destroy();
       this.guardGlow = null;
+    }
+    // Phase A: Clean up player marker
+    if (this.playerMarkerContainer) {
+      this.playerMarkerContainer.destroy();
+      this.playerMarkerContainer = null;
+    }
+    // Phase A: Clean up new HUD elements
+    if (this._timerChipBg) {
+      this._timerChipBg.destroy();
+      this._timerChipBg = null;
+    }
+    if (this._missionPanelBg) {
+      this._missionPanelBg.destroy();
+      this._missionPanelBg = null;
+    }
+    if (this.controlsHint) {
+      this.controlsHint.destroy();
+      this.controlsHint = null;
     }
     // Clean up enemy nameplates
     if (this.guardNameLabel) {
@@ -5685,6 +5712,11 @@ class GameScene extends Phaser.Scene {
       this.exitZoneGlow.destroy();
       this.exitZoneGlow = null;
     }
+    // Phase B: Clean up exit hint text
+    if (this.exitHintText) {
+      this.exitHintText.destroy();
+      this.exitHintText = null;
+    }
     // Clean up zones
     const zones = ['hackTerminalArea', 'relayTerminalArea'];
     zones.forEach(name => {
@@ -5738,6 +5770,38 @@ class GameScene extends Phaser.Scene {
     for (let i = 0; i < 12; i++) {
       this._trailPool.push({ x: 0, y: 0, alpha: 0, active: false });
     }
+
+    // ==================== Phase A: Player Identity Marker ====================
+    // "YOU" text above player with downward arrow - tracks player movement
+    // Readable but non-intrusive styling
+    this.playerMarkerContainer = this.add.container(startPos.x * TILE_SIZE, startPos.y * TILE_SIZE - TILE_SIZE/2 - 16);
+    this.playerMarkerContainer.setDepth(60); // Above player
+    
+    // "YOU" text with background for readability
+    this.playerMarkerBg = this.add.rectangle(0, 0, 36, 16, 0x00d4ff, 0.7);
+    this.playerMarkerBg.setStrokeStyle(1, 0x00ffff, 0.9);
+    
+    this.playerMarkerText = this.add.text(0, 0, 'YOU', {
+      fontFamily: 'Courier New',
+      fontSize: '9px',
+      fill: '#ffffff',
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+    
+    // Downward arrow pointing to player
+    this.playerMarkerArrow = this.add.triangle(0, 12, 0, 0, 8, 0, 4, 6, 0x00d4ff, 0.8);
+    
+    this.playerMarkerContainer.add([this.playerMarkerBg, this.playerMarkerText, this.playerMarkerArrow]);
+    
+    // Subtle pulse animation for the marker
+    this.tweens.add({
+      targets: this.playerMarkerBg,
+      alpha: { from: 0.7, to: 0.5 },
+      duration: 800,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
 
     // Guard with menacing glow
     this.guardGlow = this.add.circle(TILE_SIZE * 15, TILE_SIZE * 7, TILE_SIZE / 2 + 4, 0xff3344, 0.15);
@@ -5904,10 +5968,19 @@ class GameScene extends Phaser.Scene {
       fontSize: '18px' 
     }).setOrigin(0.5).setDepth(31);
     
-    // Exit text (shows LOCKED or OPEN)
+    // Exit text (shows LOCKED or OPEN) - Phase B: clearer messaging
     this.exitText = this.add.text(exitPos.x * TILE_SIZE, exitPos.y * TILE_SIZE, 'LOCKED', { 
       fontSize: '12px', fill: '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' 
     }).setOrigin(0.5).setDepth(30);
+    
+    // Phase B: Exit hint text - shows requirement when locked (Level 1 only for onboarding)
+    if (this.currentLevelIndex === 0) {
+      this.exitHintText = this.add.text(exitPos.x * TILE_SIZE, exitPos.y * TILE_SIZE + TILE_SIZE, 'Need: Data Core', { 
+        fontSize: '9px', fill: '#888899', fontFamily: 'Courier New' 
+      }).setOrigin(0.5).setDepth(30).setAlpha(0.7);
+    } else {
+      this.exitHintText = null;
+    }
     
     // Phase 6: Exit zone pulsing glow animation (slower, less distracting)
     this.tweens.add({ targets: this.exitZoneGlow, alpha: 0.4, duration: 1200, yoyo: true, repeat: -1 });
@@ -6086,7 +6159,7 @@ class GameScene extends Phaser.Scene {
     securityCode.destroy();
     sfx.pickup();
     if (this.objectiveText4) {
-      this.objectiveText4.setText('[+] Security Code');
+      this.objectiveText4.setText('[✓] Security Code (S)');
       this.objectiveText4.setFill('#00ffff');
     }
     this.updateExitStatus();
@@ -6097,7 +6170,7 @@ class GameScene extends Phaser.Scene {
     powerCell.destroy();
     sfx.pickup();
     if (this.objectiveText5) {
-      this.objectiveText5.setText('[+] Power Cell');
+      this.objectiveText5.setText('[✓] Power Cell (P)');
       this.objectiveText5.setFill('#ff00ff');
     }
     this.updateExitStatus();
@@ -6169,119 +6242,286 @@ class GameScene extends Phaser.Scene {
   }
 
   createUI() {
-    // Lightweight HUD backdrop accents - subtle cyber-heist tech frame
-    this._createHUDBackdropAccents();
-
+    // Phase A: Improved HUD structure with higher contrast and clearer typography
+    // Layout: Top-left (mission panel), Top-center (timer/run chip), Top-right (status panel)
+    
     const safeNumber = (value, fallback = 0) => (Number.isFinite(value) ? value : fallback);
     const levelName = this.currentLayout?.name || `Level ${safeNumber(this.currentLevelIndex, 0) + 1}`;
     const credits = safeNumber(saveManager.data?.credits, 0);
     const runCount = safeNumber(this.runCount, safeNumber(saveManager.data?.totalRuns, 0) + 1);
-    const hudX = 10;
-    const hudWidth = 260;
-    let y = 10;
-    const startY = y;
-    const hudTexts = [];
-
-    const addLine = (text, style = {}, spacing = 4) => {
-      const mergedStyle = {
-        fontFamily: 'Courier New',
-        fontSize: style.fontSize || '12px',
-        fill: style.fill || '#ffffff',
-        fontStyle: style.fontStyle,
-        wordWrap: { width: hudWidth, useAdvancedWrap: true },
-        ...style
-      };
-      const line = this.add.text(hudX, y, text, mergedStyle);
-      hudTexts.push(line);
-      y += line.height + spacing;
-      return line;
-    };
-
-    this.timerText = addLine('00:00.00', { fontSize: '20px', fill: '#00ffaa' }, 6);
-    this.creditsText = addLine(`Credits: ${credits}`, { fontSize: '12px', fill: '#ffaa00' }, 4);
-    this.runText = addLine(`Run: ${runCount}`, { fontSize: '12px', fill: '#888888' }, 2);
-    this.levelText = addLine(`Level: ${levelName}`, { fontSize: '12px', fill: '#8888ff' }, 6);
-
-    this.objectiveText = addLine('[O] Key Card', { fontSize: '12px', fill: '#00aaff' }, 2);
-    this.objectiveText2 = addLine('[O] Hack Terminal', { fontSize: '12px', fill: '#00ff88' }, 2);
-    this.objectiveText3 = addLine('[O] Data Core', { fontSize: '12px', fill: '#ffaa00' }, 2);
-
+    const gameWidth = this.levelWidth * TILE_SIZE;
+    const gameHeight = this.levelHeight * TILE_SIZE;
+    
+    // ==================== TOP-CENTER: Timer/Run Chip ====================
+    // Compact centered chip for timer and run info
+    const chipWidth = 180;
+    const chipHeight = 36;
+    const chipX = gameWidth / 2;
+    const chipY = 18;
+    
+    // Timer chip background with higher contrast
+    this._timerChipBg = this.add.rectangle(chipX, chipY, chipWidth, chipHeight, 0x0a0a1a, 0.85);
+    this._timerChipBg.setStrokeStyle(2, 0x00ffaa, 0.8);
+    this._timerChipBg.setDepth(100);
+    
+    // Timer text - larger, more prominent
+    this.timerText = this.add.text(chipX, chipY, '00:00.00', {
+      fontFamily: 'Courier New',
+      fontSize: '22px',
+      fill: '#00ffaa',
+      fontStyle: 'bold',
+      stroke: '#003322',
+      strokeThickness: 2
+    }).setOrigin(0.5).setDepth(101);
+    
+    // Run number badge next to timer
+    this.runText = this.add.text(chipX + chipWidth/2 - 8, chipY, `R${runCount}`, {
+      fontFamily: 'Courier New',
+      fontSize: '10px',
+      fill: '#66aaff',
+      fontStyle: 'bold'
+    }).setOrigin(1, 0.5).setDepth(101);
+    
+    // ==================== TOP-LEFT: Mission Panel ====================
+    // Higher contrast panel with clearer typography
+    const panelX = 12;
+    let panelY = 55; // Below timer chip
+    const panelWidth = 200;
+    const panelPadding = 10;
+    const panelTexts = [];
+    
+    // Mission panel background
+    const extraObjectives = (this.hasRelayTerminal ? 1 : 0)
+      + (this.currentLayout?.securityCode ? 1 : 0)
+      + (this.currentLayout?.powerCell ? 1 : 0);
+    const panelHeight = 145 + (extraObjectives * 18);
+    
+    this._missionPanelBg = this.add.rectangle(
+      panelX + panelWidth/2 - panelPadding/2, 
+      panelY + panelHeight/2, 
+      panelWidth, 
+      panelHeight, 
+      0x0a0a1a, 
+      0.9
+    );
+    this._missionPanelBg.setStrokeStyle(2, 0x334466, 0.9);
+    this._missionPanelBg.setDepth(100);
+    
+    // Mission panel header
+    this.levelText = this.add.text(panelX, panelY, `MISSION: ${levelName.toUpperCase()}`, {
+      fontFamily: 'Courier New',
+      fontSize: '11px',
+      fill: '#66ccff',
+      fontStyle: 'bold',
+      stroke: '#001133',
+      strokeThickness: 1
+    }).setDepth(101);
+    panelTexts.push(this.levelText);
+    panelY += 18;
+    
+    // Separator line
+    const sepGraphics = this.add.graphics();
+    sepGraphics.lineStyle(1, 0x334466, 0.6);
+    sepGraphics.lineBetween(panelX, panelY, panelX + panelWidth - 20, panelY);
+    sepGraphics.setDepth(101);
+    panelY += 8;
+    
+    // Phase A: Objective checklist with K/T/D clarity
+    // Format: [ ] Task Name (K=Key, T=Terminal, D=Data Core)
+    this.objectiveText = this.add.text(panelX, panelY, '[ ] Key Card (K)', {
+      fontFamily: 'Courier New',
+      fontSize: '12px',
+      fill: '#00aaff',
+      fontStyle: 'bold',
+      stroke: '#001122',
+      strokeThickness: 1
+    }).setDepth(101);
+    panelTexts.push(this.objectiveText);
+    panelY += 18;
+    
+    this.objectiveText2 = this.add.text(panelX, panelY, '[ ] Hack Terminal (T)', {
+      fontFamily: 'Courier New',
+      fontSize: '12px',
+      fill: '#00ff88',
+      fontStyle: 'bold',
+      stroke: '#001122',
+      strokeThickness: 1
+    }).setDepth(101);
+    panelTexts.push(this.objectiveText2);
+    panelY += 18;
+    
+    this.objectiveText3 = this.add.text(panelX, panelY, '[ ] Data Core (D)', {
+      fontFamily: 'Courier New',
+      fontSize: '12px',
+      fill: '#ffaa00',
+      fontStyle: 'bold',
+      stroke: '#111100',
+      strokeThickness: 1
+    }).setDepth(101);
+    panelTexts.push(this.objectiveText3);
+    panelY += 18;
+    
     // Phase 11: Relay Terminal objective (only shown if level has one)
     if (this.hasRelayTerminal) {
-      this.objectiveTextRelay = addLine('[O] Relay Terminal', { fontSize: '12px', fill: '#66ffaa' }, 2);
+      this.objectiveTextRelay = this.add.text(panelX, panelY, '[ ] Relay Terminal (R)', {
+        fontFamily: 'Courier New',
+        fontSize: '12px',
+        fill: '#66ffaa',
+        fontStyle: 'bold',
+        stroke: '#001122',
+        strokeThickness: 1
+      }).setDepth(101);
+      panelTexts.push(this.objectiveTextRelay);
+      panelY += 18;
     } else {
       this.objectiveTextRelay = null;
     }
-
+    
     // Phase 4: Additional objectives (only shown if present in layout)
     if (this.currentLayout?.securityCode) {
-      this.objectiveText4 = addLine('[O] Security Code', { fontSize: '12px', fill: '#00ffff' }, 2);
+      this.objectiveText4 = this.add.text(panelX, panelY, '[ ] Security Code (S)', {
+        fontFamily: 'Courier New',
+        fontSize: '12px',
+        fill: '#00ffff',
+        fontStyle: 'bold',
+        stroke: '#001122',
+        strokeThickness: 1
+      }).setDepth(101);
+      panelTexts.push(this.objectiveText4);
+      panelY += 18;
     } else {
       this.objectiveText4 = null;
     }
-
+    
     if (this.currentLayout?.powerCell) {
-      this.objectiveText5 = addLine('[O] Power Cell', { fontSize: '12px', fill: '#ff00ff' }, 4);
+      this.objectiveText5 = this.add.text(panelX, panelY, '[ ] Power Cell (P)', {
+        fontFamily: 'Courier New',
+        fontSize: '12px',
+        fill: '#ff00ff',
+        fontStyle: 'bold',
+        stroke: '#110011',
+        strokeThickness: 1
+      }).setDepth(101);
+      panelTexts.push(this.objectiveText5);
+      panelY += 18;
     } else {
       this.objectiveText5 = null;
     }
-
-    this.statusText = addLine('Find the Key Card!', { fontSize: '11px', fill: '#666666' }, 2);
-    const perks = gameSave?.perks || { speed: 1, luck: 1, stealth: 1 };
-    this.perksText = addLine(`Perks: S${safeNumber(perks.speed, 1)}/L${safeNumber(perks.luck, 1)}/St${safeNumber(perks.stealth, 1)}`, { fontSize: '10px', fill: '#666666' }, 6);
-
-    const hudHeight = y - startY + 4;
-    this._hudBackground = this.add.rectangle(hudX - 6, startY - 6, hudWidth + 12, hudHeight, 0x0a0a12, 0.35).setOrigin(0, 0);
-    this._hudBackground.setDepth(0);
-    if (this._hudAccents) this._hudAccents.setDepth(1);
-    hudTexts.forEach((line) => line.setDepth(2));
-
-    // Phase 4: Add difficulty indicator - Phase 6: improved color coding
+    
+    // Status hint text
+    panelY += 4;
+    this.statusText = this.add.text(panelX, panelY, '► Find the Key Card!', {
+      fontFamily: 'Courier New',
+      fontSize: '10px',
+      fill: '#888899',
+      fontStyle: 'italic'
+    }).setDepth(101);
+    panelTexts.push(this.statusText);
+    
+    // ==================== TOP-RIGHT: Status Panel ====================
+    // Fixed positioning to prevent clipping at common resolutions
+    const rightPanelX = gameWidth - 12;
+    let rightPanelY = 55;
+    
+    // Phase A: Add difficulty indicator with safe positioning
     const diffColor = this.levelDifficulty === 1 ? '#44ff88' : (this.levelDifficulty === 2 ? '#ffaa00' : '#ff4444');
     const diffLabel = this.levelDifficulty === 1 ? 'EASY' : (this.levelDifficulty === 2 ? 'MEDIUM' : 'HARD');
-    this.difficultyText = this.add.text(MAP_WIDTH * TILE_SIZE - 10, 10, diffLabel, { fontSize: '12px', fill: diffColor, fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(1, 0);
-    // Phase 12: Add alarm timer display if level has one
+    this.difficultyText = this.add.text(rightPanelX, rightPanelY, `DIFFICULTY: ${diffLabel}`, {
+      fontFamily: 'Courier New',
+      fontSize: '11px',
+      fill: diffColor,
+      fontStyle: 'bold',
+      stroke: '#000000',
+      strokeThickness: 1
+    }).setOrigin(1, 0).setDepth(101);
+    rightPanelY += 18;
+    
+    // Credits display
+    this.creditsText = this.add.text(rightPanelX, rightPanelY, `CREDITS: ${credits}`, {
+      fontFamily: 'Courier New',
+      fontSize: '11px',
+      fill: '#ffaa00',
+      fontStyle: 'bold',
+      stroke: '#110000',
+      strokeThickness: 1
+    }).setOrigin(1, 0).setDepth(101);
+    rightPanelY += 16;
+    
+    // Perks display
+    const perks = gameSave?.perks || { speed: 1, luck: 1, stealth: 1 };
+    this.perksText = this.add.text(rightPanelX, rightPanelY, `PERKS: S${safeNumber(perks.speed, 1)}/L${safeNumber(perks.luck, 1)}/St${safeNumber(perks.stealth, 1)}`, {
+      fontFamily: 'Courier New',
+      fontSize: '10px',
+      fill: '#666688'
+    }).setOrigin(1, 0).setDepth(101);
+    rightPanelY += 20;
+    
+    // Phase 12: Add alarm timer display if level has one - positioned below perks
     if (this.alarmTimer !== null) {
-      this.alarmText = this.add.text(MAP_WIDTH * TILE_SIZE - 10, 30, `⏰ ALARM: ${this.alarmTimer}s`, { fontSize: '12px', fill: '#ffaa00', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(1, 0);
+      this.alarmText = this.add.text(rightPanelX, rightPanelY, `⏰ ALARM: ${this.alarmTimer}s`, {
+        fontFamily: 'Courier New',
+        fontSize: '12px',
+        fill: '#ffaa00',
+        fontStyle: 'bold',
+        stroke: '#220000',
+        strokeThickness: 1
+      }).setOrigin(1, 0).setDepth(101);
     } else {
       this.alarmText = null;
     }
-
-    this.add.text(10, MAP_HEIGHT * TILE_SIZE - 25, 'ARROWS/WASD: Move | R: Restart | ESC: Pause', { fontSize: '10px', fill: '#444455', fontFamily: 'Courier New' });
+    
+    // ==================== BOTTOM: Control Hints ====================
+    // Safe positioning at bottom with padding
+    this.controlsHint = this.add.text(gameWidth / 2, gameHeight - 14, 
+      'ARROWS/WASD: Move  |  R: Restart  |  ESC: Pause', {
+      fontFamily: 'Courier New',
+      fontSize: '10px',
+      fill: '#445566',
+      fontStyle: 'bold'
+    }).setOrigin(0.5, 0.5).setDepth(101);
+    
+    // ==================== Phase A: Create HUD accents ====================
+    this._createHUDBackdropAccents();
+    
+    // Store references for cleanup
+    this._hudTexts = panelTexts;
   }
   
   // Lightweight HUD backdrop accents - creates subtle tech frame around HUD
   _createHUDBackdropAccents() {
-    // Corner bracket at top-left of HUD area
+    const gameWidth = this.levelWidth * TILE_SIZE;
+    const gameHeight = this.levelHeight * TILE_SIZE;
+    
+    // Corner bracket graphics
     const hudCorner = this.add.graphics();
-    const cornerSize = 15;
-    const cornerX = 5;
-    const cornerY = 5;
+    const cornerSize = 12;
     
     // Top-left corner bracket
-    hudCorner.lineStyle(2, 0x334455, 0.4);
-    hudCorner.lineBetween(cornerX, cornerY, cornerX + cornerSize, cornerY);
-    hudCorner.lineBetween(cornerX, cornerY, cornerX, cornerY + cornerSize);
+    hudCorner.lineStyle(2, 0x446688, 0.5);
+    hudCorner.lineBetween(4, 4, 4 + cornerSize, 4);
+    hudCorner.lineBetween(4, 4, 4, 4 + cornerSize);
     
-    // Bottom edge of HUD panel (subtle line)
-    const extraObjectives = (this.hasRelayTerminal ? 1 : 0)
-      + (this.currentLayout?.securityCode ? 1 : 0)
-      + (this.currentLayout?.powerCell ? 1 : 0);
-    const hudHeight = 200 + (extraObjectives * 16);
-    hudCorner.lineStyle(1, 0x223344, 0.25);
-    hudCorner.lineBetween(cornerX, cornerY + hudHeight, cornerX + 180, cornerY + hudHeight);
+    // Top-right corner bracket
+    hudCorner.lineStyle(2, 0x446688, 0.5);
+    hudCorner.lineBetween(gameWidth - 4, 4, gameWidth - 4 - cornerSize, 4);
+    hudCorner.lineBetween(gameWidth - 4, 4, gameWidth - 4, 4 + cornerSize);
     
-    // Top-right corner bracket for difficulty display
-    hudCorner.lineStyle(2, 0x334455, 0.3);
-    hudCorner.lineBetween(MAP_WIDTH * TILE_SIZE - 5, 5, MAP_WIDTH * TILE_SIZE - 5 - cornerSize, 5);
-    hudCorner.lineBetween(MAP_WIDTH * TILE_SIZE - 5, 5, MAP_WIDTH * TILE_SIZE - 5, 5 + cornerSize);
+    // Bottom-left corner bracket
+    hudCorner.lineStyle(2, 0x446688, 0.4);
+    hudCorner.lineBetween(4, gameHeight - 4, 4 + cornerSize, gameHeight - 4);
+    hudCorner.lineBetween(4, gameHeight - 4, 4, gameHeight - 4 - cornerSize);
     
-    // Bottom control hints bar accent
-    hudCorner.lineStyle(1, 0x223344, 0.2);
-    hudCorner.lineBetween(5, MAP_HEIGHT * TILE_SIZE - 30, MAP_WIDTH * TILE_SIZE - 5, MAP_HEIGHT * TILE_SIZE - 30);
+    // Bottom-right corner bracket
+    hudCorner.lineBetween(gameWidth - 4, gameHeight - 4, gameWidth - 4 - cornerSize, gameHeight - 4);
+    hudCorner.lineBetween(gameWidth - 4, gameHeight - 4, gameWidth - 4, gameHeight - 4 - cornerSize);
+    
+    // Top edge accent line (subtle)
+    hudCorner.lineStyle(1, 0x334455, 0.3);
+    hudCorner.lineBetween(20, 52, gameWidth - 20, 52);
     
     // Store for cleanup
     this._hudAccents = hudCorner;
+    this._hudAccents.setDepth(99);
   }
 
   // Phase 11: Level start briefing for onboarding - shows contextual tips
@@ -6471,6 +6711,12 @@ class GameScene extends Phaser.Scene {
       floorGraphics.lineBetween(0, y, MAP_WIDTH * TILE_SIZE, y);
     }
     
+    // Phase B: Room identity cues - subtle floor highlights for objective rooms (Level 1 only)
+    // Helps new players identify important rooms visually
+    if (this.currentLevelIndex === 0) {
+      this._addRoomHighlights();
+    }
+    
     const wallColor = 0x2d2d3d;
     this.walls = this.add.group();
     for (let x = 0; x < MAP_WIDTH; x++) {
@@ -6504,6 +6750,130 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  // Phase B: Room identity highlights for Level 1 (Warehouse) - improves readability
+  // Adds subtle floor tints to objective rooms to help new players identify them
+  _addRoomHighlights() {
+    const level = this.currentLayout;
+    if (!level) return;
+    
+    // Room highlight colors (very subtle, matching objective colors)
+    const roomColors = {
+      keyCard: { color: 0x00aaff, alpha: 0.08 },      // Blue tint for keycard room
+      hackTerminal: { color: 0x00ff88, alpha: 0.08 }, // Green tint for terminal room
+      dataCore: { color: 0xffaa00, alpha: 0.08 },     // Orange tint for datacore room
+      exitZone: { color: 0x22ff66, alpha: 0.06 }      // Subtle green for exit
+    };
+    
+    // Create subtle floor highlights for each objective room (5x5 room centered on objective)
+    const roomSize = 5; // 5x5 tiles
+    const halfRoom = Math.floor(roomSize / 2);
+    
+    Object.keys(roomColors).forEach(objKey => {
+      const objPos = level[objKey];
+      if (!objPos || !Number.isFinite(objPos.x) || !Number.isFinite(objPos.y)) return;
+      
+      const config = roomColors[objKey];
+      const highlight = this.add.graphics();
+      highlight.setDepth(1); // Above floor, below walls
+      
+      // Draw subtle room floor highlight (5x5 area centered on objective)
+      const startX = (objPos.x - halfRoom) * TILE_SIZE;
+      const startY = (objPos.y - halfRoom) * TILE_SIZE;
+      const width = roomSize * TILE_SIZE;
+      const height = roomSize * TILE_SIZE;
+      
+      // Fill with subtle color
+      highlight.fillStyle(config.color, config.alpha);
+      highlight.fillRect(startX, startY, width, height);
+      
+      // Add subtle border to define room bounds
+      highlight.lineStyle(1, config.color, config.alpha * 2);
+      highlight.strokeRect(startX, startY, width, height);
+      
+      // Store reference for cleanup
+      if (!this._roomHighlights) this._roomHighlights = [];
+      this._roomHighlights.push(highlight);
+    });
+    
+    // Add corridor highlights (horizontal corridors at y=7 and y=14)
+    const corridorGraphics = this.add.graphics();
+    corridorGraphics.setDepth(0);
+    
+    // Upper corridor (y=7) - subtle blue
+    corridorGraphics.fillStyle(0x334466, 0.04);
+    corridorGraphics.fillRect(0, 6 * TILE_SIZE, this.levelWidth * TILE_SIZE, 2 * TILE_SIZE);
+    
+    // Lower corridor (y=14) - subtle blue  
+    corridorGraphics.fillStyle(0x334466, 0.04);
+    corridorGraphics.fillRect(0, 13 * TILE_SIZE, this.levelWidth * TILE_SIZE, 2 * TILE_SIZE);
+    
+    if (!this._roomHighlights) this._roomHighlights = [];
+    this._roomHighlights.push(corridorGraphics);
+  }
+
+  // Phase B: Animate objective text completion with subtle pulse effect
+  _animateObjectiveComplete(objectiveTextEl) {
+    if (!objectiveTextEl) return;
+    // Subtle scale pulse + fade in
+    this.tweens.add({
+      targets: objectiveTextEl,
+      scaleX: 1.15,
+      scaleY: 1.15,
+      duration: 150,
+      yoyo: true,
+      ease: 'Quad.easeOut'
+    });
+  }
+
+  // Phase B: Animate status text change with color flash
+  _animateStatusChange(statusTextEl) {
+    if (!statusTextEl) return;
+    // Subtle alpha pulse
+    this.tweens.add({
+      targets: statusTextEl,
+      alpha: 0.5,
+      duration: 100,
+      yoyo: true,
+      ease: 'Quad.easeOut'
+    });
+  }
+
+  // Phase B: Animate exit zone unlock with glow pulse
+  _animateExitUnlock() {
+    // Pulse the exit zone glow
+    if (this.exitZoneGlow) {
+      this.tweens.add({
+        targets: this.exitZoneGlow,
+        alpha: 0.6,
+        duration: 300,
+        yoyo: true,
+        ease: 'Quad.easeOut'
+      });
+    }
+    // Scale pulse on exit text
+    if (this.exitText) {
+      this.tweens.add({
+        targets: this.exitText,
+        scaleX: 1.3,
+        scaleY: 1.3,
+        duration: 200,
+        yoyo: true,
+        ease: 'Back.easeOut'
+      });
+    }
+    // Pulse the lock icon
+    if (this.exitLockIcon) {
+      this.tweens.add({
+        targets: this.exitLockIcon,
+        scaleX: 1.5,
+        scaleY: 1.5,
+        duration: 250,
+        yoyo: true,
+        ease: 'Back.easeOut'
+      });
+    }
+  }
+
   collectKeyCard(player, keyCard) {
     if (!this.hasKeyCard) {
       this.hasKeyCard = true;
@@ -6511,10 +6881,12 @@ class GameScene extends Phaser.Scene {
       if (keyCard.body) keyCard.body.enable = false;
       if (this.keyCardIcon) this.keyCardIcon.setVisible(false);
       sfx.collect();
-      this.objectiveText.setText('[+] Key Card');
+      this.objectiveText.setText('[✓] Key Card (K)');
       this.objectiveText.setFill('#00ff00');
+      this._animateObjectiveComplete(this.objectiveText); // Phase B: animate
       this.statusText.setText('Key obtained! Hack the terminal!');
       this.statusText.setFill('#00aaff');
+      this._animateStatusChange(this.statusText); // Phase B: animate
       if (this.cameras?.main) this.cameras.main.flash(200, 0, 150, 255);
     }
   }
@@ -6526,10 +6898,12 @@ class GameScene extends Phaser.Scene {
       if (dataCore.body) dataCore.body.enable = false;
       if (this.dataCoreIcon) this.dataCoreIcon.setVisible(false);
       sfx.collect();
-      this.objectiveText3.setText('[+] Data Core');
+      this.objectiveText3.setText('[✓] Data Core (D)');
       this.objectiveText3.setFill('#00ff00');
+      this._animateObjectiveComplete(this.objectiveText3); // Phase B: animate
       this.statusText.setText('Data secured! Exit unlocked!');
       this.statusText.setFill('#00ffaa');
+      this._animateStatusChange(this.statusText); // Phase B: animate
       this.exitZone.fillColor = 0x22ff66;
       this.exitZone.fillAlpha = 0.4;
       this.exitZone.setStrokeStyle(2, 0x22ff66);
@@ -6546,6 +6920,13 @@ class GameScene extends Phaser.Scene {
       if (this.exitZoneFrame) {
         this.exitZoneFrame.setStrokeStyle(4, 0x22ff66); // Green frame when unlocked
       }
+      // Phase B: Update exit hint to show unlocked status
+      if (this.exitHintText) {
+        this.exitHintText.setText('ESCAPE NOW!');
+        this.exitHintText.setFill('#22ff66');
+      }
+      // Phase B: Animate exit state change
+      this._animateExitUnlock();
       if (this.cameras?.main) this.cameras.main.flash(200, 0, 255, 100);
     }
   }
@@ -6581,15 +6962,17 @@ class GameScene extends Phaser.Scene {
 
       if (terminal === 'primary') {
         this.hackStage = 1;
-        this.objectiveText2.setText('[+] Hack Terminal');
+        this.objectiveText2.setText('[✓] Hack Terminal (T)');
         this.objectiveText2.setFill('#00ff00');
+        this._animateObjectiveComplete(this.objectiveText2); // Phase B: animate
 
         if (this.hasRelayTerminal) {
           // Need relay hack next
           this.statusText.setText('Primary hacked! Find the relay terminal!');
           this.statusText.setFill('#66ffaa');
+          this._animateStatusChange(this.statusText); // Phase B: animate
           if (this.objectiveTextRelay) {
-            this.objectiveTextRelay.setText('[>] Relay Terminal');
+            this.objectiveTextRelay.setText('[>] Relay Terminal (R)');
             this.objectiveTextRelay.setFill('#66ffaa');
           }
           sfx.collect();
@@ -6599,17 +6982,20 @@ class GameScene extends Phaser.Scene {
           this.hackStage = 2;
           this.statusText.setText('Terminal hacked! Get the data core!');
           this.statusText.setFill('#ffaa00');
+          this._animateStatusChange(this.statusText); // Phase B: animate
           sfx.win();
           if (this.cameras?.main) this.cameras.main.flash(200, 255, 255, 100);
         }
       } else if (terminal === 'relay') {
         this.hackStage = 2;
         if (this.objectiveTextRelay) {
-          this.objectiveTextRelay.setText('[+] Relay Terminal');
+          this.objectiveTextRelay.setText('[✓] Relay Terminal (R)');
           this.objectiveTextRelay.setFill('#00ff00');
+          this._animateObjectiveComplete(this.objectiveTextRelay); // Phase B: animate
         }
         this.statusText.setText('Relay complete! Get the data core!');
         this.statusText.setFill('#ffaa00');
+        this._animateStatusChange(this.statusText); // Phase B: animate
         sfx.win();
         if (this.cameras?.main) this.cameras.main.flash(200, 255, 255, 100);
       }
@@ -6816,6 +7202,11 @@ class GameScene extends Phaser.Scene {
         const pulse = 0.1 + Math.floor(this.time.now / 200) % 10 * 0.005;
         this.playerGlow.setAlpha(pulse);
       }
+    }
+    
+    // Phase A: Update player "YOU" marker position to track player
+    if (this.playerMarkerContainer) {
+      this.playerMarkerContainer.setPosition(this.player.x, this.player.y - TILE_SIZE/2 - 16);
     }
     
     // OPTIMIZATION: Player movement trail - only update every 2nd frame
@@ -8703,17 +9094,23 @@ class GameScene extends Phaser.Scene {
 }
 
 // ==================== GAME CONFIG ====================
+// Phase A: Improved fullscreen scaling - uses ENVELOP mode to minimize black bars
+// while preserving aspect-safe fallback for extreme aspect ratios
 const config = {
   type: Phaser.AUTO,
-  width: MAP_WIDTH * TILE_SIZE,
-  height: MAP_HEIGHT * TILE_SIZE,
+  width: REFERENCE_WIDTH,
+  height: REFERENCE_HEIGHT,
   parent: 'game-container',
   backgroundColor: '#0a0a0f',
   scale: {
-    mode: Phaser.Scale.FIT,
+    // Phase A: Use ENVELOP for better fullscreen usage - fills more screen space
+    // Falls back to FIT-like behavior for extreme aspect ratios
+    mode: Phaser.Scale.ENVELOP,
     autoCenter: Phaser.Scale.CENTER_BOTH,
-    width: MAP_WIDTH * TILE_SIZE,
-    height: MAP_HEIGHT * TILE_SIZE
+    width: REFERENCE_WIDTH,
+    height: REFERENCE_HEIGHT,
+    // Phase A: Allow dynamic resizing for fullscreen transitions
+    resizeInterval: 100
   },
   physics: {
     default: 'arcade',

@@ -545,9 +545,9 @@ const RAW_LEVEL_LAYOUTS = [
     ],
 
     // ==================== SENSORS (watch corridors - NO OVERLAP WITH PATROL) ====================
-    // V2 REBALANCE 2026-02-25: Camera repositioned to avoid stacking with patrol
-    // Watches upper corridor, providing early warning without guard overlap
-    cameras: [{x: 6, y: 8}],  // Upper corridor, clear of patrol zone
+    // Phase B 2026-02-25: Camera moved to perimeter to reduce mid-lane threat stacking
+    // Watches exit approach from upper corridor - no camera in main objective path for Level 1 onboarding
+    cameras: [{x: 23, y: 7}],  // Upper corridor near exit approach (walkable corridor tile)
     motionSensors: [],
     laserGrids: [],
 
