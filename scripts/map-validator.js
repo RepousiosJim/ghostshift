@@ -408,7 +408,11 @@ export function calculatePathDistance(grid, from, to) {
   
   if (startTx === endTx && startTy === endTy) return 0;
   
-  const visited = Array(MAP_HEIGHT).fill(null).map(() => Array(MAP_WIDTH).fill(false));
+  // Use actual grid dimensions instead of baseline MAP_WIDTH/MAP_HEIGHT
+  const height = grid.length;
+  const width = grid[0] ? grid[0].length : MAP_WIDTH;
+  
+  const visited = Array(height).fill(null).map(() => Array(width).fill(false));
   const queue = [{x: startTx, y: startTy, dist: 0}];
   visited[startTy][startTx] = true;
   
@@ -425,7 +429,7 @@ export function calculatePathDistance(grid, from, to) {
         return dist + 1;
       }
       
-      if (n.x >= 0 && n.x < MAP_WIDTH && n.y >= 0 && n.y < MAP_HEIGHT) {
+      if (n.x >= 0 && n.x < width && n.y >= 0 && n.y < height) {
         if (!visited[n.y][n.x] && grid[n.y][n.x]) {
           visited[n.y][n.x] = true;
           queue.push({x: n.x, y: n.y, dist: dist + 1});

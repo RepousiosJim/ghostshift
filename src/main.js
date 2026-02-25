@@ -5456,11 +5456,24 @@ class GameScene extends Phaser.Scene {
     this.levelWidth = levelWidth;
     this.levelHeight = levelHeight;
 
-    // Update physics world bounds to match level dimensions
-    this.physics.world.setBounds(0, 0, levelWidth * TILE_SIZE, levelHeight * TILE_SIZE);
+    // Update physics world bounds to match level dimensions (defensive guards)
+    const worldPixelWidth = levelWidth * TILE_SIZE;
+    const worldPixelHeight = levelHeight * TILE_SIZE;
+    if (this.physics && this.physics.world && typeof this.physics.world.setBounds === 'function') {
+      this.physics.world.setBounds(0, 0, worldPixelWidth, worldPixelHeight);
+    } else {
+      console.warn('[GameScene] physics.world.setBounds unavailable at create()');
+    }
 
-    // Update camera bounds to match level dimensions
-    this.cameras.main.setBounds(0, 0, levelWidth * TILE_SIZE, levelHeight * TILE_SIZE);
+    // Update camera bounds to match level dimensions (defensive guards)
+    const mainCamera = (this.cameras && this.cameras.main)
+      ? this.cameras.main
+      : (this.cameras && Array.isArray(this.cameras.cameras) ? this.cameras.cameras[0] : null);
+    if (mainCamera && typeof mainCamera.setBounds === 'function') {
+      mainCamera.setBounds(0, 0, worldPixelWidth, worldPixelHeight);
+    } else {
+      console.warn('[GameScene] cameras.main.setBounds unavailable at create()');
+    }
     
     setRuntimePhase('level:create:layout', { sceneKey: this.scene.key, levelIndex: this.currentLevelIndex });
     _levelStartGuard.release();
@@ -5482,13 +5495,13 @@ class GameScene extends Phaser.Scene {
     this.showLevelStartBriefing();
     // Vignette effect for atmosphere (using a large soft-edged circle approach via gradient simulation)
     this.vignette = this.add.graphics();
-    const vignetteSize = Math.max(MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE) * 0.8;
+    const vignetteSize = Math.max(levelWidth * TILE_SIZE, levelHeight * TILE_SIZE) * 0.8;
     this.vignette.fillStyle(0x000000, 0.3);
     // Draw corners as approximate vignette
-    this.vignette.fillRect(0, 0, MAP_WIDTH * TILE_SIZE, 40);
-    this.vignette.fillRect(0, MAP_HEIGHT * TILE_SIZE - 40, MAP_WIDTH * TILE_SIZE, 40);
-    this.vignette.fillRect(0, 0, 40, MAP_HEIGHT * TILE_SIZE);
-    this.vignette.fillRect(MAP_WIDTH * TILE_SIZE - 40, 0, 40, MAP_HEIGHT * TILE_SIZE);
+    this.vignette.fillRect(0, 0, levelWidth * TILE_SIZE, 40);
+    this.vignette.fillRect(0, levelHeight * TILE_SIZE - 40, levelWidth * TILE_SIZE, 40);
+    this.vignette.fillRect(0, 0, 40, levelHeight * TILE_SIZE);
+    this.vignette.fillRect(levelWidth * TILE_SIZE - 40, 0, 40, levelHeight * TILE_SIZE);
     this.isRunning = true;
     this.currentRun = [];
     // Store timer reference for cleanup
@@ -5776,8 +5789,10 @@ class GameScene extends Phaser.Scene {
 
     // ==================== POLISH: ENEMY NAMEPLATES (reduced visual noise) ====================
     // Smaller size, lower opacity, proximity-based visibility
+    // Level 1 (Warehouse) uses even lower opacity to reduce new player confusion
     resetEnemyNames();
     const guardName = generateEnemyName('guard');
+    const nameplateBaseAlpha = this.currentLevelIndex === 0 ? 0.35 : 0.6; // Lower for Level 1
     this.guardNameLabel = this.add.text(this.guard.x, this.guard.y - TILE_SIZE / 2 - 22, guardName, {
       fontSize: '8px',        // Reduced from 10px
       fill: '#ff6666',
@@ -5785,7 +5800,7 @@ class GameScene extends Phaser.Scene {
       fontStyle: 'bold',
       backgroundColor: '#1a1a2e',
       padding: { x: 3, y: 1 }  // Reduced padding
-    }).setOrigin(0.5).setDepth(51).setAlpha(0.6);  // Lower base opacity
+    }).setOrigin(0.5).setDepth(51).setAlpha(nameplateBaseAlpha);
 
     this.createScannerDrone();
     this.createCameras();
@@ -5896,6 +5911,77 @@ class GameScene extends Phaser.Scene {
     
     // Phase 6: Exit zone pulsing glow animation (slower, less distracting)
     this.tweens.add({ targets: this.exitZoneGlow, alpha: 0.4, duration: 1200, yoyo: true, repeat: -1 });
+
+    // ==================== LEVEL 1 FLOW INDICATORS ====================
+    // Visual path guidance for K -> T -> D -> Exit sequence (Level 1 only)
+    // Shows subtle directional arrows between objectives for new player guidance
+    this.flowIndicators = [];
+    if (this.currentLevelIndex === 0) {
+      const flowGraphics = this.add.graphics();
+      flowGraphics.setDepth(5); // Below objectives but above floor
+      
+      // Flow path: K -> T -> D -> Exit
+      const flowPath = [
+        { from: kcPos, to: htPos, label: 'K→T' },
+        { from: htPos, to: dcPos, label: 'T→D' },
+        { from: dcPos, to: exitPos, label: 'D→E' }
+      ];
+      
+      flowPath.forEach(segment => {
+        const fromX = segment.from.x * TILE_SIZE;
+        const fromY = segment.from.y * TILE_SIZE;
+        const toX = segment.to.x * TILE_SIZE;
+        const toY = segment.to.y * TILE_SIZE;
+        
+        // Draw subtle dashed line between objectives
+        flowGraphics.lineStyle(1, 0x446688, 0.3);
+        const segments = 8;
+        const dx = (toX - fromX) / segments;
+        const dy = (toY - fromY) / segments;
+        
+        for (let i = 0; i < segments; i += 2) {
+          const x1 = fromX + dx * i;
+          const y1 = fromY + dy * i;
+          const x2 = fromX + dx * (i + 1);
+          const y2 = fromY + dy * (i + 1);
+          flowGraphics.lineBetween(x1, y1, x2, y2);
+        }
+        
+        // Draw arrowhead at destination
+        const angle = Math.atan2(toY - fromY, toX - fromX);
+        const arrowSize = 8;
+        const arrowX = toX - Math.cos(angle) * (TILE_SIZE * 0.8);
+        const arrowY = toY - Math.sin(angle) * (TILE_SIZE * 0.8);
+        
+        flowGraphics.fillStyle(0x446688, 0.4);
+        flowGraphics.beginPath();
+        flowGraphics.moveTo(
+          arrowX + Math.cos(angle) * arrowSize,
+          arrowY + Math.sin(angle) * arrowSize
+        );
+        flowGraphics.lineTo(
+          arrowX + Math.cos(angle + 2.5) * arrowSize * 0.6,
+          arrowY + Math.sin(angle + 2.5) * arrowSize * 0.6
+        );
+        flowGraphics.lineTo(
+          arrowX + Math.cos(angle - 2.5) * arrowSize * 0.6,
+          arrowY + Math.sin(angle - 2.5) * arrowSize * 0.6
+        );
+        flowGraphics.closePath();
+        flowGraphics.fillPath();
+      });
+      
+      this.flowIndicators.push(flowGraphics);
+      
+      // Subtle pulse animation for flow indicators
+      this.tweens.add({
+        targets: flowGraphics,
+        alpha: 0.6,
+        duration: 2000,
+        yoyo: true,
+        repeat: -1
+      });
+    }
 
     this.ghost = this.add.rectangle(-100, -100, TILE_SIZE - 8, TILE_SIZE - 8, 0x44ffaa);
     this.ghost.setAlpha(GHOST_ALPHA);
@@ -8305,8 +8391,10 @@ class GameScene extends Phaser.Scene {
   // POLISH: Proximity-based visibility - more visible when player is nearby
   updateEnemyNameplates() {
     const PROXIMITY_THRESHOLD = 200;  // Distance in pixels for full visibility
-    const MIN_ALPHA = 0.4;            // Minimum alpha when far
-    const MAX_ALPHA = 0.9;            // Maximum alpha when close
+    // Level 1 (Warehouse) uses lower alpha to reduce visual noise for new players
+    const isLevel1 = this.currentLevelIndex === 0;
+    const MIN_ALPHA = isLevel1 ? 0.2 : 0.4;  // Lower minimum for Level 1
+    const MAX_ALPHA = isLevel1 ? 0.6 : 0.9;  // Lower maximum for Level 1
     
     // Update guard nameplate with proximity-based visibility
     if (this.guardNameLabel && this.guard && this.player) {
