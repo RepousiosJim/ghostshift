@@ -1954,6 +1954,15 @@ class BootScene extends Phaser.Scene {
         onComplete: (results) => {
           const stats = this.assetLoader.getStats();
           console.log(`[BootScene] Asset loading complete: ${stats.loaded}/${stats.total} loaded, ${stats.fallbacks} fallbacks`);
+          
+          // ========== DEV LOG: VERIFY PLAY BUTTON ASSET LOADED ==========
+          const playAssetLoaded = this.textures.exists('menu_btn_play');
+          console.log('[PLAY-BUTTON-DEBUG] BootScene: menu_btn_play texture exists:', playAssetLoaded);
+          if (playAssetLoaded) {
+            const tex = this.textures.get('menu_btn_play');
+            const src = tex?.source?.[0];
+            console.log('[PLAY-BUTTON-DEBUG] BootScene: texture source:', src?.src || 'canvas', 'width:', src?.width, 'height:', src?.height);
+          }
         },
         onError: (failures) => {
           console.error('[BootScene] Critical asset failures:', failures);
@@ -2813,8 +2822,18 @@ class MainMenuScene extends Phaser.Scene {
     // Asset key for the PLAY button
     const ASSET_KEY = 'menu_btn_play';
     
+    // ========== DEV LOG: PROVE TEXTURE KEY USED ==========
+    const textureExists = this.textures.exists(ASSET_KEY);
+    console.log('[PLAY-BUTTON-DEBUG] Checking texture:', ASSET_KEY, 'exists:', textureExists);
+    
+    // List all available textures for debugging
+    if (!textureExists) {
+      const textureKeys = this.textures.getTextureKeys ? this.textures.getTextureKeys() : [];
+      console.log('[PLAY-BUTTON-DEBUG] Available textures:', textureKeys.slice(0, 20));
+    }
+    
     // Check if asset is loaded
-    if (!this.textures.exists(ASSET_KEY)) {
+    if (!textureExists) {
       console.warn('[MainMenuScene] menu_btn_play asset not loaded, falling back to procedural');
       // Fallback to procedural button
       return this.createPrimaryButton(
@@ -2826,6 +2845,12 @@ class MainMenuScene extends Phaser.Scene {
       );
     }
     
+    // ========== DEV LOG: CONFIRM ASSET PATH ==========
+    const texture = this.textures.get(ASSET_KEY);
+    const source = texture?.source?.[0];
+    console.log('[PLAY-BUTTON-DEBUG] Using ASSET-ONLY path. Texture key:', ASSET_KEY, 
+      'source:', source?.src || 'canvas', 'width:', source?.width, 'height:', source?.height);
+    
     let isFocused = false;
     
     // Create container for the button
@@ -2835,6 +2860,10 @@ class MainMenuScene extends Phaser.Scene {
     const buttonImage = this.add.image(0, 0, ASSET_KEY);
     buttonImage.setDisplaySize(width, height);
     container.add(buttonImage);
+    
+    // ========== DEV LOG: VERIFY IMAGE CREATED ==========
+    console.log('[PLAY-BUTTON-DEBUG] Image created. textureKey:', buttonImage.texture?.key, 
+      'displayWidth:', buttonImage.displayWidth, 'displayHeight:', buttonImage.displayHeight);
     
     // Make interactive
     buttonImage.setInteractive({ useHandCursor: true });
