@@ -22,6 +22,17 @@ import {
   getTotalAssetCount,
   ASSET_VERSION 
 } from './asset-manifest.js';
+// Menu Button Asset System
+import { 
+  BUTTON_IDS,
+  BUTTON_STATES,
+  BUTTON_TEXTURE_MAP,
+  MenuButtonAssetLoader,
+  AssetQAValidator,
+  ButtonFocusManager,
+  createMenuButton,
+  generateMappingTable
+} from './menu-button-assets.js';
 
 // Dynamic import of Phaser for better loading performance
 // This allows the smaller game.js to load first, then Phaser lazy-loads
@@ -2084,6 +2095,12 @@ class MainMenuScene extends Phaser.Scene {
     this._resizeListener = () => this._handleResize();
     fullscreenManager.on('resize', this._resizeListener);
     
+    // ========== MENU BUTTON ASSET SYSTEM INITIALIZATION ==========
+    // Initialize button asset loader and focus manager
+    this.menuButtonLoader = new MenuButtonAssetLoader(this);
+    this.buttonFocusManager = new ButtonFocusManager(this);
+    this.menuButtons = []; // Track all menu buttons for focus management
+    
     // Check if we should show How to Play from ControlsScene transition
     if (data?.showHowToPlay) {
       // Delay slightly to ensure scene is fully created
@@ -2391,17 +2408,25 @@ class MainMenuScene extends Phaser.Scene {
     const buttonStartY = y + 110;
     const buttonSpacing = 52;
     
-    // How to Play - V3: Enhanced contrast
-    this.createSecondaryButton(x, buttonStartY, buttonWidth, buttonHeight, '📖 HOW TO PLAY', 0x1a3a5a, 0x66ccff, () => this.showHowToPlayOverlay());
+    // How to Play - V3: Enhanced contrast with proper button ID
+    const howToPlayBtn = this.createSecondaryButton(x, buttonStartY, buttonWidth, buttonHeight, '📖 HOW TO PLAY', BUTTON_IDS.HOW_TO_PLAY, 0x1a3a5a, 0x66ccff, () => this.showHowToPlayOverlay());
+    this.menuButtons.push(howToPlayBtn);
+    this.buttonFocusManager.registerButton(howToPlayBtn);
     
-    // Controls - V3: Enhanced contrast
-    this.createSecondaryButton(x, buttonStartY + buttonSpacing, buttonWidth, buttonHeight, '🎮 CONTROLS', 0x2a3a5a, 0x99bbdd, () => this.transitionTo('ControlsScene'));
+    // Controls - V3: Enhanced contrast with proper button ID
+    const controlsBtn = this.createSecondaryButton(x, buttonStartY + buttonSpacing, buttonWidth, buttonHeight, '🎮 CONTROLS', BUTTON_IDS.CONTROLS, 0x2a3a5a, 0x99bbdd, () => this.transitionTo('ControlsScene'));
+    this.menuButtons.push(controlsBtn);
+    this.buttonFocusManager.registerButton(controlsBtn);
     
-    // Settings - V3: Enhanced contrast
-    this.createSecondaryButton(x, buttonStartY + buttonSpacing * 2, buttonWidth, buttonHeight, '⚙ SETTINGS', 0x2a3a5a, 0x99bbdd, () => this.transitionTo('SettingsScene'));
+    // Settings - V3: Enhanced contrast with proper button ID
+    const settingsBtn = this.createSecondaryButton(x, buttonStartY + buttonSpacing * 2, buttonWidth, buttonHeight, '⚙ SETTINGS', BUTTON_IDS.SETTINGS, 0x2a3a5a, 0x99bbdd, () => this.transitionTo('SettingsScene'));
+    this.menuButtons.push(settingsBtn);
+    this.buttonFocusManager.registerButton(settingsBtn);
     
-    // Credits (game credits, not currency) - V3: Enhanced contrast
-    this.createSecondaryButton(x, buttonStartY + buttonSpacing * 3, buttonWidth, buttonHeight, '★ GAME CREDITS', 0x2a3a5a, 0x99bbdd, () => this.showCreditsOverlay());
+    // Credits (game credits, not currency) - V3: Enhanced contrast with proper button ID
+    const creditsBtn = this.createSecondaryButton(x, buttonStartY + buttonSpacing * 3, buttonWidth, buttonHeight, '★ GAME CREDITS', BUTTON_IDS.CREDITS, 0x2a3a5a, 0x99bbdd, () => this.showCreditsOverlay());
+    this.menuButtons.push(creditsBtn);
+    this.buttonFocusManager.registerButton(creditsBtn);
     
     // Panel bounds for resize
     this._utilityPanelBounds = { x: x - panelWidth/2, y, width: panelWidth, height: panelHeight };
@@ -2559,7 +2584,16 @@ class MainMenuScene extends Phaser.Scene {
     const playWidth = 320;
     const playHeight = 64;
     
-    this.createPrimaryButton(x, y, playWidth, playHeight, '▶  PLAY', 0x2255cc, 0x66aaff, () => this.transitionTo('LevelSelectScene'), true);
+    // Create PLAY button with per-button state texture mapping
+    const playButton = this.createPrimaryButton(
+      x, y, playWidth, playHeight, '▶  PLAY', 
+      BUTTON_IDS.PLAY, // Button ID for asset mapping
+      0x2255cc, 0x66aaff, 
+      () => this.transitionTo('LevelSelectScene'), 
+      true // isPrimary
+    );
+    this.menuButtons.push(playButton);
+    this.buttonFocusManager.registerButton(playButton);
     
     // V3 Polish: Tighter Play/Continue spacing (85 -> 72)
     const canContinue = saveManager.hasSave();
@@ -2568,7 +2602,11 @@ class MainMenuScene extends Phaser.Scene {
     const continueHeight = 56;
     const continueY = y + 72;
     
-    this.createPrimaryButton(x, continueY, continueWidth, continueHeight, '↻  CONTINUE', 
+    // Create CONTINUE button with per-button state texture mapping
+    // DISABLED state is properly handled when !canContinue
+    const continueButton = this.createPrimaryButton(
+      x, continueY, continueWidth, continueHeight, '↻  CONTINUE',
+      BUTTON_IDS.CONTINUE, // Button ID for asset mapping
       canContinue ? 0x1a5a2a : 0x1a1a1a, 
       canContinue ? 0x66ff88 : 0x444444, 
       () => { 
@@ -2576,23 +2614,45 @@ class MainMenuScene extends Phaser.Scene {
           this.transitionTo('GameScene', { levelIndex: lastPlayedLevel, continueRun: true }); 
         }
       }, 
-      false,
-      !canContinue,
+      false, // isPrimary
+      !canContinue, // disabled - CRITICAL: ensures disabled visual is used
       canContinue ? null : 'Complete a level to continue'
     );
+    this.menuButtons.push(continueButton);
+    this.buttonFocusManager.registerButton(continueButton);
     
     // Store continue button for potential updates
     this._continueButtonY = continueY;
+    this._continueButton = continueButton;
+    
+    // Setup keyboard focus navigation
+    this.buttonFocusManager.setupKeyboardListeners();
+    
+    // Focus first button by default
+    this.buttonFocusManager.focusIndex(0);
   }
   
-  // ========== PHASE A: PRIMARY BUTTON (Enhanced) ==========
-  createPrimaryButton(x, y, width, height, text, bgColor, strokeColor, onClick, isPrimary = false, disabled = false, hint = null, skinKey = null) {
+  // ========== PHASE A: PRIMARY BUTTON (Enhanced with Per-Button State Mapping) ==========
+  createPrimaryButton(x, y, width, height, text, buttonId, bgColor, strokeColor, onClick, isPrimary = false, disabled = false, hint = null, skinKey = null) {
     // Phase B: Staggered entrance animation - increment delay for each button
     if (!this._buttonEntranceIndex) this._buttonEntranceIndex = 0;
     const entranceDelay = 300 + (this._buttonEntranceIndex * 80);
     this._buttonEntranceIndex++;
     
-    // Outer glow
+    // ========== PER-BUTTON STATE TEXTURE MAPPING ==========
+    // Get texture key based on button ID and current state
+    const getStateTextureKey = (state) => {
+      if (!buttonId) return null;
+      const stateMap = BUTTON_TEXTURE_MAP[buttonId];
+      if (!stateMap) return null;
+      return stateMap[state] || null;
+    };
+    
+    // Current effective state
+    let currentState = disabled ? BUTTON_STATES.DISABLED : BUTTON_STATES.IDLE;
+    let isFocused = false;
+    
+    // Outer glow - use disabled styling when disabled
     const glowColor = disabled ? 0x222230 : strokeColor;
     const glowAlpha = disabled ? 0.06 : (isPrimary ? 0.25 : 0.15);
     const outerGlow = this.add.rectangle(x, y, width + 12, height + 12, glowColor, glowAlpha);
@@ -2605,33 +2665,18 @@ class MainMenuScene extends Phaser.Scene {
     bg.setStrokeStyle(isPrimary ? 3 : 2, disabled ? 0x333340 : strokeColor);
     bg.setInteractive({ useHandCursor: !disabled });
 
-    // Optional button skin overlay: each button uses its own dedicated image key
-    const labelToSkinKey = {
-      'PLAY': 'btn-play',
-      'CONTINUE': 'btn-continue',
-      'HOW TO PLAY': 'btn-how-to-play',
-      'CONTROLS': 'btn-controls',
-      'SETTINGS': 'btn-settings',
-      'GAME CREDITS': 'btn-credits',
-      'CREDITS': 'btn-credits'
-    };
-
-    let resolvedSkinKey = null;
-    if (skinKey && this.textures.exists(skinKey)) {
-      resolvedSkinKey = skinKey;
-    } else {
-      const mapped = labelToSkinKey[text];
-      if (mapped && this.textures.exists(mapped)) {
-        resolvedSkinKey = mapped;
-      }
-    }
-
-    const buttonSkin = resolvedSkinKey
-      ? this.add.image(x, y, resolvedSkinKey).setDisplaySize(width, height).setAlpha(disabled ? 0.08 : 0.20)
-      : null;
-
-    if (buttonSkin) {
-      buttonSkin.setTint(disabled ? 0x777777 : 0xffffff);
+    // ========== BUTTON SKIN WITH PER-STATE TEXTURE ==========
+    // Try to load the state-specific texture for this button
+    let buttonSkin = null;
+    const initialTextureKey = getStateTextureKey(currentState);
+    
+    if (initialTextureKey && this.textures.exists(initialTextureKey)) {
+      buttonSkin = this.add.image(x, y, initialTextureKey).setDisplaySize(width, height).setAlpha(disabled ? 0.08 : 0.20);
+      if (disabled) buttonSkin.setTint(0x777777);
+    } else if (skinKey && this.textures.exists(skinKey)) {
+      // Fallback to provided skinKey
+      buttonSkin = this.add.image(x, y, skinKey).setDisplaySize(width, height).setAlpha(disabled ? 0.08 : 0.20);
+      if (disabled) buttonSkin.setTint(0x777777);
     }
     
     // Text shadow
@@ -2676,16 +2721,47 @@ class MainMenuScene extends Phaser.Scene {
       });
     }
     
+    // ========== STATE UPDATE FUNCTION ==========
+    // Updates button visuals based on state, including texture
+    const updateButtonState = (newState) => {
+      currentState = newState;
+      
+      // Update skin texture if available
+      if (buttonSkin) {
+        const textureKey = getStateTextureKey(newState);
+        if (textureKey && this.textures.exists(textureKey)) {
+          buttonSkin.setTexture(textureKey);
+        }
+      }
+    };
+    
+    // ========== FOCUS STATE HANDLING (Keyboard/Gamepad) ==========
+    const setFocus = (focused) => {
+      if (disabled) return;
+      isFocused = focused;
+      
+      if (focused) {
+        updateButtonState(BUTTON_STATES.FOCUSED);
+        bg.setStrokeStyle(isPrimary ? 4 : 3, 0x00ffff); // Cyan for keyboard focus
+        outerGlow.setFillStyle(0x00ffff, 0.3);
+      } else {
+        updateButtonState(BUTTON_STATES.IDLE);
+        bg.setStrokeStyle(isPrimary ? 3 : 2, strokeColor);
+        outerGlow.setFillStyle(strokeColor, isPrimary ? 0.25 : 0.15);
+      }
+    };
+    
     // Hover/active state handlers
     const updateHover = (isHovering) => {
-      if (disabled) return;
+      if (disabled || isFocused) return;
       
       if (isHovering) {
+        updateButtonState(BUTTON_STATES.HOVER);
         bg.setFillStyle(bgColor + 0x202030);
         bg.setStrokeStyle(isPrimary ? 4 : 3, 0xffffff);
         outerGlow.setAlpha(isPrimary ? 0.35 : 0.25);
         highlight.setAlpha(0.25);
-        if (buttonSkin) buttonSkin.setAlpha(disabled ? 0.08 : 0.28);
+        if (buttonSkin) buttonSkin.setAlpha(0.28);
         label.setFill('#ffffff');
         // Scale effect
         this.tweens.add({
@@ -2696,11 +2772,12 @@ class MainMenuScene extends Phaser.Scene {
           ease: 'Quad.easeOut'
         });
       } else {
+        updateButtonState(BUTTON_STATES.IDLE);
         bg.setFillStyle(bgColor);
         bg.setStrokeStyle(isPrimary ? 3 : 2, strokeColor);
         outerGlow.setAlpha(isPrimary ? 0.25 : 0.15);
         highlight.setAlpha(0.15);
-        if (buttonSkin) buttonSkin.setAlpha(disabled ? 0.08 : 0.20);
+        if (buttonSkin) buttonSkin.setAlpha(0.20);
         label.setFill('#ffffff');
         this.tweens.add({
           targets: [bg, outerGlow, label, textShadow, highlight, pulseGlow, buttonSkin].filter(Boolean),
@@ -2727,6 +2804,9 @@ class MainMenuScene extends Phaser.Scene {
     
     bg.on('pointerdown', () => { 
       if (!disabled) {
+        // Press state
+        updateButtonState(BUTTON_STATES.PRESSED);
+        
         // Press animation
         bg.setFillStyle(bgColor - 0x202020);
         bg.setStrokeStyle(isPrimary ? 3 : 2, strokeColor);
@@ -2742,6 +2822,7 @@ class MainMenuScene extends Phaser.Scene {
             if (outerGlow) outerGlow.setScale(1);
             if (highlight) highlight.setScale(1);
             if (pulseGlow) pulseGlow.setScale(1);
+            updateButtonState(BUTTON_STATES.IDLE);
             onClick();
           }
         });
@@ -2773,15 +2854,26 @@ class MainMenuScene extends Phaser.Scene {
       ease: 'Quad.easeOut'
     });
     
-    return { bg, label, outerGlow, highlight, textShadow, hintText, pulseGlow };
+    return { bg, label, outerGlow, highlight, textShadow, hintText, pulseGlow, buttonSkin, buttonId, setFocus, currentState };
   }
   
-  // ========== PHASE A: SECONDARY BUTTON (Smaller) ==========
-  createSecondaryButton(x, y, width, height, text, bgColor, strokeColor, onClick, disabled = false) {
+  // ========== PHASE A: SECONDARY BUTTON (Smaller, with Per-Button State Mapping) ==========
+  createSecondaryButton(x, y, width, height, text, buttonId, bgColor, strokeColor, onClick, disabled = false) {
     // Phase B: Staggered entrance animation - increment delay for each button
     if (!this._secondaryButtonEntranceIndex) this._secondaryButtonEntranceIndex = 0;
     const entranceDelay = 400 + (this._secondaryButtonEntranceIndex * 60);
     this._secondaryButtonEntranceIndex++;
+    
+    // ========== PER-BUTTON STATE TEXTURE MAPPING ==========
+    const getStateTextureKey = (state) => {
+      if (!buttonId) return null;
+      const stateMap = BUTTON_TEXTURE_MAP[buttonId];
+      if (!stateMap) return null;
+      return stateMap[state] || null;
+    };
+    
+    let currentState = disabled ? BUTTON_STATES.DISABLED : BUTTON_STATES.IDLE;
+    let isFocused = false;
     
     // Outer glow (subtle)
     const outerGlow = this.add.rectangle(x, y, width + 6, height + 6, disabled ? 0x222230 : strokeColor, disabled ? 0.04 : 0.08);
@@ -2791,6 +2883,14 @@ class MainMenuScene extends Phaser.Scene {
     bg.setStrokeStyle(1, disabled ? 0x333340 : strokeColor);
     bg.setInteractive({ useHandCursor: !disabled });
     
+    // Try to load state-specific texture
+    let buttonSkin = null;
+    const initialTextureKey = getStateTextureKey(currentState);
+    if (initialTextureKey && this.textures.exists(initialTextureKey)) {
+      buttonSkin = this.add.image(x, y, initialTextureKey).setDisplaySize(width, height).setAlpha(disabled ? 0.06 : 0.15);
+      if (disabled) buttonSkin.setTint(0x777777);
+    }
+    
     // V3 Polish: Improved button text contrast and sizing
     const label = this.add.text(x, y, text, { 
       fontSize: '14px', 
@@ -2799,28 +2899,62 @@ class MainMenuScene extends Phaser.Scene {
       fontStyle: 'bold'
     }).setOrigin(0.5);
     
+    // ========== STATE UPDATE FUNCTION ==========
+    const updateButtonState = (newState) => {
+      currentState = newState;
+      if (buttonSkin) {
+        const textureKey = getStateTextureKey(newState);
+        if (textureKey && this.textures.exists(textureKey)) {
+          buttonSkin.setTexture(textureKey);
+        }
+      }
+    };
+    
+    // ========== FOCUS STATE HANDLING (Keyboard/Gamepad) ==========
+    const setFocus = (focused) => {
+      if (disabled) return;
+      isFocused = focused;
+      
+      if (focused) {
+        updateButtonState(BUTTON_STATES.FOCUSED);
+        bg.setStrokeStyle(2, 0x00ffff); // Cyan for keyboard focus
+        outerGlow.setFillStyle(0x00ffff, 0.2);
+        label.setFill('#ffffff');
+      } else {
+        updateButtonState(BUTTON_STATES.IDLE);
+        bg.setStrokeStyle(1, strokeColor);
+        outerGlow.setFillStyle(strokeColor, 0.08);
+        label.setFill('#d0d8e0');
+      }
+    };
+    
     // Hover state
     bg.on('pointerover', () => { 
-      if (!disabled) { 
+      if (!disabled && !isFocused) { 
+        updateButtonState(BUTTON_STATES.HOVER);
         bg.setFillStyle(bgColor + 0x151520);
         bg.setStrokeStyle(2, 0xffffff);
         outerGlow.setAlpha(0.15);
         label.setFill('#ffffff');
+        if (buttonSkin) buttonSkin.setAlpha(0.20);
         sfx.menuHover(); 
       } 
     });
     
     bg.on('pointerout', () => { 
-      if (!disabled) {
+      if (!disabled && !isFocused) {
+        updateButtonState(BUTTON_STATES.IDLE);
         bg.setFillStyle(bgColor);
         bg.setStrokeStyle(1, strokeColor);
         outerGlow.setAlpha(0.08);
         label.setFill('#d0d8e0');
+        if (buttonSkin) buttonSkin.setAlpha(0.15);
       }
     });
     
     bg.on('pointerdown', () => { 
       if (!disabled) {
+        updateButtonState(BUTTON_STATES.PRESSED);
         bg.setFillStyle(bgColor - 0x101010);
         this.tweens.add({
           targets: [bg, outerGlow],
@@ -2831,6 +2965,7 @@ class MainMenuScene extends Phaser.Scene {
           onComplete: () => {
             bg.setScale(1);
             outerGlow.setScale(1);
+            updateButtonState(BUTTON_STATES.IDLE);
             onClick();
           }
         });
@@ -2853,7 +2988,7 @@ class MainMenuScene extends Phaser.Scene {
       ease: 'Quad.easeOut'
     });
     
-    return { bg, label, outerGlow };
+    return { bg, label, outerGlow, buttonSkin, buttonId, setFocus, currentState };
   }
   
   createAnimatedBackground() {
@@ -3408,6 +3543,17 @@ class MainMenuScene extends Phaser.Scene {
     // Stop all timers and tweens first
     this.time.removeAllEvents();
     this.tweens.killAll();
+    
+    // Clean up button focus manager
+    if (this.buttonFocusManager) {
+      this.buttonFocusManager.removeKeyboardListeners();
+      this.buttonFocusManager.clearButtons();
+    }
+    
+    // Clean up menu buttons array
+    if (this.menuButtons) {
+      this.menuButtons = [];
+    }
     
     // Clean up BackgroundComposer
     if (this.backgroundComposer) {

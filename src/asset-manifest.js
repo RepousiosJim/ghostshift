@@ -10,7 +10,7 @@
  * @module AssetManifest
  */
 
-export const ASSET_VERSION = 'v0.7.1';
+export const ASSET_VERSION = 'v0.7.2';
 
 /**
  * Asset categories for loading organization
@@ -63,23 +63,12 @@ export const ASSET_MANIFEST = {
 
   // ==================== UI ASSETS ====================
   // Menu buttons and interface elements
+  // STRICT PER-BUTTON, PER-STATE MAPPING (v0.7.2)
   ui: [
-    // Menu buttons - AI-generated premium buttons
+    // ==================== PLAY BUTTON (Primary CTA) ====================
     {
-      key: 'menu-buttons-ai',
-      path: 'assets/ui/menu_buttons_ai.png',
-      type: 'image',
-      category: ASSET_CATEGORIES.UI,
-      required: false, // Fallback to procedural buttons
-      fallback: 'procedural',
-      priority: ASSET_PRIORITY.HIGH,
-      version: ASSET_VERSION
-    },
-    
-    // Individual button assets (tight variants)
-    {
-      key: 'btn-play',
-      path: 'assets/ui/buttons/btn_play_tight.png',
+      key: 'btn-play-idle',
+      path: 'assets/ui/buttons/btn_play.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -88,8 +77,8 @@ export const ASSET_MANIFEST = {
       version: ASSET_VERSION
     },
     {
-      key: 'btn-continue',
-      path: 'assets/ui/buttons/btn_continue_tight.png',
+      key: 'btn-play-hover',
+      path: 'assets/ui/buttons/btn_play.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -98,8 +87,8 @@ export const ASSET_MANIFEST = {
       version: ASSET_VERSION
     },
     {
-      key: 'btn-how-to-play',
-      path: 'assets/ui/buttons/btn_how_to_play_tight.png',
+      key: 'btn-play-pressed',
+      path: 'assets/ui/buttons/btn_play.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -108,8 +97,8 @@ export const ASSET_MANIFEST = {
       version: ASSET_VERSION
     },
     {
-      key: 'btn-controls',
-      path: 'assets/ui/buttons/btn_controls_tight.png',
+      key: 'btn-play-disabled',
+      path: 'assets/ui/buttons/btn_play.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -118,18 +107,8 @@ export const ASSET_MANIFEST = {
       version: ASSET_VERSION
     },
     {
-      key: 'btn-settings',
-      path: 'assets/ui/buttons/btn_settings_tight.png',
-      type: 'image',
-      category: ASSET_CATEGORIES.UI,
-      required: false,
-      fallback: 'procedural',
-      priority: ASSET_PRIORITY.HIGH,
-      version: ASSET_VERSION
-    },
-    {
-      key: 'btn-credits',
-      path: 'assets/ui/buttons/btn_credits_tight.png',
+      key: 'btn-play-focused',
+      path: 'assets/ui/buttons/btn_play.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -138,7 +117,267 @@ export const ASSET_MANIFEST = {
       version: ASSET_VERSION
     },
     
-    // Generic button states (fallback for procedural)
+    // ==================== CONTINUE BUTTON ====================
+    {
+      key: 'btn-continue-idle',
+      path: 'assets/ui/buttons/btn_continue.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-continue-hover',
+      path: 'assets/ui/buttons/btn_continue.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-continue-pressed',
+      path: 'assets/ui/buttons/btn_continue.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-continue-disabled',
+      path: 'assets/ui/buttons/btn_continue.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-continue-focused',
+      path: 'assets/ui/buttons/btn_continue.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    },
+    
+    // ==================== HOW TO PLAY BUTTON ====================
+    {
+      key: 'btn-how-to-play-idle',
+      path: 'assets/ui/buttons/btn_how_to_play.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-how-to-play-hover',
+      path: 'assets/ui/buttons/btn_how_to_play.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-how-to-play-pressed',
+      path: 'assets/ui/buttons/btn_how_to_play.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-how-to-play-disabled',
+      path: 'assets/ui/buttons/btn_how_to_play.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-how-to-play-focused',
+      path: 'assets/ui/buttons/btn_how_to_play.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    },
+    
+    // ==================== CONTROLS BUTTON ====================
+    {
+      key: 'btn-controls-idle',
+      path: 'assets/ui/buttons/btn_controls.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-controls-hover',
+      path: 'assets/ui/buttons/btn_controls.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-controls-pressed',
+      path: 'assets/ui/buttons/btn_controls.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-controls-disabled',
+      path: 'assets/ui/buttons/btn_controls.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-controls-focused',
+      path: 'assets/ui/buttons/btn_controls.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    },
+    
+    // ==================== SETTINGS BUTTON ====================
+    {
+      key: 'btn-settings-idle',
+      path: 'assets/ui/buttons/btn_settings.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-settings-hover',
+      path: 'assets/ui/buttons/btn_settings.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-settings-pressed',
+      path: 'assets/ui/buttons/btn_settings.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-settings-disabled',
+      path: 'assets/ui/buttons/btn_settings.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-settings-focused',
+      path: 'assets/ui/buttons/btn_settings.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    },
+    
+    // ==================== CREDITS BUTTON ====================
+    {
+      key: 'btn-credits-idle',
+      path: 'assets/ui/buttons/btn_credits.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-credits-hover',
+      path: 'assets/ui/buttons/btn_credits.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-credits-pressed',
+      path: 'assets/ui/buttons/btn_credits.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-credits-disabled',
+      path: 'assets/ui/buttons/btn_credits.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-credits-focused',
+      path: 'assets/ui/buttons/btn_credits.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    },
+    
+    // ==================== GENERIC BUTTON STATES (Fallback for procedural) ====================
     {
       key: 'primary-default',
       path: 'assets/ui/buttons/primary-default.png',
@@ -170,6 +409,16 @@ export const ASSET_MANIFEST = {
       version: ASSET_VERSION
     },
     {
+      key: 'primary-disabled',
+      path: 'assets/ui/buttons/primary-disabled.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.NORMAL,
+      version: ASSET_VERSION
+    },
+    {
       key: 'secondary-default',
       path: 'assets/ui/buttons/secondary-default.png',
       type: 'image',
@@ -192,6 +441,16 @@ export const ASSET_MANIFEST = {
     {
       key: 'secondary-pressed',
       path: 'assets/ui/buttons/secondary-pressed.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: 'procedural',
+      priority: ASSET_PRIORITY.NORMAL,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'secondary-disabled',
+      path: 'assets/ui/buttons/secondary-disabled.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
