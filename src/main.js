@@ -1277,6 +1277,7 @@ function saveSaveData(data) { saveManager.data = data; saveManager.save(); }
 // Phase 7: Increased scale for desktop/web - larger game canvas for better UI visibility
 // Phase A: Optimized for fullscreen with aspect-safe fallback
 const TILE_SIZE = 48; // Increased from 32 for better visibility
+const PLAYER_SCALE = 0.85; // Player visual/collision scale (85% = 15% smaller for better corridor navigation)
 const MAP_WIDTH = 22; // BASELINE: Default map width (Level 1 overrides to 28)
 const MAP_HEIGHT = 18; // BASELINE: Default map height (Level 1 overrides to 23)
 // Phase A: Reference resolution for HUD scaling
@@ -1930,18 +1931,22 @@ class MainMenuScene extends Phaser.Scene {
     // Premium background using BackgroundComposer (hero variant)
     this.backgroundComposer = new BackgroundComposer(this, { variant: 'hero' });
     
+    // V3 Polish: Subtle lower-third ambience gradient
+    this._createLowerThirdAmbience();
+    
     // ========== PHASE A: COMMAND-CENTER LAYOUT ==========
     // Three-column layout: Left (progression) | Center (actions) | Right (utility)
     const screenCenterX = MAP_WIDTH * TILE_SIZE / 2;
     const screenCenterY = MAP_HEIGHT * TILE_SIZE / 2;
     
-    // Column X positions
-    const leftColX = 160;      // Left progression panel
+    // Column X positions - V3 Polish: pulled inward for better 3-column rhythm
+    const leftColX = 175;      // Left progression panel
     const centerColX = screenCenterX;  // Center action stack
-    const rightColX = MAP_WIDTH * TILE_SIZE - 160;  // Right utility panel
+    const rightColX = MAP_WIDTH * TILE_SIZE - 175;  // Right utility panel
     
     // ========== ENHANCED TITLE (Center Top) ==========
-    this.titleText = this.add.text(screenCenterX, 42, 'GHOSTSHIFT', { 
+    // V3 Polish: Increased top margin for better vertical balance
+    this.titleText = this.add.text(screenCenterX, 52, 'GHOSTSHIFT', { 
       fontSize: '48px', 
       fill: '#4488ff', 
       fontFamily: 'Courier New', 
@@ -1949,13 +1954,15 @@ class MainMenuScene extends Phaser.Scene {
       stroke: '#4488ff',
       strokeThickness: 2
     }).setOrigin(0.5);
-    this.titleText.setShadow(0, 0, '#4488ff', 12, true, true);
+    // V3 Polish: Reduced glow blur ~30% for cleaner logo
+    this.titleText.setShadow(0, 0, '#4488ff', 8, true, true);
     
-    this.subtitleText = this.add.text(screenCenterX, 82, 'INFILTRATE · HACK · ESCAPE', { 
+    // V3 Polish: Improved subtitle contrast and spacing
+    this.subtitleText = this.add.text(screenCenterX, 86, 'INFILTRATE · HACK · ESCAPE', { 
       fontSize: '13px', 
-      fill: '#667788', 
+      fill: '#778899', 
       fontFamily: 'Courier New',
-      letterSpacing: 3
+      letterSpacing: 4
     }).setOrigin(0.5);
     
     // Title glow animation
@@ -1969,13 +1976,15 @@ class MainMenuScene extends Phaser.Scene {
     });
     
     // ========== LEFT PANEL: PROGRESSION ==========
-    this.createProgressionPanel(leftColX, 130);
+    // V3 Polish: Adjusted panel Y for better vertical balance with title
+    this.createProgressionPanel(leftColX, 145);
     
     // ========== RIGHT PANEL: UTILITY ==========
-    this.createUtilityPanel(rightColX, 130);
+    this.createUtilityPanel(rightColX, 145);
     
     // ========== CENTER PANEL: PRIMARY ACTIONS ==========
-    this.createPrimaryActionStack(centerColX, 200);
+    // V3 Polish: Adjusted center stack Y for better vertical balance
+    this.createPrimaryActionStack(centerColX, 215);
     
     this.input.keyboard.once('keydown', () => sfx.init());
     this.input.on('pointerdown', () => sfx.init(), this);
@@ -2089,24 +2098,24 @@ class MainMenuScene extends Phaser.Scene {
       const cellX = gridStartX + col * cellWidth;
       const cellY = gridY + row * cellHeight;
       
-      // Badge
+      // V3 Polish: Improved level badge readability with clearer number/star separation
       const badge = this.add.rectangle(cellX, cellY, cellWidth - 4, cellHeight - 4,
         isUnlocked ? 0x1a2a3a : 0x0a0c10, 0.9);
       badge.setStrokeStyle(1, isUnlocked ? (stars >= 5 ? 0xffdd00 : 0x4488ff) : 0x252530);
       this.progressionPanelElements.push(badge);
       
-      // Level number
-      const levelNum = this.add.text(cellX - 6, cellY, String(index + 1), { 
-        fontSize: '10px', 
+      // Level number - V3: larger, centered above stars
+      const levelNum = this.add.text(cellX, cellY - 4, String(index + 1), { 
+        fontSize: '11px', 
         fill: isUnlocked ? '#66aaff' : '#445566', 
         fontFamily: 'Courier New',
         fontStyle: 'bold'
       }).setOrigin(0.5);
       this.progressionPanelElements.push(levelNum);
       
-      // Stars
-      const starText = this.add.text(cellX + 8, cellY, isUnlocked ? `${stars}★` : '🔒', { 
-        fontSize: '8px', 
+      // Stars - V3: below level number for better readability
+      const starText = this.add.text(cellX, cellY + 6, isUnlocked ? `${stars}★` : '🔒', { 
+        fontSize: '9px', 
         fill: isUnlocked ? (stars > 0 ? '#ffdd00' : '#667788') : '#334455', 
         fontFamily: 'Courier New'
       }).setOrigin(0.5);
@@ -2212,23 +2221,23 @@ class MainMenuScene extends Phaser.Scene {
     // Phase B: Add sparkle effects around credits
     this._createCreditSparkles(x - 50, creditsY);
     
-    // Secondary action buttons (smaller, stacked)
-    const buttonWidth = 160;
-    const buttonHeight = 40;
+    // V3 Polish: Improved button sizing and spacing for better touch targets
+    const buttonWidth = 168;
+    const buttonHeight = 42;
     const buttonStartY = y + 110;
-    const buttonSpacing = 50;
+    const buttonSpacing = 52;
     
-    // How to Play
+    // How to Play - V3: Enhanced contrast
     this.createSecondaryButton(x, buttonStartY, buttonWidth, buttonHeight, '📖 HOW TO PLAY', 0x1a3a5a, 0x66ccff, () => this.showHowToPlayOverlay());
     
-    // Controls
-    this.createSecondaryButton(x, buttonStartY + buttonSpacing, buttonWidth, buttonHeight, '🎮 CONTROLS', 0x2a3a4a, 0x88aacc, () => this.transitionTo('ControlsScene'));
+    // Controls - V3: Enhanced contrast
+    this.createSecondaryButton(x, buttonStartY + buttonSpacing, buttonWidth, buttonHeight, '🎮 CONTROLS', 0x2a3a5a, 0x99bbdd, () => this.transitionTo('ControlsScene'));
     
-    // Settings
-    this.createSecondaryButton(x, buttonStartY + buttonSpacing * 2, buttonWidth, buttonHeight, '⚙ SETTINGS', 0x2a3a4a, 0x88aacc, () => this.transitionTo('SettingsScene'));
+    // Settings - V3: Enhanced contrast
+    this.createSecondaryButton(x, buttonStartY + buttonSpacing * 2, buttonWidth, buttonHeight, '⚙ SETTINGS', 0x2a3a5a, 0x99bbdd, () => this.transitionTo('SettingsScene'));
     
-    // Credits (game credits, not currency)
-    this.createSecondaryButton(x, buttonStartY + buttonSpacing * 3, buttonWidth, buttonHeight, '★ GAME CREDITS', 0x2a3a4a, 0x88aacc, () => this.showCreditsOverlay());
+    // Credits (game credits, not currency) - V3: Enhanced contrast
+    this.createSecondaryButton(x, buttonStartY + buttonSpacing * 3, buttonWidth, buttonHeight, '★ GAME CREDITS', 0x2a3a5a, 0x99bbdd, () => this.showCreditsOverlay());
     
     // Panel bounds for resize
     this._utilityPanelBounds = { x: x - panelWidth/2, y, width: panelWidth, height: panelHeight };
@@ -2345,6 +2354,41 @@ class MainMenuScene extends Phaser.Scene {
     });
   }
   
+  // ========== V3 POLISH: LOWER-THIRD AMBIENCE ==========
+  _createLowerThirdAmbience() {
+    const screenWidth = MAP_WIDTH * TILE_SIZE;
+    const screenHeight = MAP_HEIGHT * TILE_SIZE;
+    
+    // Subtle gradient at bottom - doesn't distract from content
+    const ambienceGraphics = this.add.graphics();
+    ambienceGraphics.setDepth(-5); // Behind content, above background
+    
+    // Very subtle blue glow at bottom
+    const gradientHeight = 120;
+    const startY = screenHeight - gradientHeight;
+    
+    // Draw gradient from bottom upward
+    for (let i = 0; i < gradientHeight; i++) {
+      const progress = i / gradientHeight;
+      const alpha = 0.08 * (1 - progress); // Stronger at bottom, fades up
+      ambienceGraphics.fillStyle(0x4488ff, alpha);
+      ambienceGraphics.fillRect(0, startY + (gradientHeight - i), screenWidth, 1);
+    }
+    
+    // Store for cleanup
+    this._lowerThirdAmbience = ambienceGraphics;
+    
+    // Subtle pulse animation
+    this.tweens.add({
+      targets: ambienceGraphics,
+      alpha: { from: 1, to: 0.7 },
+      duration: 3000,
+      yoyo: true,
+      repeat: -1,
+      ease: 'Sine.easeInOut'
+    });
+  }
+  
   // ========== PHASE A: PRIMARY ACTION STACK (Center) ==========
   createPrimaryActionStack(x, y) {
     // Main PLAY button - prominent CTA
@@ -2353,12 +2397,12 @@ class MainMenuScene extends Phaser.Scene {
     
     this.createPrimaryButton(x, y, playWidth, playHeight, '▶  PLAY', 0x2255cc, 0x66aaff, () => this.transitionTo('LevelSelectScene'), true);
     
-    // Continue button
+    // V3 Polish: Tighter Play/Continue spacing (85 -> 72)
     const canContinue = saveManager.hasSave();
     const lastPlayedLevel = saveManager.getLastPlayed() ? saveManager.data.unlockedLevels[saveManager.data.unlockedLevels.length - 1] : 0;
     const continueWidth = 320;
     const continueHeight = 56;
-    const continueY = y + 85;
+    const continueY = y + 72;
     
     this.createPrimaryButton(x, continueY, continueWidth, continueHeight, '↻  CONTINUE', 
       canContinue ? 0x1a5a2a : 0x1a1a1a, 
@@ -2370,7 +2414,7 @@ class MainMenuScene extends Phaser.Scene {
       }, 
       false,
       !canContinue,
-      canContinue ? null : 'No save data'
+      canContinue ? null : 'Complete a level to continue'
     );
     
     // Store continue button for potential updates
@@ -2552,11 +2596,12 @@ class MainMenuScene extends Phaser.Scene {
     bg.setStrokeStyle(1, disabled ? 0x333340 : strokeColor);
     bg.setInteractive({ useHandCursor: !disabled });
     
-    // Text
+    // V3 Polish: Improved button text contrast and sizing
     const label = this.add.text(x, y, text, { 
-      fontSize: '13px', 
-      fill: disabled ? '#444444' : '#cccccc', 
-      fontFamily: 'Courier New' 
+      fontSize: '14px', 
+      fill: disabled ? '#444444' : '#d0d8e0', 
+      fontFamily: 'Courier New',
+      fontStyle: 'bold'
     }).setOrigin(0.5);
     
     // Hover state
@@ -2575,7 +2620,7 @@ class MainMenuScene extends Phaser.Scene {
         bg.setFillStyle(bgColor);
         bg.setStrokeStyle(1, strokeColor);
         outerGlow.setAlpha(0.08);
-        label.setFill('#cccccc');
+        label.setFill('#d0d8e0');
       }
     });
     
@@ -5751,9 +5796,12 @@ class GameScene extends Phaser.Scene {
     // Phase 16: Build obstacle lookup for tile-based LOS
     this._rebuildObstacleLookup();
     
-    // Player with glow effect
-    this.playerGlow = this.add.circle(startPos.x * TILE_SIZE, startPos.y * TILE_SIZE, TILE_SIZE / 2 + 4, 0x00ffff, 0.15);
-    this.player = this.add.rectangle(startPos.x * TILE_SIZE, startPos.y * TILE_SIZE, TILE_SIZE - 8, TILE_SIZE - 8, 0x00d4ff);
+    // Player with glow effect - scaled to 85% for better corridor navigation
+    const playerSize = (TILE_SIZE - 8) * PLAYER_SCALE; // 40 * 0.85 = 34px
+    this._playerSize = playerSize; // Store for update loop marker positioning
+    const playerGlowRadius = (TILE_SIZE / 2 + 4) * PLAYER_SCALE; // 28 * 0.85 = 23.8px
+    this.playerGlow = this.add.circle(startPos.x * TILE_SIZE, startPos.y * TILE_SIZE, playerGlowRadius, 0x00ffff, 0.15);
+    this.player = this.add.rectangle(startPos.x * TILE_SIZE, startPos.y * TILE_SIZE, playerSize, playerSize, 0x00d4ff);
     this.player.setStrokeStyle(2, 0x00ffff);
     this.physics.add.existing(this.player);
     this.player.body.setCollideWorldBounds(true);
@@ -5773,8 +5821,9 @@ class GameScene extends Phaser.Scene {
 
     // ==================== Phase A: Player Identity Marker ====================
     // "YOU" text above player with downward arrow - tracks player movement
-    // Readable but non-intrusive styling
-    this.playerMarkerContainer = this.add.container(startPos.x * TILE_SIZE, startPos.y * TILE_SIZE - TILE_SIZE/2 - 16);
+    // Readable but non-intrusive styling - adjusted for 85% player scale
+    const markerOffset = playerSize / 2 + 14; // Scaled offset to maintain visual spacing
+    this.playerMarkerContainer = this.add.container(startPos.x * TILE_SIZE, startPos.y * TILE_SIZE - markerOffset);
     this.playerMarkerContainer.setDepth(60); // Above player
     
     // "YOU" text with background for readability
@@ -7204,9 +7253,10 @@ class GameScene extends Phaser.Scene {
       }
     }
     
-    // Phase A: Update player "YOU" marker position to track player
+    // Phase A: Update player "YOU" marker position to track player (scaled offset)
     if (this.playerMarkerContainer) {
-      this.playerMarkerContainer.setPosition(this.player.x, this.player.y - TILE_SIZE/2 - 16);
+      const markerOffset = (this._playerSize || (TILE_SIZE - 8)) / 2 + 14;
+      this.playerMarkerContainer.setPosition(this.player.x, this.player.y - markerOffset);
     }
     
     // OPTIMIZATION: Player movement trail - only update every 2nd frame
