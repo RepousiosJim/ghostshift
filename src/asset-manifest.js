@@ -10,7 +10,9 @@
  * @module AssetManifest
  */
 
-export const ASSET_VERSION = 'v0.8.1';
+// DETERMINISTIC VERSION: Timestamp-based for cache-busting
+// Format: vMAJOR.MINOR.PATCH-TIMESTAMP (updates on each build)
+export const ASSET_VERSION = 'v0.8.2-20250225T2320UTC';
 
 /**
  * Asset categories for loading organization

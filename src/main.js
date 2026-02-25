@@ -22,7 +22,9 @@ import {
   getTotalAssetCount,
   ASSET_VERSION 
 } from './asset-manifest.js';
-// Menu Button Asset System
+// Menu Button Asset System - CONSOLIDATED
+// NOTE: createMenuButton is NOT used - we use inline methods for full control
+// This import provides: button IDs, states, texture mapping, and focus management
 import { 
   BUTTON_IDS,
   BUTTON_STATES,
@@ -30,7 +32,7 @@ import {
   MenuButtonAssetLoader,
   AssetQAValidator,
   ButtonFocusManager,
-  createMenuButton,
+  // createMenuButton - REMOVED: Not used, using inline methods instead
   generateMappingTable
 } from './menu-button-assets.js';
 // GhostShift Theme System
@@ -2133,25 +2135,46 @@ class MainMenuScene extends Phaser.Scene {
     });
     
     // ========== DIAGNOSTIC: VERIFY PLAY ASSET AND CONTINUE TEXTURES ==========
-    // Dev-only logging to confirm assets are loaded
-    if (typeof window !== 'undefined' && window.DEBUG_BUTTON_ASSETS) {
+    // ALWAYS RUN - This is critical for debugging stale rendering issues
+    // Set window.DEBUG_BUTTON_ASSETS = true for verbose logging
+    {
       // PLAY button uses dedicated asset
       const playAssetExists = this.textures.exists('menu_btn_play');
-      console.log('[MainMenuScene] PLAY asset (menu_btn_play):', playAssetExists ? '✓' : '✗');
+      console.log('[MainMenuScene] ========== TEXTURE KEY PROOF ==========');
+      console.log('[MainMenuScene] PLAY asset (menu_btn_play):', playAssetExists ? '✓ LOADED' : '✗ MISSING');
+      
+      // Get texture details for PLAY button
+      if (playAssetExists) {
+        const tex = this.textures.get('menu_btn_play');
+        const src = tex?.source?.[0];
+        console.log('[MainMenuScene] PLAY texture source:', src?.src || 'canvas', 'dimensions:', src?.width + 'x' + src?.height);
+      }
       
       // CONTINUE uses texture mapping
       const continueIdleKey = BUTTON_TEXTURE_MAP[BUTTON_IDS.CONTINUE]?.[BUTTON_STATES.IDLE];
-      console.log('[MainMenuScene] CONTINUE texture key:', continueIdleKey, 
-        'exists:', this.textures.exists(continueIdleKey));
+      console.log('[MainMenuScene] CONTINUE idle texture key:', continueIdleKey, 
+        'exists:', this.textures.exists(continueIdleKey) ? '✓' : '✗');
       
-      // Log all loaded button textures (excluding PLAY which uses dedicated asset)
-      console.log('[MainMenuScene] Button textures loaded (excl. PLAY):');
+      // Summary of all button textures
+      const summary = [];
       Object.entries(BUTTON_TEXTURE_MAP).forEach(([buttonId, states]) => {
-        console.log(`  [${buttonId}]:`);
-        Object.entries(states).forEach(([state, key]) => {
-          console.log(`    ${state}: ${key} - ${this.textures.exists(key) ? '✓' : '✗'}`);
-        });
+        const idleKey = states[BUTTON_STATES.IDLE];
+        const exists = this.textures.exists(idleKey);
+        summary.push(`${buttonId}:${exists ? '✓' : '✗'}`);
       });
+      console.log('[MainMenuScene] Button texture summary:', summary.join(' | '));
+      console.log('[MainMenuScene] =========================================');
+      
+      // Verbose logging only in debug mode
+      if (typeof window !== 'undefined' && window.DEBUG_BUTTON_ASSETS) {
+        console.log('[MainMenuScene] Full texture map:');
+        Object.entries(BUTTON_TEXTURE_MAP).forEach(([buttonId, states]) => {
+          console.log(`  [${buttonId}]:`);
+          Object.entries(states).forEach(([state, key]) => {
+            console.log(`    ${state}: ${key} - ${this.textures.exists(key) ? '✓' : '✗'}`);
+          });
+        });
+      }
     }
     
     // Check if we should show How to Play from ControlsScene transition
@@ -2850,20 +2873,24 @@ class MainMenuScene extends Phaser.Scene {
     const source = texture?.source?.[0];
     console.log('[PLAY-BUTTON-DEBUG] Using ASSET-ONLY path. Texture key:', ASSET_KEY, 
       'source:', source?.src || 'canvas', 'width:', source?.width, 'height:', source?.height);
+    console.log('[PLAY-BUTTON-DEBUG] Display size:', width, 'x', height, 'Aspect:', (width/height).toFixed(2));
     
     let isFocused = false;
     
     // Create container for the button
     const container = this.add.container(x, y);
     
+    // ========== AUTHORITATIVE PLAY BUTTON RENDER ==========
     // Single image asset - no procedural background, no text overlay
+    // The asset contains the complete button visual including text
     const buttonImage = this.add.image(0, 0, ASSET_KEY);
     buttonImage.setDisplaySize(width, height);
     container.add(buttonImage);
     
-    // ========== DEV LOG: VERIFY IMAGE CREATED ==========
-    console.log('[PLAY-BUTTON-DEBUG] Image created. textureKey:', buttonImage.texture?.key, 
-      'displayWidth:', buttonImage.displayWidth, 'displayHeight:', buttonImage.displayHeight);
+    // ========== PROVE TEXTURE KEY IN USE ==========
+    console.log('[PLAY-BUTTON-DEBUG] ✓ PLAY button using texture key:', buttonImage.texture?.key, 
+      '| displaySize:', buttonImage.displayWidth + 'x' + buttonImage.displayHeight,
+      '| NO text overlay, NO procedural elements');
     
     // Make interactive
     buttonImage.setInteractive({ useHandCursor: true });
@@ -2960,9 +2987,14 @@ class MainMenuScene extends Phaser.Scene {
   }
   
   createPrimaryActionStack(x, y) {
-    // Main PLAY button - ASSET-ONLY rendering (no procedural elements)
-    const playWidth = 320;
-    const playHeight = 64;
+    // ========== AUTHORITATIVE PLAY BUTTON DIMENSIONS ==========
+    // Asset: menu_btn_play.png is 640x160 (4:1 aspect ratio)
+    // Display size MUST match aspect ratio to avoid distortion
+    // Using 300x75 (4:1) for clean rendering
+    const playWidth = 300;
+    const playHeight = 75;
+    
+    console.log('[PLAY-BUTTON-DEBUG] Creating PLAY button with dimensions:', playWidth, 'x', playHeight, '(4:1 aspect ratio)');
     
     // Create PLAY button using asset-only path (menu_btn_play.png)
     const playButton = this.createAssetOnlyPlayButton(
