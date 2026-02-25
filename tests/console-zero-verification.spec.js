@@ -148,6 +148,8 @@ test('Gameplay start (Level 0) - zero console errors', async ({ page }) => {
  * Test 5: All 7 levels - start each and verify no console errors
  */
 test('All 7 levels start without console errors', async ({ page }) => {
+  // Increase timeout for testing all 7 levels
+  test.setTimeout(60000)
   const { pageErrors, criticalConsoleErrors } = attachErrorCollectors(page)
   
   await page.goto('/', { waitUntil: 'domcontentloaded' })
