@@ -110,9 +110,11 @@ export const BUTTON_TEXTURE_MAP = {
  * Maps texture keys to file paths with cache-busting version
  * 
  * Strategy:
- * - PLAY/CONTINUE: Use primary-*.png assets (prominent action buttons)
- * - Other buttons: Use secondary-*.png assets (utility buttons)
- * - State mapping: idle→default, hover→hover, pressed→pressed, disabled→disabled, focused→hover
+ * - CONTINUE: Uses primary-*.png assets (prominent action button)
+ * - Other secondary buttons: Use shared secondary-*.png assets (utility buttons)
+ * - State mapping: idle→default, hover→hover, pressed→pressed, disabled→disabled, focused→selected
+ * 
+ * NOTE: These paths are for fallback dynamic loading. Primary loading is via asset-manifest.js
  */
 export const BUTTON_ASSET_PATHS = {};
 
@@ -125,16 +127,22 @@ const STATE_TO_ASSET_SUFFIX = {
   [BUTTON_STATES.HOVER]: 'hover',
   [BUTTON_STATES.PRESSED]: 'pressed',
   [BUTTON_STATES.DISABLED]: 'disabled',
-  [BUTTON_STATES.FOCUSED]: 'hover' // Focused uses hover visual
+  [BUTTON_STATES.FOCUSED]: 'selected' // Focused uses selected visual for clarity
 };
 
 // Generate asset paths for all buttons and states
+// NOTE: Secondary buttons (HOW_TO_PLAY, CONTROLS, SETTINGS, CREDITS) share textures
+// to reduce asset count and loading overhead
 Object.entries(BUTTON_TEXTURE_MAP).forEach(([buttonId, states]) => {
   const isPrimary = PRIMARY_BUTTON_IDS.includes(buttonId);
   const buttonFamily = isPrimary ? 'primary' : 'secondary';
   
   Object.entries(states).forEach(([state, textureKey]) => {
     const assetSuffix = STATE_TO_ASSET_SUFFIX[state] || 'default';
+    
+    // For secondary buttons, use shared texture keys (btn-secondary-*)
+    // instead of per-button textures (btn-controls-idle, etc.)
+    const actualTextureKey = isPrimary ? textureKey : `btn-secondary-${state}`;
     
     // Use existing primary/secondary button assets
     // Path: assets/ui/buttons/primary-default.png, secondary-hover.png, etc.
@@ -145,7 +153,9 @@ Object.entries(BUTTON_TEXTURE_MAP).forEach(([buttonId, states]) => {
       fallback: null, // No fallback - use procedural if asset fails
       version: ASSET_VERSION,
       isPrimary,
-      buttonFamily
+      buttonFamily,
+      // For secondary buttons, map to shared texture
+      sharedTextureKey: isPrimary ? null : actualTextureKey
     };
   });
 });

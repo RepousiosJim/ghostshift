@@ -10,7 +10,7 @@
  * @module AssetManifest
  */
 
-export const ASSET_VERSION = 'v0.7.7';
+export const ASSET_VERSION = 'v0.7.8';
 
 /**
  * Asset categories for loading organization
@@ -63,7 +63,7 @@ export const ASSET_MANIFEST = {
 
   // ==================== UI ASSETS ====================
   // PLAY button uses asset-only rendering (menu_btn_play.png)
-  // Other buttons remain procedural
+  // Other buttons use primary/secondary state textures
   ui: [
     {
       key: 'menu_btn_play',
@@ -73,6 +73,108 @@ export const ASSET_MANIFEST = {
       required: true, // PLAY button must load
       fallback: null,
       priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    },
+    // Primary button state textures (CONTINUE uses these)
+    {
+      key: 'btn-continue-idle',
+      path: 'assets/ui/buttons/primary-default.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: null,
+      priority: ASSET_PRIORITY.NORMAL,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-continue-hover',
+      path: 'assets/ui/buttons/primary-hover.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: null,
+      priority: ASSET_PRIORITY.NORMAL,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-continue-pressed',
+      path: 'assets/ui/buttons/primary-pressed.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: null,
+      priority: ASSET_PRIORITY.NORMAL,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-continue-disabled',
+      path: 'assets/ui/buttons/primary-disabled.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: null,
+      priority: ASSET_PRIORITY.NORMAL,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-continue-focused',
+      path: 'assets/ui/buttons/primary-selected.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: null,
+      priority: ASSET_PRIORITY.NORMAL,
+      version: ASSET_VERSION
+    },
+    // Secondary button state textures (HOW_TO_PLAY, CONTROLS, SETTINGS, CREDITS use these)
+    {
+      key: 'btn-secondary-idle',
+      path: 'assets/ui/buttons/secondary-default.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: null,
+      priority: ASSET_PRIORITY.LOW,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-secondary-hover',
+      path: 'assets/ui/buttons/secondary-hover.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: null,
+      priority: ASSET_PRIORITY.LOW,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-secondary-pressed',
+      path: 'assets/ui/buttons/secondary-pressed.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: null,
+      priority: ASSET_PRIORITY.LOW,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-secondary-disabled',
+      path: 'assets/ui/buttons/secondary-disabled.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: null,
+      priority: ASSET_PRIORITY.LOW,
+      version: ASSET_VERSION
+    },
+    {
+      key: 'btn-secondary-focused',
+      path: 'assets/ui/buttons/secondary-selected.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: false,
+      fallback: null,
+      priority: ASSET_PRIORITY.LOW,
       version: ASSET_VERSION
     }
   ],

@@ -3001,50 +3001,70 @@ class MainMenuScene extends Phaser.Scene {
       return stateMap[state] || null;
     };
     
+    // Primary button IDs (CONTINUE only - PLAY uses dedicated asset)
+    const PRIMARY_BUTTON_IDS = [BUTTON_IDS.CONTINUE];
+    
     // Current effective state
     let currentState = disabled ? BUTTON_STATES.DISABLED : BUTTON_STATES.IDLE;
     let isFocused = false;
     
     // ========== THEME-COMPLIANT STYLING ==========
-    const glowColor = disabled ? theme.colors.disabled : strokeColor;
-    const glowAlpha = disabled ? btnSpec.glowAlpha.disabled : (isPrimary ? btnSpec.glowAlpha.idle : 0.15);
+    // For disabled CONTINUE button, use more muted, clearly disabled styling
+    const effectiveDisabled = disabled && buttonId === BUTTON_IDS.CONTINUE;
+    const glowColor = effectiveDisabled ? 0x222230 : (disabled ? theme.colors.disabled : strokeColor);
+    const glowAlpha = effectiveDisabled ? 0.04 : (disabled ? btnSpec.glowAlpha.disabled : (isPrimary ? btnSpec.glowAlpha.idle : 0.15));
     const outerGlow = this.add.rectangle(x, y, width + btnSpec.glowSize, height + btnSpec.glowSize, glowColor, glowAlpha);
     
-    // Inner highlight
-    const highlight = this.add.rectangle(x, y - height/2 + 3, width - 8, 2, disabled ? theme.colors.disabled : 0xffffff, disabled ? 0.03 : 0.15);
+    // Inner highlight - dimmer for disabled CONTINUE
+    const highlight = this.add.rectangle(x, y - height/2 + 3, width - 8, 2, 
+      effectiveDisabled ? 0x222233 : (disabled ? theme.colors.disabled : 0xffffff), 
+      effectiveDisabled ? 0.01 : (disabled ? 0.03 : 0.15));
     
-    // Main background
-    const bg = this.add.rectangle(x, y, width, height, bgColor);
-    bg.setStrokeStyle(isPrimary ? btnSpec.strokeWidth : theme.strokes.medium, disabled ? theme.colors.strokeDisabled : strokeColor);
+    // Main background - use darker, more muted color for disabled CONTINUE
+    const effectiveBgColor = effectiveDisabled ? 0x151518 : bgColor;
+    const bg = this.add.rectangle(x, y, width, height, effectiveBgColor);
+    bg.setStrokeStyle(isPrimary ? btnSpec.strokeWidth : theme.strokes.medium, 
+      effectiveDisabled ? 0x333340 : (disabled ? theme.colors.strokeDisabled : strokeColor));
     bg.setInteractive({ useHandCursor: !disabled });
 
     // ========== BUTTON SKIN WITH PER-STATE TEXTURE ==========
     // Try to load the state-specific texture for this button
+    // NOTE: Button skins are subtle background textures, NOT replacements for procedural UI
     let buttonSkin = null;
     const initialTextureKey = getStateTextureKey(currentState);
     
+    // For secondary buttons, check for shared texture key
+    let textureToUse = null;
     if (initialTextureKey && this.textures.exists(initialTextureKey)) {
-      buttonSkin = this.add.image(x, y, initialTextureKey).setDisplaySize(width, height).setAlpha(disabled ? 0.08 : 0.20);
-      if (disabled) buttonSkin.setTint(0x777777);
+      textureToUse = initialTextureKey;
+    } else if (buttonId && !PRIMARY_BUTTON_IDS.includes(buttonId)) {
+      // Secondary buttons use shared textures (btn-secondary-idle, etc.)
+      const sharedKey = `btn-secondary-${currentState}`;
+      if (this.textures.exists(sharedKey)) {
+        textureToUse = sharedKey;
+      }
     } else if (skinKey && this.textures.exists(skinKey)) {
-      // Fallback to provided skinKey
-      buttonSkin = this.add.image(x, y, skinKey).setDisplaySize(width, height).setAlpha(disabled ? 0.08 : 0.20);
-      if (disabled) buttonSkin.setTint(0x777777);
+      textureToUse = skinKey;
     }
     
-    // Text shadow
+    if (textureToUse) {
+      buttonSkin = this.add.image(x, y, textureToUse).setDisplaySize(width, height).setAlpha(disabled ? 0.05 : 0.12);
+      if (disabled) buttonSkin.setTint(0x555555);
+    }
+    
+    // Text shadow - more subtle for disabled CONTINUE
     const textShadow = this.add.text(x + 1, y + 1, text, { 
       fontSize: isPrimary ? btnSpec.fontSize : theme.typography.sizes.lg, 
       fill: '#000000', 
       fontFamily: theme.typography.fontFamily, 
       fontStyle: 'bold', 
-      alpha: disabled ? 0.15 : 0.3 
+      alpha: effectiveDisabled ? 0.08 : (disabled ? 0.15 : 0.3) 
     }).setOrigin(0.5);
     
-    // Main text
+    // Main text - more muted for disabled CONTINUE
     const label = this.add.text(x, y, text, { 
       fontSize: isPrimary ? btnSpec.fontSize : theme.typography.sizes.lg, 
-      fill: disabled ? theme.textColors.disabled : theme.textColors.primary, 
+      fill: effectiveDisabled ? '#444455' : (disabled ? theme.textColors.disabled : theme.textColors.primary), 
       fontFamily: theme.typography.fontFamily, 
       fontStyle: 'bold' 
     }).setOrigin(0.5);
@@ -3114,11 +3134,13 @@ class MainMenuScene extends Phaser.Scene {
         bg.setStrokeStyle(isPrimary ? btnSpec.strokeWidth + 1 : theme.strokes.medium + 1, theme.colors.strokeHover);
         outerGlow.setAlpha(isPrimary ? btnSpec.glowAlpha.hover + 0.10 : 0.25);
         highlight.setAlpha(0.25);
-        if (buttonSkin) buttonSkin.setAlpha(0.28);
+        if (buttonSkin) buttonSkin.setAlpha(0.18);
         label.setFill(theme.textColors.primary);
-        // Scale effect
+        // Scale effect - kill existing tweens first to prevent conflicts
+        const scaleTargets = [bg, outerGlow, highlight].filter(Boolean);
+        scaleTargets.forEach(t => this.tweens.killTweensOf(t));
         this.tweens.add({
-          targets: [bg, outerGlow, label, textShadow, highlight, pulseGlow, buttonSkin].filter(Boolean),
+          targets: scaleTargets,
           scaleX: anim.hoverScale,
           scaleY: anim.hoverScale,
           duration: anim.durations.normal,
@@ -3130,10 +3152,13 @@ class MainMenuScene extends Phaser.Scene {
         bg.setStrokeStyle(isPrimary ? btnSpec.strokeWidth : theme.strokes.medium, strokeColor);
         outerGlow.setAlpha(isPrimary ? btnSpec.glowAlpha.idle : 0.15);
         highlight.setAlpha(0.15);
-        if (buttonSkin) buttonSkin.setAlpha(0.20);
+        if (buttonSkin) buttonSkin.setAlpha(0.12);
         label.setFill(theme.textColors.primary);
+        // Kill existing tweens and scale back
+        const scaleTargets = [bg, outerGlow, highlight].filter(Boolean);
+        scaleTargets.forEach(t => this.tweens.killTweensOf(t));
         this.tweens.add({
-          targets: [bg, outerGlow, label, textShadow, highlight, pulseGlow, buttonSkin].filter(Boolean),
+          targets: scaleTargets,
           scaleX: 1,
           scaleY: 1,
           duration: anim.durations.slow,
@@ -3164,8 +3189,12 @@ class MainMenuScene extends Phaser.Scene {
         bg.setFillStyle(bgColor - 0x202020);
         bg.setStrokeStyle(isPrimary ? btnSpec.strokeWidth : theme.strokes.medium, strokeColor);
         
+        // Kill existing scale tweens
+        const pressTargets = [bg, outerGlow, highlight].filter(Boolean);
+        pressTargets.forEach(t => this.tweens.killTweensOf(t));
+        
         this.tweens.add({
-          targets: [bg, outerGlow, highlight, pulseGlow].filter(Boolean),
+          targets: pressTargets,
           scaleX: anim.pressedScale,
           scaleY: anim.pressedScale,
           duration: anim.durations.fast,
@@ -3174,7 +3203,6 @@ class MainMenuScene extends Phaser.Scene {
             bg.setScale(1);
             if (outerGlow) outerGlow.setScale(1);
             if (highlight) highlight.setScale(1);
-            if (pulseGlow) pulseGlow.setScale(1);
             updateButtonState(BUTTON_STATES.IDLE);
             onClick();
           }
@@ -3242,12 +3270,13 @@ class MainMenuScene extends Phaser.Scene {
     bg.setStrokeStyle(btnSpec.strokeWidth, disabled ? theme.colors.utilityStrokeDisabled : strokeColor);
     bg.setInteractive({ useHandCursor: !disabled });
     
-    // Try to load state-specific texture
+    // Try to load state-specific texture (secondary buttons share textures)
     let buttonSkin = null;
-    const initialTextureKey = getStateTextureKey(currentState);
-    if (initialTextureKey && this.textures.exists(initialTextureKey)) {
-      buttonSkin = this.add.image(x, y, initialTextureKey).setDisplaySize(width, height).setAlpha(disabled ? 0.06 : 0.15);
-      if (disabled) buttonSkin.setTint(0x777777);
+    // Secondary buttons use shared textures: btn-secondary-idle, btn-secondary-hover, etc.
+    const sharedTextureKey = `btn-secondary-${currentState}`;
+    if (this.textures.exists(sharedTextureKey)) {
+      buttonSkin = this.add.image(x, y, sharedTextureKey).setDisplaySize(width, height).setAlpha(disabled ? 0.04 : 0.10);
+      if (disabled) buttonSkin.setTint(0x555555);
     }
     
     // ========== THEME-COMPLIANT TEXT STYLING ==========
@@ -3262,9 +3291,10 @@ class MainMenuScene extends Phaser.Scene {
     const updateButtonState = (newState) => {
       currentState = newState;
       if (buttonSkin) {
-        const textureKey = getStateTextureKey(newState);
-        if (textureKey && this.textures.exists(textureKey)) {
-          buttonSkin.setTexture(textureKey);
+        // Secondary buttons use shared textures
+        const sharedKey = `btn-secondary-${newState}`;
+        if (this.textures.exists(sharedKey)) {
+          buttonSkin.setTexture(sharedKey);
         }
       }
     };
@@ -3287,7 +3317,7 @@ class MainMenuScene extends Phaser.Scene {
       }
     };
     
-    // Hover state
+    // Hover state - stable scaling with tween cleanup
     bg.on('pointerover', () => { 
       if (!disabled && !isFocused) { 
         updateButtonState(BUTTON_STATES.HOVER);
@@ -3295,7 +3325,7 @@ class MainMenuScene extends Phaser.Scene {
         bg.setStrokeStyle(theme.strokes.medium, theme.colors.strokeHover);
         outerGlow.setAlpha(btnSpec.glowAlpha.hover);
         label.setFill(theme.textColors.primary);
-        if (buttonSkin) buttonSkin.setAlpha(0.20);
+        if (buttonSkin) buttonSkin.setAlpha(0.14);
         sfx.menuHover(); 
       } 
     });
@@ -3307,7 +3337,7 @@ class MainMenuScene extends Phaser.Scene {
         bg.setStrokeStyle(btnSpec.strokeWidth, strokeColor);
         outerGlow.setAlpha(btnSpec.glowAlpha.idle);
         label.setFill(theme.textColors.secondary);
-        if (buttonSkin) buttonSkin.setAlpha(0.15);
+        if (buttonSkin) buttonSkin.setAlpha(0.10);
       }
     });
     
@@ -3315,11 +3345,13 @@ class MainMenuScene extends Phaser.Scene {
       if (!disabled) {
         updateButtonState(BUTTON_STATES.PRESSED);
         bg.setFillStyle(bgColor - 0x101010);
+        // Kill existing tweens for stable animation
+        [bg, outerGlow].forEach(t => this.tweens.killTweensOf(t));
         this.tweens.add({
           targets: [bg, outerGlow],
-          scaleX: anim.pressedScale + 0.01, // 0.97
-          scaleY: anim.pressedScale + 0.01,
-          duration: anim.durations.fast - 10,
+          scaleX: anim.pressedScale,
+          scaleY: anim.pressedScale,
+          duration: anim.durations.fast,
           yoyo: true,
           onComplete: () => {
             bg.setScale(1);
