@@ -378,176 +378,170 @@ function mergeObstacles(...arrays) {
 
 // Level layouts with rooms-and-corridors architecture
 const RAW_LEVEL_LAYOUTS = [
-  // Level 1: Warehouse V6.1 - 28x23 map (FIXED CONNECTIVITY 2026-02-25)
-  // VERTICAL+HORIZONTAL FLOW: Multi-level dungeon with proper connectivity
+  // Level 1: Warehouse V7 - 22x18 map (GRAPH-FIRST REFACTOR 2026-02-25)
+  // 
+  // GRAPH STRUCTURE: 7 distinct rooms with 2+ loops and multiple ingress routes
   //
-  // ARCHITECTURE (3-tier vertical structure with continuous corridors):
-  // - UPPER TIER (y=1-6): Navigation rooms + Exit chamber
-  // - MIDDLE TIER (y=8-13): Main objectives (Keycard, Terminal, Datacore)
-  // - LOWER TIER (y=15-21): Spawn + Safe staging
-  // - CONTINUOUS VERTICAL CORRIDORS between all tiers (x=3, 9, 15, 21)
-  // - CONTINUOUS HORIZONTAL CORRIDORS (y=7, y=14)
+  //       ┌──[Staging]──┐
+  //       │      │      │
+  //       │      ↓      ↓
+  // [Spawn]→[Keycard]→[Terminal]→[DataCore]→[Exit]
+  //              ↑      │      ↑
+  //              └──────┘      │
+  //                [Storage]───┘
   //
-  // STRICT DUNGEON-ROOM RULES:
-  // - Each room: 5x5 or larger (3x3+ walkable interior)
-  // - Rooms fully surrounded by walls with deliberate door gaps
-  // - Doors are 2-tile wide gaps for readability
-  // - Corridors are clear (no dividers blocking flow)
-  // - Objectives in room interiors only
+  // LOOPS (2 required):
+  // 1. Keycard → Terminal → Staging → Keycard (upper loop)
+  // 2. Terminal → DataCore → Storage → Terminal (lower loop)
   //
-  // VERTICAL PROGRESSION:
-  // Spawn (lower-left y=18) -> Keycard (mid-left y=11) -> Terminal (mid-center y=11)
-  //   -> Datacore (mid-right y=11) -> Exit (upper-right y=3)
-  // Players navigate vertically through continuous corridors
+  // INGRESS ROUTES:
+  // - Terminal: 3 ingress (from Keycard, from Staging, from Storage)
+  // - DataCore: 3 ingress (from Terminal, from Storage, from upper corridor)
+  //
+  // HORIZONTAL OBJECTIVE FLOW:
+  // Spawn (left) → Keycard (left-mid) → Terminal (center) → DataCore (right-mid) → Exit (far-right)
+  //
+  // ROOM ARCHETYPES (7 total, varied sizes):
+  // 1. Spawn Room (4x4) - Entry point
+  // 2. Security Office (5x5) - Keycard location, 2 doors
+  // 3. Control Room (6x5) - Terminal location, 3 doors (hub)
+  // 4. Server Room (5x5) - DataCore location, 3 doors
+  // 5. Exit Chamber (3x3) - Exit zone
+  // 6. Staging Pocket (4x4) - Upper alternate route
+  // 7. Storage Room (4x4) - Lower alternate route
+  //
+  // TILE GRAMMAR:
+  // - Room interiors: walkable floors
+  // - Corridors: 2-tile wide clear paths
+  // - Door gaps: 2-tile wide gaps in room walls
+  // - Walls: solid obstacles
+  // - Objectives: in room interiors only
+  // - Patrol slots: at junctions/thresholds only
   {
     name: 'Warehouse',
-    width: 28,
-    height: 23,
+    width: 22,
+    height: 18,
     obstacles: mergeObstacles(
       // ==================== MAP BORDER ====================
-      Array.from({length: 28}, (_, i) => ({x: i, y: 0})),
-      Array.from({length: 28}, (_, i) => ({x: i, y: 22})),
-      Array.from({length: 23}, (_, i) => ({x: 0, y: i})),
-      Array.from({length: 23}, (_, i) => ({x: 27, y: i})),
+      Array.from({length: 22}, (_, i) => ({x: i, y: 0})),
+      Array.from({length: 22}, (_, i) => ({x: i, y: 17})),
+      Array.from({length: 18}, (_, i) => ({x: 0, y: i})),
+      Array.from({length: 18}, (_, i) => ({x: 21, y: i})),
 
-      // ==================== UPPER TIER ROOMS (y=1-6) ====================
-      // 5 rooms with doors connecting to upper corridor (y=7)
-    
-      // UPPER ROOM 1 (5x5) - x=1-5, y=1-5
-      createRoomWalls(1, 1, 5, 5, {bottomDoor: {offset: 1, width: 2}}),
+      // ==================== ROOM 1: SPAWN ROOM (4x4) ====================
+      // Location: x=1-4, y=13-16 (bottom-left)
+      // Door: top wall (connects to main corridor)
+      createRoomWalls(1, 13, 4, 4, {topDoor: {offset: 1, width: 2}}),
 
-      // UPPER ROOM 2 (5x5) - x=7-11, y=1-5
-      createRoomWalls(7, 1, 5, 5, {bottomDoor: {offset: 1, width: 2}}),
+      // ==================== ROOM 2: SECURITY OFFICE (5x5) - KEYCARD ====================
+      // Location: x=1-5, y=6-10 (left-mid)
+      // Doors: bottom (to spawn corridor), right (to terminal), top (to staging route)
+      createRoomWalls(1, 6, 5, 5, {
+        bottomDoor: {offset: 1, width: 2},
+        rightDoor: {offset: 1, width: 2},
+        topDoor: {offset: 2, width: 2}
+      }),
 
-      // UPPER ROOM 3 (5x5) - x=13-17, y=1-5
-      createRoomWalls(13, 1, 5, 5, {bottomDoor: {offset: 1, width: 2}}),
+      // ==================== ROOM 3: CONTROL ROOM (6x5) - TERMINAL ====================
+      // Location: x=7-12, y=6-10 (center)
+      // Doors: left (from keycard), right (to datacore), bottom (to storage)
+      //        + top door to staging (3 ingress total)
+      createRoomWalls(7, 6, 6, 5, {
+        leftDoor: {offset: 1, width: 2},
+        rightDoor: {offset: 1, width: 2},
+        bottomDoor: {offset: 2, width: 2},
+        topDoor: {offset: 2, width: 2}
+      }),
 
-      // UPPER ROOM 4: EXIT CHAMBER (5x5) - x=19-23, y=1-5
-      createRoomWalls(19, 1, 5, 5, {bottomDoor: {offset: 1, width: 2}}),
+      // ==================== ROOM 4: SERVER ROOM (5x5) - DATACORE ====================
+      // Location: x=14-18, y=6-10 (right-mid)
+      // Doors: left (from terminal), bottom (from storage), top (to upper corridor)
+      //        (3 ingress total)
+      createRoomWalls(14, 6, 5, 5, {
+        leftDoor: {offset: 1, width: 2},
+        bottomDoor: {offset: 1, width: 2},
+        topDoor: {offset: 1, width: 2}
+      }),
 
-      // UPPER ROOM 5 (3x5) - x=25-27, y=1-5
-      createRoomWalls(25, 1, 3, 5, {bottomDoor: {offset: 0, width: 2}}),
+      // ==================== ROOM 5: EXIT CHAMBER (3x3) ====================
+      // Location: x=19-21, y=1-3 (top-right)
+      // Door: left wall (connects from datacore corridor)
+      createRoomWalls(19, 1, 3, 3, {leftDoor: {offset: 0, width: 2}}),
 
-      // ==================== UPPER CORRIDOR DIVIDER (y=6) ====================
-      // Horizontal wall with 2-tile gaps at doors
-      // Leave gaps at x=2-3, 8-9, 14-15, 20-21, 25-26
-      [{x: 1, y: 6}, {x: 4, y: 6}, {x: 5, y: 6},
-       {x: 7, y: 6}, {x: 10, y: 6}, {x: 11, y: 6},
-       {x: 13, y: 6}, {x: 16, y: 6}, {x: 17, y: 6},
-       {x: 19, y: 6}, {x: 22, y: 6}, {x: 23, y: 6},
-       {x: 25, y: 6}, {x: 27, y: 6}],
+      // ==================== ROOM 6: STAGING POCKET (4x4) ====================
+      // Location: x=8-11, y=1-4 (upper area)
+      // Doors: bottom (to terminal), left (to keycard upper route)
+      createRoomWalls(8, 1, 4, 4, {
+        bottomDoor: {offset: 1, width: 2},
+        leftDoor: {offset: 1, width: 2}
+      }),
 
-      // ==================== MIDDLE TIER ROOMS (y=8-13) ====================
-      // 5 rooms with doors to both corridors
-    
-      // MIDDLE ROOM 1: KEYCARD (5x5) - x=1-5, y=8-12
-      createRoomWalls(1, 8, 5, 5, {
+      // ==================== ROOM 7: STORAGE ROOM (4x4) ====================
+      // Location: x=14-17, y=13-16 (lower area)
+      // Doors: top (to terminal), left (to main corridor)
+      createRoomWalls(14, 13, 4, 4, {
         topDoor: {offset: 1, width: 2},
-        bottomDoor: {offset: 1, width: 2}
+        leftDoor: {offset: 1, width: 2}
       }),
 
-      // MIDDLE ROOM 2: TERMINAL (5x5) - x=7-11, y=8-12
-      createRoomWalls(7, 8, 5, 5, {
-        topDoor: {offset: 1, width: 2},
-        bottomDoor: {offset: 1, width: 2}
-      }),
+      // ==================== CORRIDOR WALLS ====================
+      // Main horizontal corridor divider (y=5) - between upper rooms and mid rooms
+      // Gaps at: x=3-4 (keycard top), x=9-10 (terminal top), x=15-16 (datacore top)
+      [{x: 1, y: 5}, {x: 2, y: 5}, {x: 5, y: 5},
+       {x: 7, y: 5}, {x: 8, y: 5}, {x: 11, y: 5},
+       {x: 12, y: 5}, {x: 13, y: 5}, {x: 17, y: 5},
+       {x: 18, y: 5}, {x: 19, y: 5}, {x: 20, y: 5}],
 
-      // MIDDLE ROOM 3: DATACORE (5x5) - x=13-17, y=8-12
-      createRoomWalls(13, 8, 5, 5, {
-        topDoor: {offset: 1, width: 2},
-        bottomDoor: {offset: 1, width: 2}
-      }),
+      // Lower corridor divider (y=11) - between mid rooms and lower rooms
+      // Gaps at: x=2-3 (keycard bottom), x=9-10 (terminal bottom), x=15-16 (datacore bottom)
+      [{x: 1, y: 11}, {x: 4, y: 11}, {x: 5, y: 11},
+       {x: 6, y: 11}, {x: 7, y: 11}, {x: 8, y: 11}, {x: 11, y: 11},
+       {x: 12, y: 11}, {x: 13, y: 11}, {x: 14, y: 11}, {x: 17, y: 11},
+       {x: 18, y: 11}, {x: 19, y: 11}, {x: 20, y: 11}],
 
-      // MIDDLE ROOM 4 (5x5) - x=19-23, y=8-12
-      createRoomWalls(19, 8, 5, 5, {
-        topDoor: {offset: 1, width: 2},
-        bottomDoor: {offset: 1, width: 2}
-      }),
+      // Vertical corridor divider (x=6) - between keycard and terminal
+      // Clear corridor from y=5 to y=11
+      [{x: 6, y: 1}, {x: 6, y: 2}, {x: 6, y: 3}, {x: 6, y: 4}],
+      [{x: 6, y: 12}, {x: 6, y: 13}, {x: 6, y: 14}, {x: 6, y: 15}, {x: 6, y: 16}],
 
-      // MIDDLE ROOM 5 (3x5) - x=25-27, y=8-12
-      createRoomWalls(25, 8, 3, 5, {
-        topDoor: {offset: 0, width: 2},
-        bottomDoor: {offset: 0, width: 2}
-      }),
+      // Vertical corridor divider (x=13) - between terminal and datacore
+      [{x: 13, y: 1}, {x: 13, y: 2}, {x: 13, y: 3}, {x: 13, y: 4}],
+      [{x: 13, y: 11}],
+      [{x: 13, y: 12}, {x: 13, y: 13}, {x: 13, y: 14}, {x: 13, y: 15}, {x: 13, y: 16}],
 
-      // ==================== MIDDLE-LOWER DIVIDER (y=13) ====================
-      // Horizontal wall with 2-tile gaps at doors
-      // Leave gaps at x=2-3, 8-9, 14-15, 20-21, 25-26
-      [{x: 1, y: 13}, {x: 4, y: 13}, {x: 5, y: 13},
-       {x: 7, y: 13}, {x: 10, y: 13}, {x: 11, y: 13},
-       {x: 13, y: 13}, {x: 16, y: 13}, {x: 17, y: 13},
-       {x: 19, y: 13}, {x: 22, y: 13}, {x: 23, y: 13},
-       {x: 25, y: 13}, {x: 27, y: 13}],
+      // Upper corridor to exit (y=4-5 area)
+      // Wall creating corridor path from datacore to exit
+      [{x: 19, y: 4}, {x: 19, y: 5}, {x: 19, y: 6}, {x: 19, y: 7}, {x: 19, y: 8}, {x: 19, y: 9}, {x: 19, y: 10}],
+      [{x: 20, y: 4}, {x: 20, y: 5}, {x: 20, y: 6}, {x: 20, y: 7}, {x: 20, y: 8}, {x: 20, y: 9}, {x: 20, y: 10}],
 
-      // ==================== LOWER TIER ROOMS (y=15-21) ====================
-      // 5 rooms with doors to lower corridor (y=14)
-    
-      // LOWER ROOM 1: SPAWN (5x5) - x=1-5, y=15-19
-      createRoomWalls(1, 15, 5, 5, {topDoor: {offset: 1, width: 2}}),
+      // Storage room left corridor wall
+      [{x: 12, y: 13}, {x: 12, y: 14}, {x: 12, y: 15}, {x: 12, y: 16}],
 
-      // LOWER ROOM 2 (5x5) - x=7-11, y=15-19
-      createRoomWalls(7, 15, 5, 5, {topDoor: {offset: 1, width: 2}}),
-
-      // LOWER ROOM 3 (5x5) - x=13-17, y=15-19
-      createRoomWalls(13, 15, 5, 5, {topDoor: {offset: 1, width: 2}}),
-
-      // LOWER ROOM 4 (5x5) - x=19-23, y=15-19
-      createRoomWalls(19, 15, 5, 5, {topDoor: {offset: 1, width: 2}}),
-
-      // LOWER ROOM 5 (3x5) - x=25-27, y=15-19
-      createRoomWalls(25, 15, 3, 5, {topDoor: {offset: 0, width: 2}}),
-
-      // ==================== BOTTOM ROW ROOMS (y=20-21) ====================
-      // Additional staging rooms at bottom
-      createRoomWalls(1, 20, 5, 2, {}),
-      createRoomWalls(7, 20, 5, 2, {}),
-      createRoomWalls(13, 20, 5, 2, {}),
-      createRoomWalls(19, 20, 5, 2, {}),
-      createRoomWalls(25, 20, 3, 2, {}),
-
-      // ==================== VERTICAL ROOM DIVIDERS ====================
-      // These create room boundaries but DON'T block corridors
-      // Upper tier (y=1-5)
-      [{x: 6, y: 1}, {x: 6, y: 2}, {x: 6, y: 3}, {x: 6, y: 4}, {x: 6, y: 5}],
-      [{x: 12, y: 1}, {x: 12, y: 2}, {x: 12, y: 3}, {x: 12, y: 4}, {x: 12, y: 5}],
-      [{x: 18, y: 1}, {x: 18, y: 2}, {x: 18, y: 3}, {x: 18, y: 4}, {x: 18, y: 5}],
-      [{x: 24, y: 1}, {x: 24, y: 2}, {x: 24, y: 3}, {x: 24, y: 4}, {x: 24, y: 5}],
-
-      // Middle tier (y=8-12)
-      [{x: 6, y: 8}, {x: 6, y: 9}, {x: 6, y: 10}, {x: 6, y: 11}, {x: 6, y: 12}],
-      [{x: 12, y: 8}, {x: 12, y: 9}, {x: 12, y: 10}, {x: 12, y: 11}, {x: 12, y: 12}],
-      [{x: 18, y: 8}, {x: 18, y: 9}, {x: 18, y: 10}, {x: 18, y: 11}, {x: 18, y: 12}],
-      [{x: 24, y: 8}, {x: 24, y: 9}, {x: 24, y: 10}, {x: 24, y: 11}, {x: 24, y: 12}],
-
-      // Lower tier (y=15-19)
-      [{x: 6, y: 15}, {x: 6, y: 16}, {x: 6, y: 17}, {x: 6, y: 18}, {x: 6, y: 19}],
-      [{x: 12, y: 15}, {x: 12, y: 16}, {x: 12, y: 17}, {x: 12, y: 18}, {x: 12, y: 19}],
-      [{x: 18, y: 15}, {x: 18, y: 16}, {x: 18, y: 17}, {x: 18, y: 18}, {x: 18, y: 19}],
-      [{x: 24, y: 15}, {x: 24, y: 16}, {x: 24, y: 17}, {x: 24, y: 18}, {x: 24, y: 19}]
+      // Staging room corridor connector to keycard
+      // Open path at x=7, y=2-3 (via keycard top door)
+      [{x: 7, y: 1}, {x: 7, y: 4}]
     ),
 
-    // ==================== OBJECTIVES (distributed vertically) ====================
-    playerStart: {x: 3, y: 17},       // Spawn room center (lower-left)
-    keyCard: {x: 3, y: 10},           // Keycard room center (middle-left)
-    hackTerminal: {x: 9, y: 10},      // Terminal room center (middle-center)
-    dataCore: {x: 15, y: 10},         // Data core room center (middle-right)
-    exitZone: {x: 21, y: 3},          // Exit room center (upper-right)
+    // ==================== OBJECTIVES (HORIZONTAL FLOW) ====================
+    // Spawn (left) -> Keycard (left-mid) -> Terminal (center) -> DataCore (right-mid) -> Exit (far-right)
+    playerStart: {x: 2, y: 15},       // Spawn room center
+    keyCard: {x: 3, y: 8},            // Security Office center (room interior)
+    hackTerminal: {x: 9, y: 8},       // Control Room center (room interior)
+    dataCore: {x: 16, y: 8},          // Server Room center (room interior)
+    exitZone: {x: 20, y: 2},          // Exit Chamber center
 
-    // ==================== GUARD PATROL (middle corridor - BALANCED THRESHOLD COVERAGE) ====================
-    // V2 REBALANCE 2026-02-25: Redistributed for fair corridor coverage
-    // - Evenly spaced patrol points covering main corridor thresholds
-    // - Each point covers transition between adjacent rooms
+    // ==================== GUARD PATROL (JUNCTIONS/THRESHOLDS ONLY) ====================
+    // Patrol at corridor junctions, not inside objective rooms
+    // Positions chosen for 2+ tile clearance from walls
     guardPatrol: [
-      {x: 3, y: 14},      // Left corridor (Spawn/Keycard area)
-      {x: 9, y: 14},      // Mid-left corridor (Keycard/Terminal transition)
-      {x: 15, y: 14},     // Mid-right corridor (Terminal/Datacore transition)
-      {x: 21, y: 14}      // Right corridor (Datacore/Exit transition)
+      {x: 4, y: 3},       // Upper corridor near Security Office (watching keycard approach)
+      {x: 10, y: 3},      // Staging Pocket area (watching terminal-staging junction)
+      {x: 17, y: 3}       // Upper corridor near Server Room (watching datacore-exit junction)
     ],
 
-    // ==================== SENSORS (watch corridors - NO OVERLAP WITH PATROL) ====================
-    // Phase B 2026-02-25: Camera moved to perimeter to reduce mid-lane threat stacking
-    // Watches exit approach from upper corridor - no camera in main objective path for Level 1 onboarding
-    cameras: [{x: 23, y: 7}],  // Upper corridor near exit approach (walkable corridor tile)
+    // ==================== SENSORS ====================
+    // Camera watches main corridor intersection
+    cameras: [{x: 10, y: 5}],  // Upper corridor watching staging-terminal junction
     motionSensors: [],
     laserGrids: [],
 
