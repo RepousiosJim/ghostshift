@@ -33,6 +33,18 @@ import {
   createMenuButton,
   generateMappingTable
 } from './menu-button-assets.js';
+// GhostShift Theme System
+import { 
+  GHOSTSHIFT_THEME, 
+  getColor, 
+  getTextColor, 
+  getButtonSpec,
+  getDuration,
+  getFontSize,
+  getStrokeWidth,
+  getGlowAlpha,
+  getButtonStateStyle
+} from './theme/tokens.js';
 
 // Dynamic import of Phaser for better loading performance
 // This allows the smaller game.js to load first, then Phaser lazy-loads
@@ -2968,11 +2980,16 @@ class MainMenuScene extends Phaser.Scene {
     this.buttonFocusManager.focusIndex(0);
   }
   
-  // ========== PHASE A: PRIMARY BUTTON (Enhanced with Per-Button State Mapping) ==========
+  // ========== PHASE A: PRIMARY BUTTON (Enhanced with Per-Button State Mapping + Theme System) ==========
   createPrimaryButton(x, y, width, height, text, buttonId, bgColor, strokeColor, onClick, isPrimary = false, disabled = false, hint = null, skinKey = null) {
+    // ========== THEME TOKENS ==========
+    const theme = GHOSTSHIFT_THEME;
+    const anim = theme.animation;
+    const btnSpec = theme.buttons.primary;
+    
     // Phase B: Staggered entrance animation - increment delay for each button
     if (!this._buttonEntranceIndex) this._buttonEntranceIndex = 0;
-    const entranceDelay = 300 + (this._buttonEntranceIndex * 80);
+    const entranceDelay = anim.durations.entrance - 50 + (this._buttonEntranceIndex * anim.durations.stagger);
     this._buttonEntranceIndex++;
     
     // ========== PER-BUTTON STATE TEXTURE MAPPING ==========
@@ -2988,17 +3005,17 @@ class MainMenuScene extends Phaser.Scene {
     let currentState = disabled ? BUTTON_STATES.DISABLED : BUTTON_STATES.IDLE;
     let isFocused = false;
     
-    // Outer glow - use disabled styling when disabled
-    const glowColor = disabled ? 0x222230 : strokeColor;
-    const glowAlpha = disabled ? 0.06 : (isPrimary ? 0.25 : 0.15);
-    const outerGlow = this.add.rectangle(x, y, width + 12, height + 12, glowColor, glowAlpha);
+    // ========== THEME-COMPLIANT STYLING ==========
+    const glowColor = disabled ? theme.colors.disabled : strokeColor;
+    const glowAlpha = disabled ? btnSpec.glowAlpha.disabled : (isPrimary ? btnSpec.glowAlpha.idle : 0.15);
+    const outerGlow = this.add.rectangle(x, y, width + btnSpec.glowSize, height + btnSpec.glowSize, glowColor, glowAlpha);
     
     // Inner highlight
-    const highlight = this.add.rectangle(x, y - height/2 + 3, width - 8, 2, disabled ? 0x333340 : 0xffffff, disabled ? 0.03 : 0.15);
+    const highlight = this.add.rectangle(x, y - height/2 + 3, width - 8, 2, disabled ? theme.colors.disabled : 0xffffff, disabled ? 0.03 : 0.15);
     
     // Main background
     const bg = this.add.rectangle(x, y, width, height, bgColor);
-    bg.setStrokeStyle(isPrimary ? 3 : 2, disabled ? 0x333340 : strokeColor);
+    bg.setStrokeStyle(isPrimary ? btnSpec.strokeWidth : theme.strokes.medium, disabled ? theme.colors.strokeDisabled : strokeColor);
     bg.setInteractive({ useHandCursor: !disabled });
 
     // ========== BUTTON SKIN WITH PER-STATE TEXTURE ==========
@@ -3017,18 +3034,18 @@ class MainMenuScene extends Phaser.Scene {
     
     // Text shadow
     const textShadow = this.add.text(x + 1, y + 1, text, { 
-      fontSize: isPrimary ? '20px' : '17px', 
+      fontSize: isPrimary ? btnSpec.fontSize : theme.typography.sizes.lg, 
       fill: '#000000', 
-      fontFamily: 'Courier New', 
+      fontFamily: theme.typography.fontFamily, 
       fontStyle: 'bold', 
       alpha: disabled ? 0.15 : 0.3 
     }).setOrigin(0.5);
     
     // Main text
     const label = this.add.text(x, y, text, { 
-      fontSize: isPrimary ? '20px' : '17px', 
-      fill: disabled ? '#444444' : '#ffffff', 
-      fontFamily: 'Courier New', 
+      fontSize: isPrimary ? btnSpec.fontSize : theme.typography.sizes.lg, 
+      fill: disabled ? theme.textColors.disabled : theme.textColors.primary, 
+      fontFamily: theme.typography.fontFamily, 
       fontStyle: 'bold' 
     }).setOrigin(0.5);
     
@@ -3036,9 +3053,9 @@ class MainMenuScene extends Phaser.Scene {
     let hintText = null;
     if (hint && disabled) {
       hintText = this.add.text(x, y + height/2 + 12, hint, { 
-        fontSize: '11px', 
-        fill: '#555566', 
-        fontFamily: 'Courier New',
+        fontSize: theme.typography.sizes.xs, 
+        fill: theme.textColors.hint, 
+        fontFamily: theme.typography.fontFamily,
         fontStyle: 'italic'
       }).setOrigin(0.5);
     }
@@ -3050,10 +3067,10 @@ class MainMenuScene extends Phaser.Scene {
       this.tweens.add({
         targets: pulseGlow,
         alpha: 0.1,
-        duration: 1500,
+        duration: anim.durations.pulse,
         yoyo: true,
         repeat: -1,
-        ease: 'Sine.easeInOut'
+        ease: anim.easings.smooth
       });
     }
     
@@ -3078,12 +3095,12 @@ class MainMenuScene extends Phaser.Scene {
       
       if (focused) {
         updateButtonState(BUTTON_STATES.FOCUSED);
-        bg.setStrokeStyle(isPrimary ? 4 : 3, 0x00ffff); // Cyan for keyboard focus
-        outerGlow.setFillStyle(0x00ffff, 0.3);
+        bg.setStrokeStyle(theme.strokes.focus, theme.colors.strokeFocused);
+        outerGlow.setFillStyle(theme.colors.strokeFocused, btnSpec.glowAlpha.focused);
       } else {
         updateButtonState(BUTTON_STATES.IDLE);
-        bg.setStrokeStyle(isPrimary ? 3 : 2, strokeColor);
-        outerGlow.setFillStyle(strokeColor, isPrimary ? 0.25 : 0.15);
+        bg.setStrokeStyle(isPrimary ? btnSpec.strokeWidth : theme.strokes.medium, strokeColor);
+        outerGlow.setFillStyle(strokeColor, isPrimary ? btnSpec.glowAlpha.idle : 0.15);
       }
     };
     
@@ -3094,33 +3111,33 @@ class MainMenuScene extends Phaser.Scene {
       if (isHovering) {
         updateButtonState(BUTTON_STATES.HOVER);
         bg.setFillStyle(bgColor + 0x202030);
-        bg.setStrokeStyle(isPrimary ? 4 : 3, 0xffffff);
-        outerGlow.setAlpha(isPrimary ? 0.35 : 0.25);
+        bg.setStrokeStyle(isPrimary ? btnSpec.strokeWidth + 1 : theme.strokes.medium + 1, theme.colors.strokeHover);
+        outerGlow.setAlpha(isPrimary ? btnSpec.glowAlpha.hover + 0.10 : 0.25);
         highlight.setAlpha(0.25);
         if (buttonSkin) buttonSkin.setAlpha(0.28);
-        label.setFill('#ffffff');
+        label.setFill(theme.textColors.primary);
         // Scale effect
         this.tweens.add({
           targets: [bg, outerGlow, label, textShadow, highlight, pulseGlow, buttonSkin].filter(Boolean),
-          scaleX: 1.02,
-          scaleY: 1.02,
-          duration: 80,
-          ease: 'Quad.easeOut'
+          scaleX: anim.hoverScale,
+          scaleY: anim.hoverScale,
+          duration: anim.durations.normal,
+          ease: anim.easings.quick
         });
       } else {
         updateButtonState(BUTTON_STATES.IDLE);
         bg.setFillStyle(bgColor);
-        bg.setStrokeStyle(isPrimary ? 3 : 2, strokeColor);
-        outerGlow.setAlpha(isPrimary ? 0.25 : 0.15);
+        bg.setStrokeStyle(isPrimary ? btnSpec.strokeWidth : theme.strokes.medium, strokeColor);
+        outerGlow.setAlpha(isPrimary ? btnSpec.glowAlpha.idle : 0.15);
         highlight.setAlpha(0.15);
         if (buttonSkin) buttonSkin.setAlpha(0.20);
-        label.setFill('#ffffff');
+        label.setFill(theme.textColors.primary);
         this.tweens.add({
           targets: [bg, outerGlow, label, textShadow, highlight, pulseGlow, buttonSkin].filter(Boolean),
           scaleX: 1,
           scaleY: 1,
-          duration: 150,
-          ease: 'Quad.easeOut'
+          duration: anim.durations.slow,
+          ease: anim.easings.quick
         });
       }
     };
@@ -3145,13 +3162,13 @@ class MainMenuScene extends Phaser.Scene {
         
         // Press animation
         bg.setFillStyle(bgColor - 0x202020);
-        bg.setStrokeStyle(isPrimary ? 3 : 2, strokeColor);
+        bg.setStrokeStyle(isPrimary ? btnSpec.strokeWidth : theme.strokes.medium, strokeColor);
         
         this.tweens.add({
           targets: [bg, outerGlow, highlight, pulseGlow].filter(Boolean),
-          scaleX: 0.96,
-          scaleY: 0.96,
-          duration: 40,
+          scaleX: anim.pressedScale,
+          scaleY: anim.pressedScale,
+          duration: anim.durations.fast,
           yoyo: true,
           onComplete: () => {
             bg.setScale(1);
@@ -3185,19 +3202,24 @@ class MainMenuScene extends Phaser.Scene {
       targets: allElements,
       alpha: { from: 0, to: 1 },
       y: '-=20',
-      duration: 350,
+      duration: anim.durations.entrance,
       delay: entranceDelay,
-      ease: 'Quad.easeOut'
+      ease: anim.easings.quick
     });
     
     return { bg, label, outerGlow, highlight, textShadow, hintText, pulseGlow, buttonSkin, buttonId, setFocus, currentState };
   }
   
-  // ========== PHASE A: SECONDARY BUTTON (Smaller, with Per-Button State Mapping) ==========
+  // ========== PHASE A: SECONDARY BUTTON (Smaller, with Per-Button State Mapping + Theme System) ==========
   createSecondaryButton(x, y, width, height, text, buttonId, bgColor, strokeColor, onClick, disabled = false) {
+    // ========== THEME TOKENS ==========
+    const theme = GHOSTSHIFT_THEME;
+    const anim = theme.animation;
+    const btnSpec = theme.buttons.secondary;
+    
     // Phase B: Staggered entrance animation - increment delay for each button
     if (!this._secondaryButtonEntranceIndex) this._secondaryButtonEntranceIndex = 0;
-    const entranceDelay = 400 + (this._secondaryButtonEntranceIndex * 60);
+    const entranceDelay = anim.durations.entrance + 50 + (this._secondaryButtonEntranceIndex * anim.durations.stagger);
     this._secondaryButtonEntranceIndex++;
     
     // ========== PER-BUTTON STATE TEXTURE MAPPING ==========
@@ -3211,12 +3233,13 @@ class MainMenuScene extends Phaser.Scene {
     let currentState = disabled ? BUTTON_STATES.DISABLED : BUTTON_STATES.IDLE;
     let isFocused = false;
     
+    // ========== THEME-COMPLIANT STYLING ==========
     // Outer glow (subtle)
-    const outerGlow = this.add.rectangle(x, y, width + 6, height + 6, disabled ? 0x222230 : strokeColor, disabled ? 0.04 : 0.08);
+    const outerGlow = this.add.rectangle(x, y, width + btnSpec.glowSize, height + btnSpec.glowSize, disabled ? theme.colors.disabled : strokeColor, disabled ? btnSpec.glowAlpha.disabled : btnSpec.glowAlpha.idle);
     
     // Main background
     const bg = this.add.rectangle(x, y, width, height, bgColor);
-    bg.setStrokeStyle(1, disabled ? 0x333340 : strokeColor);
+    bg.setStrokeStyle(btnSpec.strokeWidth, disabled ? theme.colors.utilityStrokeDisabled : strokeColor);
     bg.setInteractive({ useHandCursor: !disabled });
     
     // Try to load state-specific texture
@@ -3227,11 +3250,11 @@ class MainMenuScene extends Phaser.Scene {
       if (disabled) buttonSkin.setTint(0x777777);
     }
     
-    // V3 Polish: Improved button text contrast and sizing
+    // ========== THEME-COMPLIANT TEXT STYLING ==========
     const label = this.add.text(x, y, text, { 
-      fontSize: '14px', 
-      fill: disabled ? '#444444' : '#d0d8e0', 
-      fontFamily: 'Courier New',
+      fontSize: btnSpec.fontSize, 
+      fill: disabled ? theme.textColors.disabled : theme.textColors.secondary, 
+      fontFamily: theme.typography.fontFamily,
       fontStyle: 'bold'
     }).setOrigin(0.5);
     
@@ -3253,14 +3276,14 @@ class MainMenuScene extends Phaser.Scene {
       
       if (focused) {
         updateButtonState(BUTTON_STATES.FOCUSED);
-        bg.setStrokeStyle(2, 0x00ffff); // Cyan for keyboard focus
-        outerGlow.setFillStyle(0x00ffff, 0.2);
-        label.setFill('#ffffff');
+        bg.setStrokeStyle(theme.strokes.medium, theme.colors.strokeFocused);
+        outerGlow.setFillStyle(theme.colors.strokeFocused, btnSpec.glowAlpha.focused);
+        label.setFill(theme.textColors.primary);
       } else {
         updateButtonState(BUTTON_STATES.IDLE);
-        bg.setStrokeStyle(1, strokeColor);
-        outerGlow.setFillStyle(strokeColor, 0.08);
-        label.setFill('#d0d8e0');
+        bg.setStrokeStyle(btnSpec.strokeWidth, strokeColor);
+        outerGlow.setFillStyle(strokeColor, btnSpec.glowAlpha.idle);
+        label.setFill(theme.textColors.secondary);
       }
     };
     
@@ -3269,9 +3292,9 @@ class MainMenuScene extends Phaser.Scene {
       if (!disabled && !isFocused) { 
         updateButtonState(BUTTON_STATES.HOVER);
         bg.setFillStyle(bgColor + 0x151520);
-        bg.setStrokeStyle(2, 0xffffff);
-        outerGlow.setAlpha(0.15);
-        label.setFill('#ffffff');
+        bg.setStrokeStyle(theme.strokes.medium, theme.colors.strokeHover);
+        outerGlow.setAlpha(btnSpec.glowAlpha.hover);
+        label.setFill(theme.textColors.primary);
         if (buttonSkin) buttonSkin.setAlpha(0.20);
         sfx.menuHover(); 
       } 
@@ -3281,9 +3304,9 @@ class MainMenuScene extends Phaser.Scene {
       if (!disabled && !isFocused) {
         updateButtonState(BUTTON_STATES.IDLE);
         bg.setFillStyle(bgColor);
-        bg.setStrokeStyle(1, strokeColor);
-        outerGlow.setAlpha(0.08);
-        label.setFill('#d0d8e0');
+        bg.setStrokeStyle(btnSpec.strokeWidth, strokeColor);
+        outerGlow.setAlpha(btnSpec.glowAlpha.idle);
+        label.setFill(theme.textColors.secondary);
         if (buttonSkin) buttonSkin.setAlpha(0.15);
       }
     });
@@ -3294,9 +3317,9 @@ class MainMenuScene extends Phaser.Scene {
         bg.setFillStyle(bgColor - 0x101010);
         this.tweens.add({
           targets: [bg, outerGlow],
-          scaleX: 0.97,
-          scaleY: 0.97,
-          duration: 30,
+          scaleX: anim.pressedScale + 0.01, // 0.97
+          scaleY: anim.pressedScale + 0.01,
+          duration: anim.durations.fast - 10,
           yoyo: true,
           onComplete: () => {
             bg.setScale(1);
@@ -3319,9 +3342,9 @@ class MainMenuScene extends Phaser.Scene {
       targets: allElements,
       alpha: { from: 0, to: 1 },
       y: '-=15',
-      duration: 280,
+      duration: anim.durations.entrance - 70, // 280
       delay: entranceDelay,
-      ease: 'Quad.easeOut'
+      ease: anim.easings.quick
     });
     
     return { bg, label, outerGlow, buttonSkin, buttonId, setFocus, currentState };
