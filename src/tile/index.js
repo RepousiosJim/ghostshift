@@ -187,6 +187,42 @@ export {
   validateLevelWithDungeonRules
 } from './DungeonIntegration.js';
 
+// ==================== NAV MODULE RE-EXPORTS ====================
+// Phase A: Nav graph and path-check engine exports
+
+export {
+  // NavGraph
+  NavGraph,
+  NavNode,
+  NAV_NODE_TYPES,
+  NODE_TYPE_PRIORITIES,
+  NAV_GRAPH_CONFIG,
+  
+  // PathCheckEngine
+  PathCheckEngine,
+  SearchPattern,
+  PATTERN_TYPES,
+  PATH_CHECK_CONFIG,
+  
+  // RoomSweepGenerator
+  RoomSweepGenerator,
+  SWEEP_TYPES,
+  ROOM_SWEEP_CONFIG,
+  
+  // NavIntegration
+  NavIntegration,
+  NAV_INTEGRATION_CONFIG,
+  
+  // Factory functions
+  createNavSystem,
+  createNavGraph,
+  createPathCheckEngine,
+  createRoomSweepGenerator,
+  toNavCoords,
+  toWorldCoords,
+  getBestPatternForSituation
+} from '../nav/index.js';
+
 // ==================== FACTORY FUNCTION ====================
 
 import { TileGrid } from './TileGrid.js';

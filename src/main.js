@@ -1881,6 +1881,19 @@ class BootScene extends Phaser.Scene {
     if (!this.textures.exists('menu-buttons-ai')) {
       this.load.image('menu-buttons-ai', 'assets/ui/menu_buttons_ai.png');
     }
+    const menuButtonSkins = {
+      'btn-play': 'assets/ui/buttons/btn_play_tight.png',
+      'btn-continue': 'assets/ui/buttons/btn_continue_tight.png',
+      'btn-how-to-play': 'assets/ui/buttons/btn_how_to_play_tight.png',
+      'btn-controls': 'assets/ui/buttons/btn_controls_tight.png',
+      'btn-settings': 'assets/ui/buttons/btn_settings_tight.png',
+      'btn-credits': 'assets/ui/buttons/btn_credits_tight.png'
+    };
+    Object.entries(menuButtonSkins).forEach(([key, path]) => {
+      if (!this.textures.exists(key)) {
+        this.load.image(key, path);
+      }
+    });
   }
 
   create() {
@@ -2426,7 +2439,7 @@ class MainMenuScene extends Phaser.Scene {
   }
   
   // ========== PHASE A: PRIMARY BUTTON (Enhanced) ==========
-  createPrimaryButton(x, y, width, height, text, bgColor, strokeColor, onClick, isPrimary = false, disabled = false, hint = null) {
+  createPrimaryButton(x, y, width, height, text, bgColor, strokeColor, onClick, isPrimary = false, disabled = false, hint = null, skinKey = null) {
     // Phase B: Staggered entrance animation - increment delay for each button
     if (!this._buttonEntranceIndex) this._buttonEntranceIndex = 0;
     const entranceDelay = 300 + (this._buttonEntranceIndex * 80);
@@ -2445,10 +2458,30 @@ class MainMenuScene extends Phaser.Scene {
     bg.setStrokeStyle(isPrimary ? 3 : 2, disabled ? 0x333340 : strokeColor);
     bg.setInteractive({ useHandCursor: !disabled });
 
-    // Optional AI button skin overlay (Meshy 2D asset)
-    const buttonSkin = this.textures.exists('menu-buttons-ai')
-      ? this.add.image(x, y, 'menu-buttons-ai').setDisplaySize(width, height).setAlpha(disabled ? 0.08 : 0.20)
+    // Optional button skin overlay (per-button preferred, text-mapped fallback, then generic fallback)
+    let resolvedSkinKey = null;
+    const labelToSkinKey = {
+      'PLAY': 'btn-play',
+      'CONTINUE': 'btn-continue',
+      'HOW TO PLAY': 'btn-how-to-play',
+      'CONTROLS': 'btn-controls',
+      'SETTINGS': 'btn-settings',
+      'GAME CREDITS': 'btn-credits',
+      'CREDITS': 'btn-credits'
+    };
+
+    if (skinKey && this.textures.exists(skinKey)) {
+      resolvedSkinKey = skinKey;
+    } else if (labelToSkinKey[text] && this.textures.exists(labelToSkinKey[text])) {
+      resolvedSkinKey = labelToSkinKey[text];
+    } else if (this.textures.exists('menu-buttons-ai')) {
+      resolvedSkinKey = 'menu-buttons-ai';
+    }
+
+    const buttonSkin = resolvedSkinKey
+      ? this.add.image(x, y, resolvedSkinKey).setDisplaySize(width, height).setAlpha(disabled ? 0.08 : 0.20)
       : null;
+
     if (buttonSkin) {
       buttonSkin.setTint(disabled ? 0x777777 : 0xffffff);
     }
@@ -5866,6 +5899,9 @@ class GameScene extends Phaser.Scene {
       this._objectiveRelocations = validationResult.relocations;
       console.log(`[Level] Applied ${validationResult.relocations.length} objective relocations`);
     }
+    
+    // Phase A: Create tile grid for nav system
+    this._tileGrid = new TileGrid(this.currentLayout);
 
     // PER-LEVEL DIMENSION SUPPORT
     // Get level dimensions (fallback to baseline if not specified)
