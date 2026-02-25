@@ -10,7 +10,7 @@
  * @module AssetManifest
  */
 
-export const ASSET_VERSION = 'v0.7.4';
+export const ASSET_VERSION = 'v0.7.5';
 
 /**
  * Asset categories for loading organization
@@ -62,9 +62,20 @@ export const ASSET_MANIFEST = {
   ],
 
   // ==================== UI ASSETS ====================
-  // Menu buttons use procedural rendering (no external assets needed)
-  // This section is intentionally empty - buttons are drawn procedurally
-  ui: [],
+  // PLAY button uses asset-only rendering (menu_btn_play.png)
+  // Other buttons remain procedural
+  ui: [
+    {
+      key: 'menu_btn_play',
+      path: 'assets/ui/buttons_v2/menu_btn_play.png',
+      type: 'image',
+      category: ASSET_CATEGORIES.UI,
+      required: true, // PLAY button must load
+      fallback: null,
+      priority: ASSET_PRIORITY.HIGH,
+      version: ASSET_VERSION
+    }
+  ],
 
   // ==================== BACKGROUND ASSETS ====================
   // Scene backgrounds (SVG) - keys match BACKGROUND_IMAGE_PATHS from background-composer.js

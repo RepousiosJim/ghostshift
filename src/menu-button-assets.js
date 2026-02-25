@@ -62,15 +62,12 @@ export const BUTTON_SPECS = {
  * 
  * This is the authoritative mapping. No generic fallbacks.
  * Each button has explicit state->texture mappings.
+ * 
+ * NOTE: PLAY button uses dedicated asset (menu_btn_play.png) - see asset-manifest.js
+ * PLAY is NOT in this mapping as it uses asset-only rendering.
  */
 export const BUTTON_TEXTURE_MAP = {
-  [BUTTON_IDS.PLAY]: {
-    [BUTTON_STATES.IDLE]: 'btn-play-idle',
-    [BUTTON_STATES.HOVER]: 'btn-play-hover',
-    [BUTTON_STATES.PRESSED]: 'btn-play-pressed',
-    [BUTTON_STATES.DISABLED]: 'btn-play-disabled',
-    [BUTTON_STATES.FOCUSED]: 'btn-play-focused'
-  },
+  // PLAY removed - uses dedicated menu_btn_play.png asset
   [BUTTON_IDS.CONTINUE]: {
     [BUTTON_STATES.IDLE]: 'btn-continue-idle',
     [BUTTON_STATES.HOVER]: 'btn-continue-hover',
@@ -119,8 +116,8 @@ export const BUTTON_TEXTURE_MAP = {
  */
 export const BUTTON_ASSET_PATHS = {};
 
-// Primary buttons (PLAY, CONTINUE) use primary-*.png assets
-const PRIMARY_BUTTON_IDS = [BUTTON_IDS.PLAY, BUTTON_IDS.CONTINUE];
+// Primary buttons (CONTINUE only - PLAY uses dedicated menu_btn_play.png asset)
+const PRIMARY_BUTTON_IDS = [BUTTON_IDS.CONTINUE];
 
 // State mapping from button state to asset filename suffix
 const STATE_TO_ASSET_SUFFIX = {

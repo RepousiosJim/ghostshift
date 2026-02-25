@@ -2111,22 +2111,24 @@ class MainMenuScene extends Phaser.Scene {
       duration: loadResult.duration + 'ms'
     });
     
-    // ========== DIAGNOSTIC: VERIFY PLAY/CONTINUE TEXTURES ==========
-    // Dev-only logging to confirm texture keys are loaded
+    // ========== DIAGNOSTIC: VERIFY PLAY ASSET AND CONTINUE TEXTURES ==========
+    // Dev-only logging to confirm assets are loaded
     if (typeof window !== 'undefined' && window.DEBUG_BUTTON_ASSETS) {
-      const playIdleKey = BUTTON_TEXTURE_MAP[BUTTON_IDS.PLAY]?.[BUTTON_STATES.IDLE];
-      const continueIdleKey = BUTTON_TEXTURE_MAP[BUTTON_IDS.CONTINUE]?.[BUTTON_STATES.IDLE];
+      // PLAY button uses dedicated asset
+      const playAssetExists = this.textures.exists('menu_btn_play');
+      console.log('[MainMenuScene] PLAY asset (menu_btn_play):', playAssetExists ? '✓' : '✗');
       
-      console.log('[MainMenuScene] PLAY texture key:', playIdleKey, 
-        'exists:', this.textures.exists(playIdleKey));
+      // CONTINUE uses texture mapping
+      const continueIdleKey = BUTTON_TEXTURE_MAP[BUTTON_IDS.CONTINUE]?.[BUTTON_STATES.IDLE];
       console.log('[MainMenuScene] CONTINUE texture key:', continueIdleKey, 
         'exists:', this.textures.exists(continueIdleKey));
       
-      // Log all loaded button textures
-      console.log('[MainMenuScene] All button textures loaded:');
-      Object.values(BUTTON_TEXTURE_MAP).forEach(states => {
-        Object.values(states).forEach(key => {
-          console.log(`  ${key}: ${this.textures.exists(key) ? '✓' : '✗'}`);
+      // Log all loaded button textures (excluding PLAY which uses dedicated asset)
+      console.log('[MainMenuScene] Button textures loaded (excl. PLAY):');
+      Object.entries(BUTTON_TEXTURE_MAP).forEach(([buttonId, states]) => {
+        console.log(`  [${buttonId}]:`);
+        Object.entries(states).forEach(([state, key]) => {
+          console.log(`    ${state}: ${key} - ${this.textures.exists(key) ? '✓' : '✗'}`);
         });
       });
     }
@@ -2788,18 +2790,143 @@ class MainMenuScene extends Phaser.Scene {
   }
   
   // ========== PHASE A: PRIMARY ACTION STACK (Center) ==========
+  // ========== ASSET-ONLY PLAY BUTTON ==========
+  // Uses menu_btn_play.png as single source of truth - no procedural elements
+  createAssetOnlyPlayButton(x, y, width, height, onClick) {
+    // Phase B: Staggered entrance animation
+    if (!this._buttonEntranceIndex) this._buttonEntranceIndex = 0;
+    const entranceDelay = 300 + (this._buttonEntranceIndex * 80);
+    this._buttonEntranceIndex++;
+    
+    // Asset key for the PLAY button
+    const ASSET_KEY = 'menu_btn_play';
+    
+    // Check if asset is loaded
+    if (!this.textures.exists(ASSET_KEY)) {
+      console.warn('[MainMenuScene] menu_btn_play asset not loaded, falling back to procedural');
+      // Fallback to procedural button
+      return this.createPrimaryButton(
+        x, y, width, height, '▶  PLAY',
+        BUTTON_IDS.PLAY,
+        0x2255cc, 0x66aaff,
+        onClick,
+        true
+      );
+    }
+    
+    let isFocused = false;
+    
+    // Create container for the button
+    const container = this.add.container(x, y);
+    
+    // Single image asset - no procedural background, no text overlay
+    const buttonImage = this.add.image(0, 0, ASSET_KEY);
+    buttonImage.setDisplaySize(width, height);
+    container.add(buttonImage);
+    
+    // Make interactive
+    buttonImage.setInteractive({ useHandCursor: true });
+    
+    // Hover scale effect
+    buttonImage.on('pointerover', () => {
+      isFocused = true;
+      this.tweens.add({
+        targets: buttonImage,
+        scaleX: 1.02,
+        scaleY: 1.02,
+        duration: 80,
+        ease: 'Quad.easeOut'
+      });
+      sfx.menuHover();
+    });
+    
+    buttonImage.on('pointerout', () => {
+      isFocused = false;
+      this.tweens.add({
+        targets: buttonImage,
+        scaleX: 1,
+        scaleY: 1,
+        duration: 150,
+        ease: 'Quad.easeOut'
+      });
+    });
+    
+    // Press effect
+    buttonImage.on('pointerdown', () => {
+      this.tweens.add({
+        targets: buttonImage,
+        scaleX: 0.96,
+        scaleY: 0.96,
+        duration: 40,
+        yoyo: true,
+        onComplete: () => {
+          buttonImage.setScale(1);
+          onClick();
+        }
+      });
+    });
+    
+    // Phase B: Staggered entrance animation (fade + slide up)
+    container.setAlpha(0);
+    container.y += 20;
+    
+    this.tweens.add({
+      targets: container,
+      alpha: { from: 0, to: 1 },
+      y: '-=20',
+      duration: 350,
+      delay: entranceDelay,
+      ease: 'Quad.easeOut'
+    });
+    
+    // Return object compatible with focus manager
+    const setFocus = (focused) => {
+      if (focused && !isFocused) {
+        isFocused = true;
+        this.tweens.add({
+          targets: buttonImage,
+          scaleX: 1.02,
+          scaleY: 1.02,
+          duration: 80,
+          ease: 'Quad.easeOut'
+        });
+      } else if (!focused && isFocused) {
+        isFocused = false;
+        this.tweens.add({
+          targets: buttonImage,
+          scaleX: 1,
+          scaleY: 1,
+          duration: 150,
+          ease: 'Quad.easeOut'
+        });
+      }
+    };
+    
+    return { 
+      bg: buttonImage, 
+      label: null, // No text overlay - asset contains text
+      outerGlow: null, 
+      highlight: null, 
+      textShadow: null, 
+      hintText: null, 
+      pulseGlow: null, 
+      buttonSkin: null, // Not needed - image IS the button
+      buttonId: BUTTON_IDS.PLAY, 
+      setFocus, 
+      currentState: BUTTON_STATES.IDLE,
+      container 
+    };
+  }
+  
   createPrimaryActionStack(x, y) {
-    // Main PLAY button - prominent CTA
+    // Main PLAY button - ASSET-ONLY rendering (no procedural elements)
     const playWidth = 320;
     const playHeight = 64;
     
-    // Create PLAY button with per-button state texture mapping
-    const playButton = this.createPrimaryButton(
-      x, y, playWidth, playHeight, '▶  PLAY', 
-      BUTTON_IDS.PLAY, // Button ID for asset mapping
-      0x2255cc, 0x66aaff, 
-      () => this.transitionTo('LevelSelectScene'), 
-      true // isPrimary
+    // Create PLAY button using asset-only path (menu_btn_play.png)
+    const playButton = this.createAssetOnlyPlayButton(
+      x, y, playWidth, playHeight,
+      () => this.transitionTo('LevelSelectScene')
     );
     this.menuButtons.push(playButton);
     this.buttonFocusManager.registerButton(playButton);
