@@ -10,7 +10,7 @@
  * @module AssetManifest
  */
 
-export const ASSET_VERSION = 'v0.7.5';
+export const ASSET_VERSION = 'v0.7.6';
 
 /**
  * Asset categories for loading organization
