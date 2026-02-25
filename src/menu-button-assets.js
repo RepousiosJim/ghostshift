@@ -112,31 +112,54 @@ export const BUTTON_TEXTURE_MAP = {
  * ASSET PATH MAPPING
  * Maps texture keys to file paths with cache-busting version
  * 
- * Primary path: per-button per-state assets (future state-specific assets)
- * Fallback path: existing button assets (btn_play.png, etc.)
+ * Strategy:
+ * - PLAY/CONTINUE: Use primary-*.png assets (prominent action buttons)
+ * - Other buttons: Use secondary-*.png assets (utility buttons)
+ * - State mapping: idle→default, hover→hover, pressed→pressed, disabled→disabled, focused→hover
  */
 export const BUTTON_ASSET_PATHS = {};
 
+// Primary buttons (PLAY, CONTINUE) use primary-*.png assets
+const PRIMARY_BUTTON_IDS = [BUTTON_IDS.PLAY, BUTTON_IDS.CONTINUE];
+
+// State mapping from button state to asset filename suffix
+const STATE_TO_ASSET_SUFFIX = {
+  [BUTTON_STATES.IDLE]: 'default',
+  [BUTTON_STATES.HOVER]: 'hover',
+  [BUTTON_STATES.PRESSED]: 'pressed',
+  [BUTTON_STATES.DISABLED]: 'disabled',
+  [BUTTON_STATES.FOCUSED]: 'hover' // Focused uses hover visual
+};
+
 // Generate asset paths for all buttons and states
 Object.entries(BUTTON_TEXTURE_MAP).forEach(([buttonId, states]) => {
+  const isPrimary = PRIMARY_BUTTON_IDS.includes(buttonId);
+  const buttonFamily = isPrimary ? 'primary' : 'secondary';
+  
   Object.entries(states).forEach(([state, textureKey]) => {
-    // Convert buttonId to filename format (how_to_play -> how_to_play)
-    const fileName = buttonId;
+    const assetSuffix = STATE_TO_ASSET_SUFFIX[state] || 'default';
     
-    // Primary path: per-button per-state asset (for future state-specific assets)
-    const primaryPath = `assets/ui/buttons/per-button/${buttonId}/${state}.png`;
-    
-    // Fallback path: use existing base button asset (e.g., btn_play.png)
-    // All states use the same base asset, with procedural state styling
-    const fallbackPath = `assets/ui/buttons/btn_${fileName}.png`;
+    // Use existing primary/secondary button assets
+    // Path: assets/ui/buttons/primary-default.png, secondary-hover.png, etc.
+    const assetPath = `assets/ui/buttons/${buttonFamily}-${assetSuffix}.png`;
     
     BUTTON_ASSET_PATHS[textureKey] = {
-      primary: primaryPath,
-      fallback: fallbackPath,
-      version: ASSET_VERSION
+      primary: assetPath,
+      fallback: null, // No fallback - use procedural if asset fails
+      version: ASSET_VERSION,
+      isPrimary,
+      buttonFamily
     };
   });
 });
+
+// Debug: Log the mapping table on load (dev only)
+if (typeof window !== 'undefined' && window.DEBUG_BUTTON_ASSETS) {
+  console.log('[MenuButtonAssets] Button Asset Path Mapping:');
+  Object.entries(BUTTON_ASSET_PATHS).forEach(([key, paths]) => {
+    console.log(`  ${key}: ${paths.primary} (primary: ${paths.isPrimary})`);
+  });
+}
 
 // ==================== ASSET QA VALIDATION ====================
 
@@ -322,33 +345,40 @@ export class MenuButtonAssetLoader {
     // Check if already loaded
     if (this.scene.textures.exists(textureKey)) {
       this.loadedTextures.set(textureKey, true);
+      if (typeof window !== 'undefined' && window.DEBUG_BUTTON_ASSETS) {
+        console.log(`[MenuButtonAssets] Texture already exists: ${textureKey}`);
+      }
       return true;
     }
     
-    // Try primary path first
+    // Try primary path
     try {
       await this._loadImage(textureKey, this.getVersionedPath(paths.primary));
       this.loadedTextures.set(textureKey, true);
+      if (typeof window !== 'undefined' && window.DEBUG_BUTTON_ASSETS) {
+        console.log(`[MenuButtonAssets] Loaded texture: ${textureKey} from ${paths.primary}`);
+      }
       return true;
     } catch (primaryError) {
-      // Primary failed, try fallback
-      console.warn(`[MenuButtonAssets] Primary path failed for ${textureKey}, trying fallback`);
-      
-      try {
-        // For fallback, we load the base button and use it for all states
-        // We need to use a different key to avoid conflicts
-        const fallbackKey = `${textureKey}_fallback`;
-        await this._loadImage(fallbackKey, this.getVersionedPath(paths.fallback));
+      // Primary failed - check if we have a fallback
+      if (paths.fallback) {
+        console.warn(`[MenuButtonAssets] Primary path failed for ${textureKey}, trying fallback`);
         
-        // Create a reference from the desired key to the fallback texture
-        // In Phaser, we can't easily alias textures, so we'll track this mapping
-        this.scene.textures.get(fallbackKey).key = textureKey;
-        
-        this.loadedTextures.set(textureKey, true);
-        this.fallbackUsed.add(textureKey);
-        return true;
-      } catch (fallbackError) {
-        console.error(`[MenuButtonAssets] Failed to load ${textureKey}:`, fallbackError);
+        try {
+          const fallbackKey = `${textureKey}_fallback`;
+          await this._loadImage(fallbackKey, this.getVersionedPath(paths.fallback));
+          this.scene.textures.get(fallbackKey).key = textureKey;
+          this.loadedTextures.set(textureKey, true);
+          this.fallbackUsed.add(textureKey);
+          return true;
+        } catch (fallbackError) {
+          console.error(`[MenuButtonAssets] Fallback also failed for ${textureKey}:`, fallbackError);
+          this.loadedTextures.set(textureKey, false);
+          return false;
+        }
+      } else {
+        // No fallback available - will use procedural rendering
+        console.warn(`[MenuButtonAssets] No fallback for ${textureKey}, will use procedural rendering`);
         this.loadedTextures.set(textureKey, false);
         return false;
       }

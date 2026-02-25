@@ -2088,7 +2088,7 @@ class MainMenuScene extends Phaser.Scene {
     super({ key: 'MainMenuScene' });
   }
 
-  create(data) {
+  async create(data) {
     attachSceneGuard(this, 'MainMenuScene');
     setRuntimePhase('menu:create', { sceneKey: this.scene.key });
     // Phase 9: Register resize listener for fullscreen handling
@@ -2100,6 +2100,36 @@ class MainMenuScene extends Phaser.Scene {
     this.menuButtonLoader = new MenuButtonAssetLoader(this);
     this.buttonFocusManager = new ButtonFocusManager(this);
     this.menuButtons = []; // Track all menu buttons for focus management
+    
+    // ========== LOAD BUTTON ASSETS FIRST ==========
+    // This ensures textures are available before buttons are created
+    console.log('[MainMenuScene] Loading menu button assets...');
+    const loadResult = await this.menuButtonLoader.loadAll();
+    console.log('[MainMenuScene] Button assets loaded:', {
+      loaded: loadResult.loaded,
+      fallbacks: loadResult.fallbacks,
+      duration: loadResult.duration + 'ms'
+    });
+    
+    // ========== DIAGNOSTIC: VERIFY PLAY/CONTINUE TEXTURES ==========
+    // Dev-only logging to confirm texture keys are loaded
+    if (typeof window !== 'undefined' && window.DEBUG_BUTTON_ASSETS) {
+      const playIdleKey = BUTTON_TEXTURE_MAP[BUTTON_IDS.PLAY]?.[BUTTON_STATES.IDLE];
+      const continueIdleKey = BUTTON_TEXTURE_MAP[BUTTON_IDS.CONTINUE]?.[BUTTON_STATES.IDLE];
+      
+      console.log('[MainMenuScene] PLAY texture key:', playIdleKey, 
+        'exists:', this.textures.exists(playIdleKey));
+      console.log('[MainMenuScene] CONTINUE texture key:', continueIdleKey, 
+        'exists:', this.textures.exists(continueIdleKey));
+      
+      // Log all loaded button textures
+      console.log('[MainMenuScene] All button textures loaded:');
+      Object.values(BUTTON_TEXTURE_MAP).forEach(states => {
+        Object.values(states).forEach(key => {
+          console.log(`  ${key}: ${this.textures.exists(key) ? '✓' : '✗'}`);
+        });
+      });
+    }
     
     // Check if we should show How to Play from ControlsScene transition
     if (data?.showHowToPlay) {
