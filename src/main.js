@@ -1,11 +1,11 @@
 import { LEVEL_LAYOUTS, validateLevelLayouts } from './levels.js';
 import { BackgroundComposer, BACKGROUND_IMAGE_PATHS } from './background-composer.js';
 // Phase P1: Modular Guard AI - optional runtime integration
-import { GuardAI, GUARD_STATES, GUARD_AI_CONFIG as MODULAR_GUARD_CONFIG } from './guard/index.js';
+import { GuardAI, GUARD_STATES, GUARD_AI_CONFIG as MODULAR_GUARD_CONFIG, GuardNavAdapter } from './guard/index.js';
 // Step 2: Canary rollout configuration
 import { isCanaryLevel, getCanaryMetrics, getFallbackManager, CANARY_CONFIG } from './guard/CanaryConfig.js';
 // Phase B: Objective Spawner for room-aware placement validation
-import { ObjectiveSpawner, TileGrid, DEFAULT_CONSTRAINTS } from './tile/index.js';
+import { ObjectiveSpawner, TileGrid, DEFAULT_CONSTRAINTS, TileMetadata, createNavSystem } from './tile/index.js';
 
 // Dynamic import of Phaser for better loading performance
 // This allows the smaller game.js to load first, then Phaser lazy-loads
@@ -1877,6 +1877,10 @@ class BootScene extends Phaser.Scene {
         this.load.svg(path, path, { scale: 1 });
       }
     });
+
+    if (!this.textures.exists('menu-buttons-ai')) {
+      this.load.image('menu-buttons-ai', 'assets/ui/menu_buttons_ai.png');
+    }
   }
 
   create() {
@@ -2440,6 +2444,14 @@ class MainMenuScene extends Phaser.Scene {
     const bg = this.add.rectangle(x, y, width, height, bgColor);
     bg.setStrokeStyle(isPrimary ? 3 : 2, disabled ? 0x333340 : strokeColor);
     bg.setInteractive({ useHandCursor: !disabled });
+
+    // Optional AI button skin overlay (Meshy 2D asset)
+    const buttonSkin = this.textures.exists('menu-buttons-ai')
+      ? this.add.image(x, y, 'menu-buttons-ai').setDisplaySize(width, height).setAlpha(disabled ? 0.08 : 0.20)
+      : null;
+    if (buttonSkin) {
+      buttonSkin.setTint(disabled ? 0x777777 : 0xffffff);
+    }
     
     // Text shadow
     const textShadow = this.add.text(x + 1, y + 1, text, { 
@@ -2492,10 +2504,11 @@ class MainMenuScene extends Phaser.Scene {
         bg.setStrokeStyle(isPrimary ? 4 : 3, 0xffffff);
         outerGlow.setAlpha(isPrimary ? 0.35 : 0.25);
         highlight.setAlpha(0.25);
+        if (buttonSkin) buttonSkin.setAlpha(disabled ? 0.08 : 0.28);
         label.setFill('#ffffff');
         // Scale effect
         this.tweens.add({
-          targets: [bg, outerGlow, label, textShadow, highlight, pulseGlow].filter(Boolean),
+          targets: [bg, outerGlow, label, textShadow, highlight, pulseGlow, buttonSkin].filter(Boolean),
           scaleX: 1.02,
           scaleY: 1.02,
           duration: 80,
@@ -2506,9 +2519,10 @@ class MainMenuScene extends Phaser.Scene {
         bg.setStrokeStyle(isPrimary ? 3 : 2, strokeColor);
         outerGlow.setAlpha(isPrimary ? 0.25 : 0.15);
         highlight.setAlpha(0.15);
+        if (buttonSkin) buttonSkin.setAlpha(disabled ? 0.08 : 0.20);
         label.setFill('#ffffff');
         this.tweens.add({
-          targets: [bg, outerGlow, label, textShadow, highlight, pulseGlow].filter(Boolean),
+          targets: [bg, outerGlow, label, textShadow, highlight, pulseGlow, buttonSkin].filter(Boolean),
           scaleX: 1,
           scaleY: 1,
           duration: 150,
@@ -6221,12 +6235,25 @@ class GameScene extends Phaser.Scene {
     this._canaryMetrics = getCanaryMetrics();
     this._fallbackManager = getFallbackManager();
     
+    // Phase A: Nav graph system for enhanced AI pathing
+    this._navSystem = null;
+    this._tileMetadata = null;
+    
     // Determine if this level should use modular AI
     const shouldUseModularAI = isCanaryLevel(this.currentLevelIndex) && 
                                 !this._fallbackManager.shouldFallback(this.currentLevelIndex);
     
     if (shouldUseModularAI) {
       try {
+        // Initialize tile metadata for nav system
+        if (this._tileGrid) {
+          this._tileMetadata = new TileMetadata(this._tileGrid);
+          // Initialize nav system
+          this._navSystem = createNavSystem(this._tileGrid, this._tileMetadata, {
+            debug: DEBUG_MODULAR_GUARD
+          });
+        }
+        
         this._modularGuardAI = new GuardAI({ ...MODULAR_GUARD_CONFIG, debug: DEBUG_MODULAR_GUARD });
         // Initialize with scene context
         this._modularGuardAI.initialize(
@@ -6236,14 +6263,24 @@ class GameScene extends Phaser.Scene {
           this.time.now,
           TILE_SIZE
         );
+        
+        // Initialize nav capabilities if nav system is available
+        if (this._navSystem && this._modularGuardAI.initializeNav) {
+          this._modularGuardAI.initializeNav(this._tileGrid, this._tileMetadata);
+        }
+        
         this._guardAIMode = 'modular';
         if (DEBUG_MODULAR_GUARD) {
           console.log('[ModularGuardAI] Canary mode enabled for level', this.currentLevelIndex, 
                       '(', this.currentLayout.name, ')');
+          if (this._navSystem) {
+            console.log('[NavSystem] Nav graph initialized:', this._navSystem.getNavGraph().getStats());
+          }
         }
       } catch (e) {
         console.error('[ModularGuardAI] Initialization failed, falling back to legacy AI:', e);
         this._modularGuardAI = null;
+        this._navSystem = null;
         this._fallbackManager.recordError(this.currentLevelIndex);
       }
     }
