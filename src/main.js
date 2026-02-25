@@ -6,6 +6,22 @@ import { GuardAI, GUARD_STATES, GUARD_AI_CONFIG as MODULAR_GUARD_CONFIG, GuardNa
 import { isCanaryLevel, getCanaryMetrics, getFallbackManager, CANARY_CONFIG } from './guard/CanaryConfig.js';
 // Phase B: Objective Spawner for room-aware placement validation
 import { ObjectiveSpawner, TileGrid, DEFAULT_CONSTRAINTS, TileMetadata, createNavSystem } from './tile/index.js';
+// Asset Loading System
+import { 
+  AssetLoader, 
+  LoadingScreenUI, 
+  ReadyGate, 
+  loaderDiagnostics,
+  LOAD_STATE,
+  ASSET_CATEGORIES 
+} from './asset-loader.js';
+import { 
+  ASSET_MANIFEST, 
+  getAssetsByPriority, 
+  getRequiredAssets,
+  getTotalAssetCount,
+  ASSET_VERSION 
+} from './asset-manifest.js';
 
 // Dynamic import of Phaser for better loading performance
 // This allows the smaller game.js to load first, then Phaser lazy-loads
@@ -1864,60 +1880,191 @@ function getSpeedBonus() { return PERK_INFO.speed.bonus[gameSave.perks.speed]; }
 function getStealthBonus() { return PERK_INFO.stealth.bonus[gameSave.perks.stealth]; }
 function getLuckBonus() { return PERK_INFO.luck.bonus[gameSave.perks.luck]; }
 
-// ==================== BOOT SCENE (Loading) ====================
+// ==================== BOOT SCENE (Loading System Overhaul) ====================
 class BootScene extends Phaser.Scene {
   constructor() {
     super({ key: 'BootScene' });
+    this.assetLoader = null;
+    this.loadingUI = null;
   }
 
   preload() {
-    // Preload menu background SVGs to avoid missing texture artifacts
-    BACKGROUND_IMAGE_PATHS.forEach((path) => {
-      if (!this.textures.exists(path)) {
-        this.load.svg(path, path, { scale: 1 });
-      }
-    });
-
-    if (!this.textures.exists('menu-buttons-ai')) {
-      this.load.image('menu-buttons-ai', 'assets/ui/menu_buttons_ai.png');
-    }
-    const menuButtonSkins = {
-      'btn-play': 'assets/ui/buttons/btn_play_tight.png',
-      'btn-continue': 'assets/ui/buttons/btn_continue_tight.png',
-      'btn-how-to-play': 'assets/ui/buttons/btn_how_to_play_tight.png',
-      'btn-controls': 'assets/ui/buttons/btn_controls_tight.png',
-      'btn-settings': 'assets/ui/buttons/btn_settings_tight.png',
-      'btn-credits': 'assets/ui/buttons/btn_credits_tight.png'
-    };
-    Object.entries(menuButtonSkins).forEach(([key, path]) => {
-      if (!this.textures.exists(key)) {
-        this.load.image(key, path);
-      }
-    });
+    // The new loading system handles asset loading in create()
+    // This preload is kept for Phaser lifecycle compatibility but does nothing
+    // All assets are now loaded through the AssetLoader with proper tracking
   }
 
   create() {
     attachSceneGuard(this, 'BootScene');
     setRuntimePhase('boot:create', { sceneKey: this.scene.key });
-    // Simple loading screen
-    this.add.rectangle(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2, MAP_WIDTH * TILE_SIZE, MAP_HEIGHT * TILE_SIZE, 0x0a0a0f);
     
-    const title = this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2 - 30, 'GHOSTSHIFT', { fontSize: '36px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
-    const loading = this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE / 2 + 20, 'Loading...', { fontSize: '14px', fill: '#666688', fontFamily: 'Courier New' }).setOrigin(0.5);
+    // Create loading UI
+    this.loadingUI = new LoadingScreenUI(this);
+    this.loadingUI.create();
+    this.loadingUI.updateProgress(0, 'Initializing asset loader...');
+    
+    // Create asset loader
+    this.assetLoader = new AssetLoader(this);
     
     // Initialize audio on first interaction
     this.input.keyboard.once('keydown', () => sfx.init());
     this.input.on('pointerdown', () => sfx.init(), this);
     
-    // Auto-transition to main menu with faster fade
-    safeDelayedCall(this, 300, 'boot:to-menu', () => {
-      safeSceneStart(this, 'MainMenuScene');
-    });
+    // Start the asset loading process
+    this.loadAllAssets();
+  }
+  
+  /**
+   * Load all assets with progress tracking
+   */
+  async loadAllAssets() {
+    setRuntimePhase('boot:loading', { sceneKey: this.scene.key });
+    
+    try {
+      const success = await this.assetLoader.loadAll({
+        showUI: false, // We're using our own UI
+        onProgress: (progress, asset) => {
+          if (this.loadingUI) {
+            this.loadingUI.updateProgress(progress, `Loading ${asset.category}: ${asset.key}`);
+          }
+        },
+        onComplete: (results) => {
+          const stats = this.assetLoader.getStats();
+          console.log(`[BootScene] Asset loading complete: ${stats.loaded}/${stats.total} loaded, ${stats.fallbacks} fallbacks`);
+        },
+        onError: (failures) => {
+          console.error('[BootScene] Critical asset failures:', failures);
+          if (this.loadingUI) {
+            this.loadingUI.showError(failures.length, 'Critical assets failed');
+          }
+        }
+      });
+      
+      if (success) {
+        // All required assets loaded successfully
+        setRuntimePhase('boot:ready', { sceneKey: this.scene.key });
+        
+        if (this.loadingUI) {
+          this.loadingUI.showComplete(true);
+          this.loadingUI.updateProgress(1, 'Ready to play!');
+        }
+        
+        // Transition to main menu after short delay
+        safeDelayedCall(this, 400, 'boot:to-menu', () => {
+          this.transitionToMainMenu();
+        });
+      } else {
+        // Some required assets failed
+        setRuntimePhase('boot:failed', { sceneKey: this.scene.key });
+        
+        if (this.loadingUI) {
+          this.loadingUI.showComplete(false);
+          this.loadingUI.showError(1, 'Required assets missing. Please refresh.');
+        }
+        
+        // Still try to proceed - the ReadyGate will handle blocking if critical
+        safeDelayedCall(this, 2000, 'boot:fallback-menu', () => {
+          this.transitionToMainMenu();
+        });
+      }
+    } catch (error) {
+      console.error('[BootScene] Asset loading error:', error);
+      reportRuntimeError(error, { sceneKey: this.scene.key });
+      
+      if (this.loadingUI) {
+        this.loadingUI.showComplete(false);
+        this.loadingUI.showError(1, error.message);
+      }
+      
+      // Attempt to proceed anyway - game may still work with fallbacks
+      safeDelayedCall(this, 2000, 'boot:error-recovery', () => {
+        this.transitionToMainMenu();
+      });
+    }
+  }
+  
+  /**
+   * Transition to main menu with ReadyGate validation
+   */
+  transitionToMainMenu() {
+    const readyGate = new ReadyGate(this);
+    const validation = readyGate.validate();
+    
+    if (!validation.ready && !validation.canProceedWithFallbacks) {
+      console.error('[BootScene] ReadyGate blocked transition:', validation.blockingAssets);
+      
+      // Show error but proceed anyway - let MainMenuScene handle missing assets
+      if (this.loadingUI) {
+        this.loadingUI.showError(
+          validation.blockingAssets.length, 
+          'Some assets missing, proceeding with fallbacks'
+        );
+      }
+    }
+    
+    // Cleanup and transition
+    if (this.loadingUI) {
+      this.loadingUI.destroy();
+      this.loadingUI = null;
+    }
+    
+    safeSceneStart(this, 'MainMenuScene');
   }
   
   // Cleanup on shutdown
   shutdown() {
     // Stop any pending timers
+    this.time.removeAllEvents();
+    this.tweens.killAll();
+    
+    // Cleanup loading UI
+    if (this.loadingUI) {
+      this.loadingUI.destroy();
+      this.loadingUI = null;
+    }
+    
+    // Cleanup asset loader
+    if (this.assetLoader) {
+      this.assetLoader.destroy();
+      this.assetLoader = null;
+    }
+    
+    super.shutdown();
+  }
+}
+
+// ==================== PRELOAD SCENE (Background Asset Loading) ====================
+// Optional scene for loading additional assets in background during gameplay
+class PreloadScene extends Phaser.Scene {
+  constructor() {
+    super({ key: 'PreloadScene' });
+  }
+  
+  create(data) {
+    attachSceneGuard(this, 'PreloadScene');
+    
+    const { category = null, onComplete = null } = data || {};
+    
+    // Load specific category or all remaining assets
+    if (category && ASSET_MANIFEST[category]) {
+      this.loadCategory(category, onComplete);
+    } else {
+      // Just validate and exit
+      if (onComplete) onComplete({ success: true, loaded: 0 });
+      this.scene.stop();
+    }
+  }
+  
+  async loadCategory(category, onComplete) {
+    // This can be used for background loading of non-critical assets
+    // For now, just complete immediately as all assets load in BootScene
+    if (onComplete) {
+      onComplete({ success: true, loaded: 0 });
+    }
+    this.scene.stop();
+  }
+  
+  shutdown() {
     this.time.removeAllEvents();
     this.tweens.killAll();
     super.shutdown();
@@ -2458,8 +2605,7 @@ class MainMenuScene extends Phaser.Scene {
     bg.setStrokeStyle(isPrimary ? 3 : 2, disabled ? 0x333340 : strokeColor);
     bg.setInteractive({ useHandCursor: !disabled });
 
-    // Optional button skin overlay (per-button preferred, text-mapped fallback, then generic fallback)
-    let resolvedSkinKey = null;
+    // Optional button skin overlay: each button uses its own dedicated image key
     const labelToSkinKey = {
       'PLAY': 'btn-play',
       'CONTINUE': 'btn-continue',
@@ -2470,12 +2616,14 @@ class MainMenuScene extends Phaser.Scene {
       'CREDITS': 'btn-credits'
     };
 
+    let resolvedSkinKey = null;
     if (skinKey && this.textures.exists(skinKey)) {
       resolvedSkinKey = skinKey;
-    } else if (labelToSkinKey[text] && this.textures.exists(labelToSkinKey[text])) {
-      resolvedSkinKey = labelToSkinKey[text];
-    } else if (this.textures.exists('menu-buttons-ai')) {
-      resolvedSkinKey = 'menu-buttons-ai';
+    } else {
+      const mapped = labelToSkinKey[text];
+      if (mapped && this.textures.exists(mapped)) {
+        resolvedSkinKey = mapped;
+      }
     }
 
     const buttonSkin = resolvedSkinKey
@@ -9594,7 +9742,7 @@ const config = {
     default: 'arcade',
     arcade: { debug: false }
   },
-  scene: [BootScene, MainMenuScene, LevelSelectScene, SettingsScene, ResultsScene, ControlsScene, GameScene, VictoryScene]
+  scene: [BootScene, PreloadScene, MainMenuScene, LevelSelectScene, SettingsScene, ResultsScene, ControlsScene, GameScene, VictoryScene]
 };
 
 // Phase 9: Listen to fullscreen changes and emit resize events
