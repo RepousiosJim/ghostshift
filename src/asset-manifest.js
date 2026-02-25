@@ -10,7 +10,7 @@
  * @module AssetManifest
  */
 
-export const ASSET_VERSION = 'v0.7.2';
+export const ASSET_VERSION = 'v0.7.3';
 
 /**
  * Asset categories for loading organization
@@ -68,7 +68,6 @@ export const ASSET_MANIFEST = {
     // ==================== PLAY BUTTON (Primary CTA) ====================
     {
       key: 'btn-play-idle',
-      path: 'assets/ui/buttons/btn_play.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -78,7 +77,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'btn-play-hover',
-      path: 'assets/ui/buttons/btn_play.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -88,7 +86,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'btn-play-pressed',
-      path: 'assets/ui/buttons/btn_play.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -98,7 +95,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'btn-play-disabled',
-      path: 'assets/ui/buttons/btn_play.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -108,7 +104,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'btn-play-focused',
-      path: 'assets/ui/buttons/btn_play.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -120,7 +115,6 @@ export const ASSET_MANIFEST = {
     // ==================== CONTINUE BUTTON ====================
     {
       key: 'btn-continue-idle',
-      path: 'assets/ui/buttons/btn_continue.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -130,7 +124,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'btn-continue-hover',
-      path: 'assets/ui/buttons/btn_continue.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -140,7 +133,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'btn-continue-pressed',
-      path: 'assets/ui/buttons/btn_continue.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -150,7 +142,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'btn-continue-disabled',
-      path: 'assets/ui/buttons/btn_continue.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -160,7 +151,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'btn-continue-focused',
-      path: 'assets/ui/buttons/btn_continue.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -172,7 +162,6 @@ export const ASSET_MANIFEST = {
     // ==================== HOW TO PLAY BUTTON ====================
     {
       key: 'btn-how-to-play-idle',
-      path: 'assets/ui/buttons/btn_how_to_play.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -182,7 +171,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'btn-how-to-play-hover',
-      path: 'assets/ui/buttons/btn_how_to_play.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -192,7 +180,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'btn-how-to-play-pressed',
-      path: 'assets/ui/buttons/btn_how_to_play.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -202,7 +189,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'btn-how-to-play-disabled',
-      path: 'assets/ui/buttons/btn_how_to_play.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -212,7 +198,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'btn-how-to-play-focused',
-      path: 'assets/ui/buttons/btn_how_to_play.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -224,7 +209,6 @@ export const ASSET_MANIFEST = {
     // ==================== CONTROLS BUTTON ====================
     {
       key: 'btn-controls-idle',
-      path: 'assets/ui/buttons/btn_controls.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -234,7 +218,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'btn-controls-hover',
-      path: 'assets/ui/buttons/btn_controls.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -244,7 +227,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'btn-controls-pressed',
-      path: 'assets/ui/buttons/btn_controls.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -254,7 +236,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'btn-controls-disabled',
-      path: 'assets/ui/buttons/btn_controls.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -264,7 +245,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'btn-controls-focused',
-      path: 'assets/ui/buttons/btn_controls.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -276,7 +256,6 @@ export const ASSET_MANIFEST = {
     // ==================== SETTINGS BUTTON ====================
     {
       key: 'btn-settings-idle',
-      path: 'assets/ui/buttons/btn_settings.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -286,7 +265,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'btn-settings-hover',
-      path: 'assets/ui/buttons/btn_settings.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -296,7 +274,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'btn-settings-pressed',
-      path: 'assets/ui/buttons/btn_settings.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -306,7 +283,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'btn-settings-disabled',
-      path: 'assets/ui/buttons/btn_settings.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -316,7 +292,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'btn-settings-focused',
-      path: 'assets/ui/buttons/btn_settings.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -328,7 +303,6 @@ export const ASSET_MANIFEST = {
     // ==================== CREDITS BUTTON ====================
     {
       key: 'btn-credits-idle',
-      path: 'assets/ui/buttons/btn_credits.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -338,7 +312,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'btn-credits-hover',
-      path: 'assets/ui/buttons/btn_credits.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -348,7 +321,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'btn-credits-pressed',
-      path: 'assets/ui/buttons/btn_credits.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -358,7 +330,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'btn-credits-disabled',
-      path: 'assets/ui/buttons/btn_credits.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -368,7 +339,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'btn-credits-focused',
-      path: 'assets/ui/buttons/btn_credits.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -380,7 +350,6 @@ export const ASSET_MANIFEST = {
     // ==================== GENERIC BUTTON STATES (Fallback for procedural) ====================
     {
       key: 'primary-default',
-      path: 'assets/ui/buttons/primary-default.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -390,7 +359,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'primary-hover',
-      path: 'assets/ui/buttons/primary-hover.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -400,7 +368,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'primary-pressed',
-      path: 'assets/ui/buttons/primary-pressed.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -410,7 +377,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'primary-disabled',
-      path: 'assets/ui/buttons/primary-disabled.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -420,7 +386,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'secondary-default',
-      path: 'assets/ui/buttons/secondary-default.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -430,7 +395,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'secondary-hover',
-      path: 'assets/ui/buttons/secondary-hover.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -440,7 +404,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'secondary-pressed',
-      path: 'assets/ui/buttons/secondary-pressed.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
@@ -450,7 +413,6 @@ export const ASSET_MANIFEST = {
     },
     {
       key: 'secondary-disabled',
-      path: 'assets/ui/buttons/secondary-disabled.png',
       type: 'image',
       category: ASSET_CATEGORIES.UI,
       required: false,
