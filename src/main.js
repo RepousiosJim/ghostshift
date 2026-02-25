@@ -3889,12 +3889,19 @@ class LevelSelectScene extends Phaser.Scene {
   }
 }
 
-// ==================== SETTINGS SCENE (PHASE 8 - MODERNIZED) ====================
+// ==================== SETTINGS SCENE V2 (LAYOUT/READABILITY/CONTROL CLARITY/SAFETY) ====================
 class SettingsScene extends Phaser.Scene {
   constructor() { super({ key: 'SettingsScene' }); }
+  
   create() {
     attachSceneGuard(this, 'SettingsScene');
     setRuntimePhase('settings:create', { sceneKey: this.scene.key });
+    
+    // Track focusable elements for keyboard/gamepad navigation
+    this._focusableElements = [];
+    this._currentFocusIndex = 0;
+    this._confirmOverlay = null;
+    
     // Phase 9: Register resize listener for fullscreen handling
     this._resizeListener = () => {
       this._handleResize();
@@ -3906,21 +3913,33 @@ class SettingsScene extends Phaser.Scene {
     this.backgroundComposer = new BackgroundComposer(this, { variant: 'settings' });
     
     const screenWidth = this.scale.width || (MAP_WIDTH * TILE_SIZE);
+    const screenHeight = this.scale.height || (MAP_HEIGHT * TILE_SIZE);
     const centerX = screenWidth / 2;
     
-    // ==================== RESPONSIVE RIGHT BOUNDARY ====================
-    // Safe margin prevents right-side controls from clipping at screen edges
-    // Accounts for toggle glow (+6px), hit area padding (+10px), and text overflow
-    const RIGHT_SAFE_MARGIN = 48; // Conservative margin for all right-side elements
-    const contentLeft = 26;
-    const contentRight = screenWidth - RIGHT_SAFE_MARGIN;
+    // ==================== V2 GRID SYSTEM ====================
+    // 3-column layout: Label | Control | Value
+    const GRID = {
+      margin: 32,
+      rightSafe: 42,
+      labelX: 48,
+      controlX: 280,           // Where controls (toggles, sliders) start
+      valueX: screenWidth - 48, // Where values align (right-aligned)
+      rowHeight: 52,           // Consistent row spacing
+      sectionGap: 24,          // Gap between sections
+      panelPadding: 16,        // Inner padding for section panels
+      panelRadius: 8,          // Corner radius for panels
+    };
     
-    // Right column grid - consistent X positions for all right-aligned controls
-    // All toggles, value labels, quality chips, and RESET align to this grid
-    const rightColumnX = contentRight; // Anchor point for right-aligned elements
-
-    // Title
-    this.add.text(centerX, 30, 'SETTINGS', { fontSize: '28px', fill: '#4488ff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(0.5);
+    // ==================== TITLE ====================
+    const titleStyle = { 
+      fontSize: '32px', 
+      fill: '#4488ff', 
+      fontFamily: 'Courier New', 
+      fontStyle: 'bold',
+      stroke: '#000000',
+      strokeThickness: 2
+    };
+    this.add.text(centerX, 28, '⚙ SETTINGS', titleStyle).setOrigin(0.5);
     
     // Back button (shared component)
     createBackButton(this, {
@@ -3928,361 +3947,687 @@ class SettingsScene extends Phaser.Scene {
       bindEsc: true
     });
     
-    // ==================== SECTION HEADERS ====================
-    const sectionHeaderStyle = { fontSize: '12px', fontFamily: 'Courier New', fontStyle: 'bold' };
-    const sectionY = 70;
-    
-    // AUDIO Section
-    this.add.text(contentLeft, sectionY, '▸ AUDIO', { fontSize: '13px', fill: '#6699cc', fontFamily: 'Courier New', fontStyle: 'bold' });
-    this.add.line(0, 0, contentLeft, sectionY + 18, contentRight, sectionY + 18, 0x334455).setOrigin(0);
-    
-    // GRAPHICS Section
-    const graphicsY = 180;
-    this.add.text(contentLeft, graphicsY, '▸ GRAPHICS', { fontSize: '13px', fill: '#6699cc', fontFamily: 'Courier New', fontStyle: 'bold' });
-    this.add.line(0, 0, contentLeft, graphicsY + 18, contentRight, graphicsY + 18, 0x334455).setOrigin(0);
-    
-    // GAME Section
-    const gameY = 350;
-    this.add.text(contentLeft, gameY, '▸ GAME', { fontSize: '13px', fill: '#6699cc', fontFamily: 'Courier New', fontStyle: 'bold' });
-    this.add.line(0, 0, contentLeft, gameY + 18, contentRight, gameY + 18, 0x334455).setOrigin(0);
-    
-    // ==================== AUDIO SETTINGS ====================
-    const audioStartY = sectionY + 35;
-    const rowHeight = 45;
-    // Toggle dimensions - consistent across all toggles
-    const toggleWidth = 70;
-    const toggleHeight = 28;
-    // Right column anchor - toggle text aligns here
-    const toggleTextX = rightColumnX;
-    // Toggle widget positioned with padding from right column anchor
-    const toggleWidgetX = rightColumnX - 10;
-    
-    // ========== PREMIUM TOGGLE BUTTONS ==========
-    // Audio Enabled toggle with premium styling
-    this.add.text(40, audioStartY, 'Sound Effects', { fontSize: '15px', fill: '#ffffff', fontFamily: 'Courier New' });
-    
-    // Toggle background with premium look - use consistent right column grid
-    const toggleY = audioStartY + 2;
-    
-    // Toggle track
-    const audioToggleBg = this.add.rectangle(toggleWidgetX + toggleWidth/2, toggleY, toggleWidth, toggleHeight, sfx.isEnabled ? 0x1a4a2a : 0x2a1a1a);
-    audioToggleBg.setStrokeStyle(2, sfx.isEnabled ? 0x44ff88 : 0xff4444);
-    
-    // Toggle glow when on - clipped to stay within safe margin
-    const audioToggleGlow = this.add.rectangle(toggleWidgetX + toggleWidth/2, toggleY, toggleWidth + 6, toggleHeight + 6, sfx.isEnabled ? 0x44ff88 : 0xff4444, sfx.isEnabled ? 0.12 : 0.08);
-    
-    // Toggle indicator circle
-    const audioToggleIndicator = this.add.circle(toggleWidgetX + (sfx.isEnabled ? toggleWidth - 12 : 12), toggleY, 8, sfx.isEnabled ? 0x44ff88 : 0xff4444);
-    
-    // Toggle text - aligned to consistent right column grid
-    const audioToggle = this.add.text(toggleTextX, audioStartY + 2, sfx.isEnabled ? 'ON' : 'OFF', { fontSize: '12px', fill: sfx.isEnabled ? '#44ff88' : '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
-    audioToggle.setOrigin(1, 0);
-    
-    // Toggle hit area (larger for easier clicking) - within safe bounds
-    const audioToggleHit = this.add.rectangle(toggleWidgetX + toggleWidth/2, toggleY, toggleWidth + 20, toggleHeight + 10, 0x000000, 0);
-    audioToggleHit.setInteractive({ useHandCursor: true });
-    
-    const updateAudioToggle = (enabled) => {
-      audioToggleBg.setFillStyle(enabled ? 0x1a4a2a : 0x2a1a1a);
-      audioToggleBg.setStrokeStyle(2, enabled ? 0x44ff88 : 0xff4444);
-      audioToggleGlow.setFillStyle(enabled ? 0x44ff88 : 0xff4444, enabled ? 0.12 : 0.08);
-      audioToggleIndicator.setFillStyle(enabled ? 0x44ff88 : 0xff4444);
-      audioToggleIndicator.x = toggleWidgetX + (enabled ? toggleWidth - 12 : 12);
-      audioToggle.setText(enabled ? 'ON' : 'OFF');
-      audioToggle.setFill(enabled ? '#44ff88' : '#ff4444');
-    };
-    
-    audioToggleHit.on('pointerover', () => { 
-      if (!sfx.isEnabled) {
-        audioToggleBg.setStrokeStyle(2, 0xff6666);
-        audioToggleIndicator.setFillStyle(0xff6666);
-      }
-    });
-    audioToggleHit.on('pointerout', () => { 
-      audioToggleBg.setStrokeStyle(2, sfx.isEnabled ? 0x44ff88 : 0xff4444);
-      audioToggleIndicator.setFillStyle(sfx.isEnabled ? 0x44ff88 : 0xff4444);
-    });
-    audioToggleHit.on('pointerdown', () => { 
-      const newState = !sfx.isEnabled; 
-      sfx.setEnabled(newState); 
-      updateAudioToggle(newState);
-      sfx.select(); 
-    });
-    // Also trigger from text click
-    audioToggle.on('pointerdown', () => { 
-      const newState = !sfx.isEnabled; 
-      sfx.setEnabled(newState); 
-      updateAudioToggle(newState);
-      sfx.select(); 
-    });
-    
-    // Master Volume - Modern slider with thumb and percentage
-    const volY = audioStartY + rowHeight;
-    this.add.text(40, volY, 'Master Volume', { fontSize: '15px', fill: '#ffffff', fontFamily: 'Courier New' });
-    
-    // Volume percentage display - aligned consistently with other right-column values
-    const volPercent = Math.round(sfx.volume * 100);
-    const volPercentText = this.add.text(toggleTextX, volY + 2, volPercent + '%', { fontSize: '14px', fill: '#88ccff', fontFamily: 'Courier New', fontStyle: 'bold' }).setOrigin(1, 0);
-    
-    // Mute button - positioned after percentage with consistent spacing (within safe margin)
-    const muteBtn = this.add.text(toggleTextX + 38, volY + 2, sfx.volume === 0 || !sfx.isEnabled ? '🔇' : '🔊', { fontSize: '16px' }).setInteractive({ useHandCursor: true });
-    muteBtn.on('pointerover', () => muteBtn.setAlpha(0.7));
-    muteBtn.on('pointerout', () => muteBtn.setAlpha(1));
-    muteBtn.on('pointerdown', () => {
-      const wasMuted = sfx.volume === 0 || !sfx.isEnabled;
-      if (wasMuted) {
-        sfx.setEnabled(true);
-        audioToggle.setText('● ON');
-        audioToggle.setFill('#44ff88');
-        sfx.setMasterVolume(sfx.volume || 0.8);
-      } else {
-        sfx.setMasterVolume(0);
-      }
-      updateVolDisplay();
-      muteBtn.setText(sfx.volume === 0 || !sfx.isEnabled ? '🔇' : '🔊');
-      sfx.select();
-    });
-    
-    // ========== PREMIUM SLIDER SYSTEM ==========
-    // Responsive slider positioning - scale with viewport
-    const sliderStartX = 180;
-    const availableSliderWidth = rightColumnX - sliderStartX - 50; // Leave margin on right
-    const sliderWidth = Math.max(200, Math.min(280, availableSliderWidth));
-    const sliderX = sliderStartX + 20; // Start after label with consistent padding
-    const sliderY = volY + 18;
-    
-    // 1. Slider track background with premium styling - center on sliderX + sliderWidth/2
-    const volBarBg = this.add.rectangle(sliderX + sliderWidth / 2, sliderY, sliderWidth, 10, 0x1a1a2a);
-    volBarBg.setStrokeStyle(1, 0x333344);
-    
-    // 2. Track inner shadow effect - center on sliderX + sliderWidth/2
-    const trackShadow = this.add.rectangle(sliderX + sliderWidth / 2, sliderY + 2, sliderWidth - 4, 3, 0x000000, 0.2);
-    
-    // 3. Slider fill with gradient-like appearance
-    const volBarFill = this.add.rectangle(sliderX, sliderY, sfx.volume * sliderWidth, 6, 0x4488ff);
-    volBarFill.setOrigin(0, 0.5);
-    
-    // 4. Fill highlight (top edge)
-    const fillHighlight = this.add.rectangle(sliderX, sliderY - 2, sfx.volume * sliderWidth, 2, 0x66aaff, 0.4);
-    fillHighlight.setOrigin(0, 0.5);
-    
-    // 5. Premium thumb with glow
-    const thumbGlow = this.add.circle(sliderX + sfx.volume * sliderWidth, sliderY, 16, 0x66aaff, 0.15);
-    const volThumb = this.add.circle(sliderX + sfx.volume * sliderWidth, sliderY, 10, 0x66aaff);
-    volThumb.setStrokeStyle(2, 0xffffff);
-    volThumb.setInteractive({ useHandCursor: true });
-    
-    // Enhanced thumb hover/active states
-    volThumb.on('pointerover', () => { 
-      volThumb.setFill(0x88bbff); 
-      volThumb.setScale(1.3); 
-      thumbGlow.setAlpha(0.3);
-    });
-    volThumb.on('pointerout', () => { 
-      volThumb.setFill(0x66aaff); 
-      volThumb.setScale(1); 
-      thumbGlow.setAlpha(0.15);
-    });
-    
-    // Volume controls (-/+)
-    const volDown = this.add.text(sliderX - 25, sliderY - 1, '−', { fontSize: '22px', fill: '#888888', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
-    const volUp = this.add.text(sliderX + sliderWidth + 10, sliderY - 1, '+', { fontSize: '22px', fill: '#888888', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
-    
-    // Hover states for volume buttons
-    volDown.on('pointerover', () => volDown.setFill('#ffffff'));
-    volDown.on('pointerout', () => volDown.setFill('#888888'));
-    volUp.on('pointerover', () => volUp.setFill('#ffffff'));
-    volUp.on('pointerout', () => volUp.setFill('#888888'));
-    
-    const updateVolDisplay = () => {
-      const vol = sfx.volume;
-      volPercentText.setText(Math.round(vol * 100) + '%');
-      volBarFill.width = vol * sliderWidth;
-      fillHighlight.width = vol * sliderWidth;
-      volThumb.x = sliderX + vol * sliderWidth;
-      thumbGlow.x = sliderX + vol * sliderWidth;
-      muteBtn.setText(vol === 0 || !sfx.isEnabled ? '🔇' : '🔊');
-      // Update audio toggle state
-      audioToggle.setText(sfx.isEnabled ? '● ON' : '○ OFF');
-      audioToggle.setFill(sfx.isEnabled ? '#44ff88' : '#ff4444');
-    };
-    
-    // Volume slider click/drag - use responsive sliderX and sliderWidth
-    volBarBg.setInteractive({ useHandCursor: true });
-    volBarBg.on('pointerdown', (pointer) => {
-      const newVol = Math.max(0, Math.min(1, (pointer.x - sliderX) / sliderWidth));
-      sfx.setMasterVolume(newVol);
-      updateVolDisplay();
-      sfx.select();
-    });
-    
-    volThumb.on('pointerdown', (pointer) => {
-      this.input.on('pointermove', (movePtr) => {
-        const newVol = Math.max(0, Math.min(1, (movePtr.x - sliderX) / sliderWidth));
-        sfx.setMasterVolume(newVol);
-        updateVolDisplay();
+    // ==================== SECTION PANEL HELPER ====================
+    const createSectionPanel = (x, y, width, height, title, icon = '▸') => {
+      // Subtle panel background
+      const panel = this.add.rectangle(x + width/2, y + height/2, width, height, 0x0f1520, 0.85);
+      panel.setStrokeStyle(1, 0x2a3a4a);
+      
+      // Section header with icon
+      const headerY = y + 12;
+      this.add.text(x + GRID.panelPadding, headerY, `${icon} ${title}`, { 
+        fontSize: '16px', 
+        fill: '#88aadd', 
+        fontFamily: 'Courier New', 
+        fontStyle: 'bold' 
       });
-      this.input.once('pointerup', () => {
-        this.input.off('pointermove');
+      
+      // Subtle divider line
+      const dividerY = headerY + 22;
+      this.add.rectangle(x + width/2, dividerY, width - GRID.panelPadding * 2, 1, 0x2a3a4a);
+      
+      return { panel, contentY: dividerY + 16 };
+    };
+    
+    // ==================== TOGGLE COMPONENT V2 ====================
+    const createToggleV2 = (label, description, getValue, setValue, rowY, sectionX, sectionWidth) => {
+      const isOn = getValue();
+      
+      // Label column
+      this.add.text(sectionX + GRID.panelPadding, rowY, label, { 
+        fontSize: '17px', 
+        fill: '#ffffff', 
+        fontFamily: 'Courier New' 
+      });
+      
+      // Description (below label, smaller)
+      if (description) {
+        this.add.text(sectionX + GRID.panelPadding, rowY + 20, description, { 
+          fontSize: '12px', 
+          fill: '#778899', 
+          fontFamily: 'Courier New' 
+        });
+      }
+      
+      // Toggle widget - larger and more prominent
+      const toggleW = 76;
+      const toggleH = 32;
+      const toggleX = sectionX + sectionWidth - GRID.panelPadding - toggleW;
+      const toggleY = rowY + (description ? 10 : 0);
+      
+      // Track background with rounded appearance via graphics
+      const track = this.add.rectangle(toggleX + toggleW/2, toggleY + toggleH/2, toggleW, toggleH, 
+        isOn ? 0x1a3a2a : 0x2a1a1a, 1);
+      track.setStrokeStyle(2, isOn ? 0x44ff88 : 0x664444);
+      
+      // Glow effect when ON
+      const glow = this.add.rectangle(toggleX + toggleW/2, toggleY + toggleH/2, toggleW + 8, toggleH + 8, 
+        isOn ? 0x44ff88 : 0x442222, isOn ? 0.2 : 0.1);
+      
+      // Indicator thumb
+      const thumbX = toggleX + (isOn ? toggleW - 16 : 16);
+      const thumb = this.add.circle(thumbX, toggleY + toggleH/2, 10, isOn ? 0x44ff88 : 0xff6644);
+      thumb.setStrokeStyle(2, 0xffffff);
+      
+      // ON/OFF text label - clearer status
+      const statusText = this.add.text(toggleX + toggleW/2, toggleY + toggleH/2, isOn ? 'ON' : 'OFF', {
+        fontSize: '13px',
+        fill: isOn ? '#ffffff' : '#ffaa88',
+        fontFamily: 'Courier New',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      
+      // Hit area - generous for touch/click
+      const hitArea = this.add.rectangle(toggleX + toggleW/2, toggleY + toggleH/2, toggleW + 30, toggleH + 20, 0x000000, 0);
+      hitArea.setInteractive({ useHandCursor: true });
+      
+      // Update function
+      const updateToggle = (enabled) => {
+        track.setFillStyle(enabled ? 0x1a3a2a : 0x2a1a1a);
+        track.setStrokeStyle(2, enabled ? 0x44ff88 : 0x664444);
+        glow.setFillStyle(enabled ? 0x44ff88 : 0x442222, enabled ? 0.2 : 0.1);
+        thumb.setFillStyle(enabled ? 0x44ff88 : 0xff6644);
+        thumb.x = toggleX + (enabled ? toggleW - 16 : 16);
+        statusText.setText(enabled ? 'ON' : 'OFF');
+        statusText.setFill(enabled ? '#ffffff' : '#ffaa88');
+      };
+      
+      // Interaction handlers
+      hitArea.on('pointerover', () => {
+        track.setStrokeStyle(2, isOn ? 0x66ffaa : 0xff8888);
+        thumb.setScale(1.15);
+        this._showFocusIndicator(toggleX + toggleW/2, toggleY + toggleH/2, toggleW + 12, toggleH + 8);
+      });
+      hitArea.on('pointerout', () => {
+        track.setStrokeStyle(2, getValue() ? 0x44ff88 : 0x664444);
+        thumb.setScale(1);
+        this._hideFocusIndicator();
+      });
+      hitArea.on('pointerdown', () => {
+        const newState = !getValue();
+        setValue(newState);
+        updateToggle(newState);
         sfx.select();
       });
+      
+      // Add to focusable elements
+      this._focusableElements.push({
+        type: 'toggle',
+        hitArea,
+        track,
+        thumb,
+        getValue,
+        setValue,
+        updateToggle,
+        x: toggleX + toggleW/2,
+        y: toggleY + toggleH/2
+      });
+      
+      return { updateToggle, rowY: rowY + GRID.rowHeight };
+    };
+    
+    // ==================== SLIDER COMPONENT V2 ====================
+    const createSliderV2 = (label, getValue, setValue, rowY, sectionX, sectionWidth) => {
+      const value = getValue();
+      
+      // Label column
+      this.add.text(sectionX + GRID.panelPadding, rowY, label, { 
+        fontSize: '17px', 
+        fill: '#ffffff', 
+        fontFamily: 'Courier New' 
+      });
+      
+      // Slider track
+      const sliderW = Math.min(220, sectionWidth - 200);
+      const sliderH = 14;
+      const sliderX = sectionX + 180;
+      const sliderY = rowY + 8;
+      
+      // Track background (darker)
+      const trackBg = this.add.rectangle(sliderX + sliderW/2, sliderY, sliderW, sliderH, 0x1a1a2a);
+      trackBg.setStrokeStyle(2, 0x334455);
+      
+      // Fill (colored portion)
+      const fillW = value * sliderW;
+      const fill = this.add.rectangle(sliderX, sliderY, fillW, sliderH - 4, 0x4488ff);
+      fill.setOrigin(0, 0.5);
+      
+      // Fill highlight
+      const highlight = this.add.rectangle(sliderX, sliderY - 3, fillW, 3, 0x88ccff, 0.5);
+      highlight.setOrigin(0, 0.5);
+      
+      // Thumb
+      const thumbX = sliderX + fillW;
+      const thumbGlow = this.add.circle(thumbX, sliderY, 18, 0x4488ff, 0.2);
+      const thumb = this.add.circle(thumbX, sliderY, 11, 0x66aaff);
+      thumb.setStrokeStyle(3, 0xffffff);
+      thumb.setInteractive({ useHandCursor: true });
+      
+      // Value display (percentage)
+      const valueText = this.add.text(sectionX + sectionWidth - GRID.panelPadding, rowY, 
+        Math.round(value * 100) + '%', {
+        fontSize: '18px',
+        fill: '#88ccff',
+        fontFamily: 'Courier New',
+        fontStyle: 'bold'
+      }).setOrigin(1, 0);
+      
+      // Mute toggle button
+      const isMuted = value === 0;
+      const muteBtn = this.add.text(sectionX + sectionWidth - GRID.panelPadding - 50, rowY + 24, 
+        isMuted ? '🔇' : '🔊', { fontSize: '18px' }).setInteractive({ useHandCursor: true });
+      muteBtn.setOrigin(1, 0);
+      
+      // Update function
+      const updateSlider = (val) => {
+        const newFillW = val * sliderW;
+        fill.width = newFillW;
+        highlight.width = newFillW;
+        thumb.x = sliderX + newFillW;
+        thumbGlow.x = sliderX + newFillW;
+        valueText.setText(Math.round(val * 100) + '%');
+        muteBtn.setText(val === 0 ? '🔇' : '🔊');
+      };
+      
+      // Track click
+      trackBg.setInteractive({ useHandCursor: true });
+      trackBg.on('pointerdown', (pointer) => {
+        const newVal = Math.max(0, Math.min(1, (pointer.x - sliderX) / sliderW));
+        setValue(newVal);
+        updateSlider(newVal);
+        sfx.select();
+      });
+      
+      // Thumb drag
+      thumb.on('pointerdown', () => {
+        this.input.on('pointermove', (movePtr) => {
+          const newVal = Math.max(0, Math.min(1, (movePtr.x - sliderX) / sliderW));
+          setValue(newVal);
+          updateSlider(newVal);
+        });
+        this.input.once('pointerup', () => {
+          this.input.off('pointermove');
+          sfx.select();
+        });
+      });
+      
+      // Thumb hover
+      thumb.on('pointerover', () => {
+        thumb.setFill(0x88bbff);
+        thumb.setScale(1.25);
+        thumbGlow.setAlpha(0.35);
+      });
+      thumb.on('pointerout', () => {
+        thumb.setFill(0x66aaff);
+        thumb.setScale(1);
+        thumbGlow.setAlpha(0.2);
+      });
+      
+      // Mute button
+      muteBtn.on('pointerover', () => muteBtn.setAlpha(0.7));
+      muteBtn.on('pointerout', () => muteBtn.setAlpha(1));
+      muteBtn.on('pointerdown', () => {
+        const wasMuted = getValue() === 0;
+        const newVal = wasMuted ? 0.8 : 0;
+        setValue(newVal);
+        updateSlider(newVal);
+        sfx.select();
+      });
+      
+      // Keyboard controls (-/+ buttons)
+      const minusBtn = this.add.text(sliderX - 28, sliderY - 2, '−', { 
+        fontSize: '24px', 
+        fill: '#888899', 
+        fontFamily: 'Courier New',
+        fontStyle: 'bold'
+      }).setInteractive({ useHandCursor: true });
+      
+      const plusBtn = this.add.text(sliderX + sliderW + 10, sliderY - 2, '+', { 
+        fontSize: '24px', 
+        fill: '#888899', 
+        fontFamily: 'Courier New',
+        fontStyle: 'bold'
+      }).setInteractive({ useHandCursor: true });
+      
+      minusBtn.on('pointerover', () => minusBtn.setFill('#ffffff'));
+      minusBtn.on('pointerout', () => minusBtn.setFill('#888899'));
+      minusBtn.on('pointerdown', () => {
+        const newVal = Math.max(0, getValue() - 0.1);
+        setValue(newVal);
+        updateSlider(newVal);
+        sfx.select();
+      });
+      
+      plusBtn.on('pointerover', () => plusBtn.setFill('#ffffff'));
+      plusBtn.on('pointerout', () => plusBtn.setFill('#888899'));
+      plusBtn.on('pointerdown', () => {
+        const newVal = Math.min(1, getValue() + 0.1);
+        setValue(newVal);
+        updateSlider(newVal);
+        sfx.select();
+      });
+      
+      return { updateSlider, rowY: rowY + GRID.rowHeight };
+    };
+    
+    // ==================== QUALITY SELECTOR V2 ====================
+    const createQualitySelector = (rowY, sectionX, sectionWidth) => {
+      const currentQuality = saveManager.getSetting('effectsQuality') || 'high';
+      const qualities = ['LOW', 'MED', 'HIGH'];
+      let qualIndex = qualities.indexOf(currentQuality.toUpperCase());
+      if (qualIndex === -1) qualIndex = 2;
+      
+      // Label
+      this.add.text(sectionX + GRID.panelPadding, rowY, 'Effects Quality', { 
+        fontSize: '17px', 
+        fill: '#ffffff', 
+        fontFamily: 'Courier New' 
+      });
+      this.add.text(sectionX + GRID.panelPadding, rowY + 20, 'Visual detail level', { 
+        fontSize: '12px', 
+        fill: '#778899', 
+        fontFamily: 'Courier New' 
+      });
+      
+      // Quality button group
+      const btnW = 60;
+      const btnH = 30;
+      const btnGap = 8;
+      const totalW = qualities.length * btnW + (qualities.length - 1) * btnGap;
+      const startX = sectionX + sectionWidth - GRID.panelPadding - totalW;
+      const btnY = rowY + 5;
+      
+      const buttons = [];
+      
+      qualities.forEach((q, i) => {
+        const btnX = startX + i * (btnW + btnGap);
+        const isSelected = i === qualIndex;
+        
+        const btn = this.add.rectangle(btnX + btnW/2, btnY + btnH/2, btnW, btnH, 
+          isSelected ? 0x2a4a6a : 0x1a1a2a);
+        btn.setStrokeStyle(2, isSelected ? 0x66aaff : 0x334455);
+        
+        const label = this.add.text(btnX + btnW/2, btnY + btnH/2, q, {
+          fontSize: '13px',
+          fill: isSelected ? '#ffffff' : '#888899',
+          fontFamily: 'Courier New',
+          fontStyle: 'bold'
+        }).setOrigin(0.5);
+        
+        btn.setInteractive({ useHandCursor: true });
+        
+        btn.on('pointerover', () => {
+          if (i !== qualIndex) {
+            btn.setFillStyle(0x2a3a4a);
+            btn.setStrokeStyle(2, 0x5577aa);
+          }
+        });
+        btn.on('pointerout', () => {
+          if (i !== qualIndex) {
+            btn.setFillStyle(0x1a1a2a);
+            btn.setStrokeStyle(2, 0x334455);
+          }
+        });
+        btn.on('pointerdown', () => {
+          // Deselect previous
+          buttons.forEach((b, j) => {
+            const sel = j === i;
+            b.btn.setFillStyle(sel ? 0x2a4a6a : 0x1a1a2a);
+            b.btn.setStrokeStyle(2, sel ? 0x66aaff : 0x334455);
+            b.label.setFill(sel ? '#ffffff' : '#888899');
+          });
+          qualIndex = i;
+          saveManager.setSetting('effectsQuality', q.toLowerCase());
+          sfx.select();
+        });
+        
+        buttons.push({ btn, label });
+      });
+      
+      return rowY + GRID.rowHeight;
+    };
+    
+    // ==================== DANGER ZONE: RESET PROGRESS V2 ====================
+    const createDangerZone = (startY, sectionWidth) => {
+      const panelH = 100;
+      const panelX = GRID.margin;
+      const panelY = startY;
+      
+      // Danger panel with red theme
+      const dangerPanel = this.add.rectangle(panelX + sectionWidth/2, panelY + panelH/2, sectionWidth, panelH, 0x2a1515, 0.9);
+      dangerPanel.setStrokeStyle(2, 0x663333);
+      
+      // Warning header
+      this.add.text(panelX + GRID.panelPadding, panelY + 14, '⚠ DANGER ZONE', { 
+        fontSize: '15px', 
+        fill: '#ff6666', 
+        fontFamily: 'Courier New', 
+        fontStyle: 'bold' 
+      });
+      
+      // Divider
+      this.add.rectangle(panelX + sectionWidth/2, panelY + 36, sectionWidth - GRID.panelPadding * 2, 1, 0x442222);
+      
+      // Reset label and description
+      this.add.text(panelX + GRID.panelPadding, panelY + 50, 'Reset Progress', { 
+        fontSize: '16px', 
+        fill: '#ffaaaa', 
+        fontFamily: 'Courier New' 
+      });
+      this.add.text(panelX + GRID.panelPadding, panelY + 70, 'Clears all save data permanently', { 
+        fontSize: '12px', 
+        fill: '#886666', 
+        fontFamily: 'Courier New' 
+      });
+      
+      // Reset button - prominent danger styling
+      const resetBtnW = 90;
+      const resetBtnH = 36;
+      const resetBtnX = panelX + sectionWidth - GRID.panelPadding - resetBtnW;
+      const resetBtnY = panelY + 56;
+      
+      const resetBtn = this.add.rectangle(resetBtnX + resetBtnW/2, resetBtnY + resetBtnH/2, resetBtnW, resetBtnH, 0x442222);
+      resetBtn.setStrokeStyle(2, 0xff4444);
+      
+      const resetLabel = this.add.text(resetBtnX + resetBtnW/2, resetBtnY + resetBtnH/2, 'RESET', {
+        fontSize: '15px',
+        fill: '#ff6666',
+        fontFamily: 'Courier New',
+        fontStyle: 'bold'
+      }).setOrigin(0.5);
+      
+      resetBtn.setInteractive({ useHandCursor: true });
+      
+      resetBtn.on('pointerover', () => {
+        resetBtn.setFillStyle(0x662222);
+        resetBtn.setStrokeStyle(2, 0xff6666);
+        resetLabel.setFill('#ff8888');
+      });
+      resetBtn.on('pointerout', () => {
+        resetBtn.setFillStyle(0x442222);
+        resetBtn.setStrokeStyle(2, 0xff4444);
+        resetLabel.setFill('#ff6666');
+      });
+      resetBtn.on('pointerdown', () => {
+        this._showConfirmOverlay();
+      });
+      
+      return startY + panelH + 16;
+    };
+    
+    // ==================== CONFIRM OVERLAY V2 ====================
+    this._showConfirmOverlay = () => {
+      if (this._confirmOverlay) return;
+      
+      const overlayW = 380;
+      const overlayH = 180;
+      const overlayX = centerX - overlayW/2;
+      const overlayY = screenHeight/2 - overlayH/2;
+      
+      // Darken background
+      const dimmer = this.add.rectangle(centerX, screenHeight/2, screenWidth, screenHeight, 0x000000, 0.7);
+      dimmer.setDepth(1000);
+      
+      // Modal panel
+      const modal = this.add.rectangle(centerX, overlayY + overlayH/2, overlayW, overlayH, 0x1a1a2a, 0.98);
+      modal.setStrokeStyle(3, 0xff4444);
+      modal.setDepth(1001);
+      
+      // Warning icon and title
+      const warnIcon = this.add.text(centerX, overlayY + 28, '⚠ CONFIRM RESET', {
+        fontSize: '18px',
+        fill: '#ff6666',
+        fontFamily: 'Courier New',
+        fontStyle: 'bold'
+      }).setOrigin(0.5).setDepth(1002);
+      
+      // Warning message
+      const msg = this.add.text(centerX, overlayY + 65, 
+        'This will permanently delete ALL your progress.\nThis action CANNOT be undone!', {
+        fontSize: '14px',
+        fill: '#ccaaaa',
+        fontFamily: 'Courier New',
+        align: 'center',
+        lineSpacing: 6
+      }).setOrigin(0.5).setDepth(1002);
+      
+      // Confirm button
+      const confirmW = 120;
+      const confirmH = 40;
+      const confirmX = centerX - confirmW - 15;
+      const confirmY = overlayY + overlayH - 55;
+      
+      const confirmBtn = this.add.rectangle(confirmX + confirmW/2, confirmY + confirmH/2, confirmW, confirmH, 0x442222);
+      confirmBtn.setStrokeStyle(2, 0xff4444);
+      confirmBtn.setDepth(1002);
+      
+      const confirmLabel = this.add.text(confirmX + confirmW/2, confirmY + confirmH/2, 'YES, RESET', {
+        fontSize: '14px',
+        fill: '#ff6666',
+        fontFamily: 'Courier New',
+        fontStyle: 'bold'
+      }).setOrigin(0.5).setDepth(1003);
+      
+      confirmBtn.setInteractive({ useHandCursor: true });
+      confirmBtn.on('pointerover', () => {
+        confirmBtn.setFillStyle(0x662222);
+        confirmBtn.setStrokeStyle(2, 0xff6666);
+        confirmLabel.setFill('#ff8888');
+      });
+      confirmBtn.on('pointerout', () => {
+        confirmBtn.setFillStyle(0x442222);
+        confirmBtn.setStrokeStyle(2, 0xff4444);
+        confirmLabel.setFill('#ff6666');
+      });
+      confirmBtn.on('pointerdown', () => {
+        saveManager.resetSave();
+        sfx.fail();
+        this._hideConfirmOverlay();
+        this.transitionTo('BootScene');
+      });
+      
+      // Cancel button
+      const cancelW = 120;
+      const cancelH = 40;
+      const cancelX = centerX + 15;
+      const cancelY = overlayY + overlayH - 55;
+      
+      const cancelBtn = this.add.rectangle(cancelX + cancelW/2, cancelY + cancelH/2, cancelW, cancelH, 0x1a2a1a);
+      cancelBtn.setStrokeStyle(2, 0x44ff88);
+      cancelBtn.setDepth(1002);
+      
+      const cancelLabel = this.add.text(cancelX + cancelW/2, cancelY + cancelH/2, 'CANCEL', {
+        fontSize: '14px',
+        fill: '#44ff88',
+        fontFamily: 'Courier New',
+        fontStyle: 'bold'
+      }).setOrigin(0.5).setDepth(1003);
+      
+      cancelBtn.setInteractive({ useHandCursor: true });
+      cancelBtn.on('pointerover', () => {
+        cancelBtn.setFillStyle(0x2a3a2a);
+        cancelBtn.setStrokeStyle(2, 0x66ffaa);
+        cancelLabel.setFill('#66ffaa');
+      });
+      cancelBtn.on('pointerout', () => {
+        cancelBtn.setFillStyle(0x1a2a1a);
+        cancelBtn.setStrokeStyle(2, 0x44ff88);
+        cancelLabel.setFill('#44ff88');
+      });
+      cancelBtn.on('pointerdown', () => {
+        this._hideConfirmOverlay();
+        sfx.select();
+      });
+      
+      // Store references for cleanup
+      this._confirmOverlay = {
+        dimmer,
+        modal,
+        warnIcon,
+        msg,
+        confirmBtn,
+        confirmLabel,
+        cancelBtn,
+        cancelLabel
+      };
+      
+      // ESC to cancel
+      this._confirmEscHandler = this.input.keyboard.on('keydown-ESC', () => {
+        this._hideConfirmOverlay();
+        sfx.select();
+      });
+    };
+    
+    this._hideConfirmOverlay = () => {
+      if (!this._confirmOverlay) return;
+      
+      Object.values(this._confirmOverlay).forEach(obj => obj.destroy());
+      this._confirmOverlay = null;
+      
+      if (this._confirmEscHandler) {
+        this._confirmEscHandler.destroy();
+        this._confirmEscHandler = null;
+      }
+    };
+    
+    // ==================== FOCUS INDICATOR ====================
+    this._showFocusIndicator = (x, y, w, h) => {
+      this._hideFocusIndicator();
+      this._focusIndicator = this.add.rectangle(x, y, w, h, 0x4488ff, 0);
+      this._focusIndicator.setStrokeStyle(3, 0x4488ff);
+    };
+    
+    this._hideFocusIndicator = () => {
+      if (this._focusIndicator) {
+        this._focusIndicator.destroy();
+        this._focusIndicator = null;
+      }
+    };
+    
+    // ==================== KEYBOARD NAVIGATION ====================
+    this.input.keyboard.on('keydown-TAB', (event) => {
+      event.preventDefault();
+      const direction = event.shiftKey ? -1 : 1;
+      this._navigateFocus(direction);
     });
     
-    // Volume buttons - adjust position based on actual slider width
-    volDown.x = sliderX - 25;
-    volUp.x = sliderX + sliderWidth + 10;
+    this.input.keyboard.on('keydown-UP', () => this._navigateFocus(-1));
+    this.input.keyboard.on('keydown-DOWN', () => this._navigateFocus(1));
+    this.input.keyboard.on('keydown-ENTER', () => this._activateFocused());
+    this.input.keyboard.on('keydown-SPACE', () => this._activateFocused());
     
-    volDown.on('pointerdown', () => { sfx.setMasterVolume(Math.max(0, sfx.volume - 0.1)); updateVolDisplay(); sfx.select(); });
-    volUp.on('pointerdown', () => { sfx.setMasterVolume(Math.min(1, sfx.volume + 0.1)); updateVolDisplay(); sfx.select(); });
+    this._navigateFocus = (direction) => {
+      if (this._focusableElements.length === 0) return;
+      
+      this._currentFocusIndex = (this._currentFocusIndex + direction + this._focusableElements.length) % this._focusableElements.length;
+      const elem = this._focusableElements[this._currentFocusIndex];
+      
+      this._showFocusIndicator(elem.x, elem.y, 88, 40);
+      sfx.select();
+    };
     
-    // ==================== GRAPHICS SETTINGS ====================
-    const graphicsStartY = graphicsY + 35;
+    this._activateFocused = () => {
+      if (this._focusableElements.length === 0) return;
+      
+      const elem = this._focusableElements[this._currentFocusIndex];
+      if (elem.type === 'toggle') {
+        const newState = !elem.getValue();
+        elem.setValue(newState);
+        elem.updateToggle(newState);
+        sfx.select();
+      }
+    };
+    
+    // ==================== BUILD SECTIONS ====================
+    const sectionWidth = screenWidth - GRID.margin * 2;
+    let currentY = 70;
+    
+    // ===== AUDIO SECTION =====
+    const audioPanel = createSectionPanel(GRID.margin, currentY, sectionWidth, 130, 'AUDIO', '🔊');
+    let rowY = audioPanel.contentY;
+    
+    // Sound Effects toggle
+    const audioToggle = createToggleV2(
+      'Sound Effects',
+      'Enable/disable all game audio',
+      () => sfx.isEnabled,
+      (v) => sfx.setEnabled(v),
+      rowY,
+      GRID.margin,
+      sectionWidth
+    );
+    rowY = audioToggle.rowY;
+    
+    // Master Volume slider
+    const volumeSlider = createSliderV2(
+      'Master Volume',
+      () => sfx.volume,
+      (v) => sfx.setMasterVolume(v),
+      rowY,
+      GRID.margin,
+      sectionWidth
+    );
+    
+    currentY += 130 + GRID.sectionGap;
+    
+    // ===== GRAPHICS SECTION =====
+    const graphicsPanel = createSectionPanel(GRID.margin, currentY, sectionWidth, 130, 'GRAPHICS', '🎨');
+    rowY = graphicsPanel.contentY;
     
     // Effects Quality
-    this.add.text(40, graphicsStartY, 'Effects Quality', { fontSize: '15px', fill: '#ffffff', fontFamily: 'Courier New' });
-    this.add.text(40, graphicsStartY + 18, 'Visual detail level', { fontSize: '11px', fill: '#666677', fontFamily: 'Courier New' });
+    rowY = createQualitySelector(rowY, GRID.margin, sectionWidth);
     
-    const currentQuality = saveManager.getSetting('effectsQuality') || 'high';
-    // Quality chip - aligned to consistent right column grid
-    const qualityBtn = this.add.text(toggleTextX, graphicsStartY + 2, currentQuality.toUpperCase(), { fontSize: '14px', fill: '#ffaa00', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
-    qualityBtn.setOrigin(1, 0);
-    const qualities = ['low', 'medium', 'high'];
-    let qualIndex = qualities.indexOf(currentQuality);
-    qualityBtn.on('pointerover', () => qualityBtn.setFill('#ffcc44'));
-    qualityBtn.on('pointerout', () => qualityBtn.setFill('#ffaa00'));
-    qualityBtn.on('pointerdown', () => { 
-      qualIndex = (qualIndex + 1) % qualities.length; 
-      const newQual = qualities[qualIndex];
-      saveManager.setSetting('effectsQuality', newQual);
-      qualityBtn.setText(newQual.toUpperCase());
-      sfx.select();
-    });
+    // Fullscreen toggle
+    const fsToggle = createToggleV2(
+      'Fullscreen',
+      'Expand to fill entire screen',
+      () => fullscreenManager.isFullscreen,
+      async (v) => {
+        if (v) {
+          await fullscreenManager.request();
+        } else {
+          await fullscreenManager.exit();
+        }
+      },
+      rowY,
+      GRID.margin,
+      sectionWidth
+    );
     
-    // ========== PREMIUM FULLSCREEN TOGGLE ==========
-    const fullY = graphicsStartY + rowHeight;
-    this.add.text(40, fullY, 'Fullscreen', { fontSize: '15px', fill: '#ffffff', fontFamily: 'Courier New' });
-    this.add.text(40, fullY + 18, 'Stretch to fill screen', { fontSize: '11px', fill: '#666677', fontFamily: 'Courier New' });
-    
-    // Check actual browser fullscreen state
-    const isFullscreen = fullscreenManager.isFullscreen;
-    
-    // Premium toggle styling - use consistent right column grid
-    const fullToggleY = fullY + 2;
-    const fullToggleBg = this.add.rectangle(toggleWidgetX + toggleWidth/2, fullToggleY, toggleWidth, toggleHeight, isFullscreen ? 0x1a4a2a : 0x2a1a1a);
-    fullToggleBg.setStrokeStyle(2, isFullscreen ? 0x44ff88 : 0xff4444);
-    const fullToggleGlow = this.add.rectangle(toggleWidgetX + toggleWidth/2, fullToggleY, toggleWidth + 6, toggleHeight + 6, isFullscreen ? 0x44ff88 : 0xff4444, isFullscreen ? 0.12 : 0.08);
-    const fullToggleIndicator = this.add.circle(toggleWidgetX + (isFullscreen ? toggleWidth - 12 : 12), fullToggleY, 8, isFullscreen ? 0x44ff88 : 0xff4444);
-    const fullToggle = this.add.text(toggleTextX, fullY + 2, isFullscreen ? 'ON' : 'OFF', { fontSize: '12px', fill: isFullscreen ? '#44ff88' : '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
-    fullToggle.setOrigin(1, 0);
-    const fullToggleHit = this.add.rectangle(toggleWidgetX + toggleWidth/2, fullToggleY, toggleWidth + 20, toggleHeight + 10, 0x000000, 0);
-    fullToggleHit.setInteractive({ useHandCursor: true });
-    
-    // Listen for fullscreen changes to keep toggle in sync
+    // Fullscreen listener
     this._fullscreenListener = (event, isFs) => {
-      fullToggleBg.setFillStyle(isFs ? 0x1a4a2a : 0x2a1a1a);
-      fullToggleBg.setStrokeStyle(2, isFs ? 0x44ff88 : 0xff4444);
-      fullToggleGlow.setFillStyle(isFs ? 0x44ff88 : 0xff4444, isFs ? 0.12 : 0.08);
-      fullToggleIndicator.setFillStyle(isFs ? 0x44ff88 : 0xff4444);
-      fullToggleIndicator.x = toggleWidgetX + (isFs ? toggleWidth - 12 : 12);
-      fullToggle.setText(isFs ? 'ON' : 'OFF');
-      fullToggle.setFill(isFs ? '#44ff88' : '#ff4444');
       saveManager.setSetting('fullscreen', isFs);
     };
     fullscreenManager.on('fullscreenchange', this._fullscreenListener);
     
-    fullToggleHit.on('pointerover', () => { 
-      if (!fullscreenManager.isFullscreen) {
-        fullToggleBg.setStrokeStyle(2, 0xff6666);
-        fullToggleIndicator.setFillStyle(0xff6666);
-      }
-    });
-    fullToggleHit.on('pointerout', () => { 
-      fullToggleBg.setStrokeStyle(2, fullscreenManager.isFullscreen ? 0x44ff88 : 0xff4444);
-      fullToggleIndicator.setFillStyle(fullscreenManager.isFullscreen ? 0x44ff88 : 0xff4444);
-    });
-    fullToggleHit.on('pointerdown', async () => { 
-      const newState = !fullscreenManager.isFullscreen;
-      if (newState) {
-        await fullscreenManager.request();
-      } else {
-        await fullscreenManager.exit();
-      }
-      sfx.select();
-    });
+    currentY += 130 + GRID.sectionGap;
     
-    // ========== PREMIUM REDUCED MOTION TOGGLE ==========
-    const gameStartY = gameY + 35;
+    // ===== GAME SECTION =====
+    const gamePanel = createSectionPanel(GRID.margin, currentY, sectionWidth, 90, 'GAME', '🎮');
+    rowY = gamePanel.contentY;
     
-    this.add.text(40, gameStartY, 'Reduced Motion', { fontSize: '15px', fill: '#ffffff', fontFamily: 'Courier New' });
-    this.add.text(40, gameStartY + 18, 'Minimize animations', { fontSize: '11px', fill: '#666677', fontFamily: 'Courier New' });
+    // Reduced Motion toggle
+    const motionToggle = createToggleV2(
+      'Reduced Motion',
+      'Minimize animations for accessibility',
+      () => saveManager.getSetting('reducedMotion') || false,
+      (v) => saveManager.setSetting('reducedMotion', v),
+      rowY,
+      GRID.margin,
+      sectionWidth
+    );
     
-    const reducedMotion = saveManager.getSetting('reducedMotion') || false;
-    const motionToggleY = gameStartY + 2;
-    // Reduced Motion toggle - using consistent right column grid
-    const motionToggleBg = this.add.rectangle(toggleWidgetX + toggleWidth/2, motionToggleY, toggleWidth, toggleHeight, reducedMotion ? 0x1a4a2a : 0x2a1a1a);
-    motionToggleBg.setStrokeStyle(2, reducedMotion ? 0x44ff88 : 0xff4444);
-    const motionToggleGlow = this.add.rectangle(toggleWidgetX + toggleWidth/2, motionToggleY, toggleWidth + 6, toggleHeight + 6, reducedMotion ? 0x44ff88 : 0xff4444, reducedMotion ? 0.12 : 0.08);
-    const motionToggleIndicator = this.add.circle(toggleWidgetX + (reducedMotion ? toggleWidth - 12 : 12), motionToggleY, 8, reducedMotion ? 0x44ff88 : 0xff4444);
-    const motionToggle = this.add.text(toggleTextX, gameStartY + 2, reducedMotion ? 'ON' : 'OFF', { fontSize: '12px', fill: reducedMotion ? '#44ff88' : '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
-    motionToggle.setOrigin(1, 0);
-    const motionToggleHit = this.add.rectangle(toggleWidgetX + toggleWidth/2, motionToggleY, toggleWidth + 20, toggleHeight + 10, 0x000000, 0);
-    motionToggleHit.setInteractive({ useHandCursor: true });
+    currentY += 90 + GRID.sectionGap;
     
-    const updateMotionToggle = (enabled) => {
-      motionToggleBg.setFillStyle(enabled ? 0x1a4a2a : 0x2a1a1a);
-      motionToggleBg.setStrokeStyle(2, enabled ? 0x44ff88 : 0xff4444);
-      motionToggleGlow.setFillStyle(enabled ? 0x44ff88 : 0xff4444, enabled ? 0.12 : 0.08);
-      motionToggleIndicator.setFillStyle(enabled ? 0x44ff88 : 0xff4444);
-      motionToggleIndicator.x = toggleWidgetX + (enabled ? toggleWidth - 12 : 12);
-      motionToggle.setText(enabled ? 'ON' : 'OFF');
-      motionToggle.setFill(enabled ? '#44ff88' : '#ff4444');
-    };
+    // ===== DANGER ZONE =====
+    currentY = createDangerZone(currentY, sectionWidth);
     
-    motionToggleHit.on('pointerover', () => { 
-      if (!saveManager.getSetting('reducedMotion')) {
-        motionToggleBg.setStrokeStyle(2, 0xff6666);
-        motionToggleIndicator.setFillStyle(0xff6666);
-      }
-    });
-    motionToggleHit.on('pointerout', () => { 
-      const isOn = saveManager.getSetting('reducedMotion');
-      motionToggleBg.setStrokeStyle(2, isOn ? 0x44ff88 : 0xff4444);
-      motionToggleIndicator.setFillStyle(isOn ? 0x44ff88 : 0xff4444);
-    });
-    motionToggleHit.on('pointerdown', () => { 
-      const newState = !saveManager.getSetting('reducedMotion');
-      saveManager.setSetting('reducedMotion', newState);
-      updateMotionToggle(newState);
-      sfx.select();
-    });
-    motionToggle.on('pointerout', () => { motionToggle.setFill(saveManager.getSetting('reducedMotion') ? '#44ff88' : '#ff4444'); });
-    motionToggle.on('pointerdown', () => { 
-      const newState = !saveManager.getSetting('reducedMotion');
-      saveManager.setSetting('reducedMotion', newState);
-      motionToggle.setText(newState ? '● ON' : '○ OFF');
-      motionToggle.setFill(newState ? '#44ff88' : '#ff4444');
-      sfx.select();
-    });
-    
-    // Reset Progress - RESET button aligned to consistent right column grid
-    const resetY = gameStartY + rowHeight + 15;
-    this.add.text(40, resetY, 'Reset Progress', { fontSize: '15px', fill: '#ffffff', fontFamily: 'Courier New' });
-    this.add.text(40, resetY + 18, 'Clear all save data', { fontSize: '11px', fill: '#666677', fontFamily: 'Courier New' });
-    
-    const resetBtn = this.add.text(toggleTextX, resetY + 2, 'RESET', { fontSize: '14px', fill: '#ff4444', fontFamily: 'Courier New', fontStyle: 'bold' }).setInteractive({ useHandCursor: true });
-    resetBtn.setOrigin(1, 0);
-    resetBtn.on('pointerover', () => resetBtn.setFill('#ff6666'));
-    resetBtn.on('pointerout', () => resetBtn.setFill('#ff4444'));
-    resetBtn.on('pointerdown', () => { 
-      if (confirm('Are you sure you want to reset all progress? This cannot be undone.')) { 
-        saveManager.resetSave(); 
-        sfx.fail(); 
-        this.transitionTo('BootScene'); 
-      } 
-    });
-    
-    // Version info
-    this.add.text(MAP_WIDTH * TILE_SIZE / 2, MAP_HEIGHT * TILE_SIZE - 30, 'GhostShift v0.7.0 - Phase 11', { fontSize: '12px', fill: '#444455', fontFamily: 'Courier New' }).setOrigin(0.5);
+    // ==================== VERSION INFO ====================
+    this.add.text(centerX, screenHeight - 28, 'GhostShift v0.7.1 - Settings V2', { 
+      fontSize: '13px', 
+      fill: '#445566', 
+      fontFamily: 'Courier New' 
+    }).setOrigin(0.5);
     
     // Initialize audio on first interaction
     this.input.keyboard.once('keydown', () => sfx.init());
@@ -4293,12 +4638,8 @@ class SettingsScene extends Phaser.Scene {
   _relayoutUI() {
     // Recenter elements based on new canvas size
     const { width, height } = this.scale;
-    
-    // Reposition title
-    if (this.children) {
-      // Find and update positions relative to new size
-      // This is a basic implementation - more complex scenes may need more work
-    }
+    // V2: Elements are positioned relative to screen dimensions
+    // Full reflow would require rebuilding the scene
   }
   
   // Cleanup listeners when scene is destroyed
@@ -4306,6 +4647,12 @@ class SettingsScene extends Phaser.Scene {
     // Stop all timers and tweens first
     this.time.removeAllEvents();
     this.tweens.killAll();
+    
+    // Clean up confirm overlay
+    this._hideConfirmOverlay();
+    
+    // Clean up focus indicator
+    this._hideFocusIndicator();
     
     // Clean up BackgroundComposer
     if (this.backgroundComposer) {
@@ -4322,6 +4669,14 @@ class SettingsScene extends Phaser.Scene {
       this.input.keyboard.off('keydown-ESC', this._backButtonEscHandler);
       this._backButtonEscHandler = null;
     }
+    if (this._confirmEscHandler) {
+      this._confirmEscHandler.destroy();
+      this._confirmEscHandler = null;
+    }
+    
+    // Clear focusable elements
+    this._focusableElements = [];
+    
     super.shutdown();
   }
   
